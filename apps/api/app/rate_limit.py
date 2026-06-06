@@ -8,6 +8,7 @@ from starlette.responses import JSONResponse, Response
 
 from app.config import Settings
 from app.core.security import hash_token
+from app.observability import record_rate_limit_rejection
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -31,6 +32,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             elapsed = 0
 
         if count >= limit:
+            record_rate_limit_rejection(self._request_key_type(request))
             retry_after = max(1, int(60 - elapsed))
             return JSONResponse(
                 status_code=429,
@@ -50,5 +52,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         session_token = request.cookies.get("logan_session")
         if session_token:
             return f"session:{hash_token(session_token)}"
-        client_host = request.client.host if request.client else "unknown"
-        return f"ip:{client_host}"
+        client_host = request.client.host if request.client else None
+        return f"ip:{client_host}" if client_host else "unknown"
+
+    def _request_key_type(self, request: Request) -> str:
+        if request.cookies.get("logan_session"):
+            return "session"
+        return "ip" if request.client and request.client.host else "unknown"

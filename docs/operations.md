@@ -213,6 +213,43 @@ When enabled, it applies to `/api` routes, keys requests by hashed `logan_sessio
 present and by client IP otherwise, and returns JSON `429` responses with `Retry-After` when the
 per-minute limit is exceeded.
 
+## Observability
+
+Prometheus metrics are enabled by default:
+
+- `LOGAN_METRICS_ENABLED=true`
+- `LOGAN_METRICS_PATH=/metrics`
+
+`GET /metrics` returns Prometheus text exposition from the API process. The HTTP request
+middleware records request count, duration, and in-flight gauges with only `method`, route
+template, and `status_code` labels; the metrics endpoint itself is skipped. The rate limiter
+records rejected requests with only `session`, `ip`, or `unknown` key type. Pipeline, Copilot
+gateway, and analytics sink metrics use fixed internal labels such as step name, provider/model,
+stream/status, and sink/status. Metrics do not include tokens, database URLs, S3 secrets, cookies,
+raw log text, prompts, case titles/descriptions, file paths, destination names, idempotency keys,
+user ids, payloads, or error messages.
+
+Example Prometheus scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: logan-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["logan-api:8000"]
+```
+
+OpenTelemetry FastAPI tracing is optional and defaults off:
+
+- `LOGAN_OTEL_ENABLED=false`
+- `LOGAN_OTEL_SERVICE_NAME=logan-api`
+- `LOGAN_OTEL_EXPORTER_OTLP_ENDPOINT=`
+
+When enabled and the OTEL packages are installed, the API instruments FastAPI and sends spans to
+the configured OTLP HTTP endpoint, for example
+`http://otel-collector:4318/v1/traces`. When disabled or when OTEL imports are unavailable, the
+API starts without tracing.
+
 Run the web workspace against the local API:
 
 ```bash
@@ -240,6 +277,5 @@ docker compose up --build
   deployments need them.
 - Add Playwright e2e tests once the web app is connected to a running API.
 - Consider ECharts/Cytoscape or similar libraries for richer temporal and graph visualization.
-- Add Prometheus/OpenTelemetry instrumentation.
 
 These gaps are explicitly deferred from this first foundation commit; they are not hidden behind static stubs in the tested local path.

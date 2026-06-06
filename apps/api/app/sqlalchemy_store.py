@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -27,6 +28,7 @@ from app.core.security import (
 )
 from app.db import Base
 from app.models import tables
+from app.observability import record_analytics_sink_operation
 from app.services.analytics_sinks import (
     AnalyticsSinkError,
     AnalyticsSinkPublisher,
@@ -2105,43 +2107,57 @@ class SQLAlchemyStore:
         }
 
         for operation in operations:
-            record, skipped = self._prepare_analytics_sink_write(operation)
-            if skipped:
-                metadata["skipped_writes"] += 1
-                continue
+            operation_started_at = time.perf_counter()
+            metric_status = "failed"
+            metric_row_count = 0
             try:
-                operation.execute()
-            except AnalyticsSinkError as exc:
-                sanitized_error = sanitize_error_message(exc)
-                self._mark_analytics_sink_write_failed(
-                    write_id=record.id,
-                    error_message=sanitized_error,
-                )
-                metadata["failed_writes"] += 1
-                self.record_audit(
-                    action="analytics_sink.publish_failed",
-                    user_id=user_id,
-                    target_type="analysis_run",
-                    target_id=run_id,
-                    case_id=operation.case_id,
-                    metadata={
-                        "destination": operation.destination,
-                        "error": sanitized_error,
-                        "failure_mode": failure_mode,
-                        "idempotency_key": operation.idempotency_key,
-                        "sink_name": operation.sink_name,
-                    },
-                )
-                if failure_mode == "fail":
-                    raise
-                continue
+                record, skipped = self._prepare_analytics_sink_write(operation)
+                if skipped:
+                    metadata["skipped_writes"] += 1
+                    metric_status = "skipped"
+                    continue
+                try:
+                    operation.execute()
+                except AnalyticsSinkError as exc:
+                    sanitized_error = sanitize_error_message(exc)
+                    self._mark_analytics_sink_write_failed(
+                        write_id=record.id,
+                        error_message=sanitized_error,
+                    )
+                    metadata["failed_writes"] += 1
+                    self.record_audit(
+                        action="analytics_sink.publish_failed",
+                        user_id=user_id,
+                        target_type="analysis_run",
+                        target_id=run_id,
+                        case_id=operation.case_id,
+                        metadata={
+                            "destination": operation.destination,
+                            "error": sanitized_error,
+                            "failure_mode": failure_mode,
+                            "idempotency_key": operation.idempotency_key,
+                            "sink_name": operation.sink_name,
+                        },
+                    )
+                    if failure_mode == "fail":
+                        raise
+                    continue
 
-            self._mark_analytics_sink_write_succeeded(
-                write_id=record.id,
-                row_count=operation.row_count,
-            )
-            metadata["succeeded_writes"] += 1
-            self._add_analytics_sink_count(metadata, operation)
+                self._mark_analytics_sink_write_succeeded(
+                    write_id=record.id,
+                    row_count=operation.row_count,
+                )
+                metadata["succeeded_writes"] += 1
+                self._add_analytics_sink_count(metadata, operation)
+                metric_status = "succeeded"
+                metric_row_count = operation.row_count
+            finally:
+                record_analytics_sink_operation(
+                    sink_name=operation.sink_name,
+                    status=metric_status,
+                    duration_seconds=time.perf_counter() - operation_started_at,
+                    row_count=metric_row_count,
+                )
 
         self.record_audit(
             action="analytics_sink.publish",

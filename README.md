@@ -2,7 +2,7 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, RBAC case access with per-case collaborators, admin user/audit/settings/retention APIs, optional API rate limiting, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell with a minimal admin view, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, RBAC case access with per-case collaborators, admin user/audit/settings/retention APIs, optional API rate limiting, Prometheus `/metrics`, optional OpenTelemetry FastAPI tracing, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell with a minimal admin view, and deployment scaffolding.
 
 ## Architecture
 
@@ -60,6 +60,22 @@ Uploaded bytes use the local object store by default and are written under
 External analytics sinks and service-backed report queries are disabled by default,
 so local runs and tests make no ClickHouse or OpenSearch network calls.
 
+Prometheus metrics are enabled by default at `GET /metrics`. The exposition includes
+low-cardinality API request, rate-limit, analysis pipeline, Copilot gateway, and analytics sink
+metrics. Labels intentionally avoid tokens, database URLs, object-store secrets, cookies, raw log
+text, prompts, case text, and file paths. Set `LOGAN_METRICS_ENABLED=false` to disable the
+endpoint or `LOGAN_METRICS_PATH=/internal/metrics` to change its path.
+
+OpenTelemetry FastAPI instrumentation is optional and off by default:
+
+```bash
+LOGAN_OTEL_ENABLED=true
+LOGAN_OTEL_SERVICE_NAME=logan-api
+LOGAN_OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
+```
+
+If OTEL is disabled or the optional runtime imports are unavailable, the API still starts normally.
+
 ## Representative Lines Only
 
 The pipeline never sends every raw log line to a model. It runs this sequence:
@@ -113,6 +129,11 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_AUDIT_RETENTION_DAYS=730`
 - `LOGAN_RATE_LIMIT_ENABLED=false`
 - `LOGAN_RATE_LIMIT_REQUESTS_PER_MINUTE=120`
+- `LOGAN_METRICS_ENABLED=true`
+- `LOGAN_METRICS_PATH=/metrics`
+- `LOGAN_OTEL_ENABLED=false`
+- `LOGAN_OTEL_SERVICE_NAME=logan-api`
+- `LOGAN_OTEL_EXPORTER_OTLP_ENDPOINT=` optional OTLP HTTP trace endpoint.
 - `LOGAN_ANALYTICS_SINKS_ENABLED=false`; when true, SQLAlchemy analysis completion may publish redacted analytics payloads to configured external sinks.
 - `LOGAN_CLICKHOUSE_URL=` optional ClickHouse HTTP endpoint.
 - `LOGAN_CLICKHOUSE_DATABASE=logan`

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -12,6 +13,7 @@ import httpx
 
 from app.config import Settings, settings
 from app.core.security import decrypt_token
+from app.observability import record_copilot_gateway_request
 from app.store import CredentialRecord, MetadataStore
 
 
@@ -70,6 +72,59 @@ class CopilotModelGateway:
         )
 
     async def responses(
+        self,
+        *,
+        user_id: str,
+        model: str,
+        instructions: str | None,
+        input: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        stream: bool = False,
+        metadata: dict[str, Any] | None = None,
+        reasoning_effort: str = "high",
+        temperature: float | None = None,
+        response_format: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
+        started_at = time.perf_counter()
+        try:
+            response = await self._responses_core(
+                user_id=user_id,
+                model=model,
+                instructions=instructions,
+                input=input,
+                tools=tools,
+                stream=stream,
+                metadata=metadata,
+                reasoning_effort=reasoning_effort,
+                temperature=temperature,
+                response_format=response_format,
+            )
+        except Exception:
+            record_copilot_gateway_request(
+                provider=self.provider,
+                model=model,
+                stream=stream,
+                status="failed",
+                duration_seconds=time.perf_counter() - started_at,
+            )
+            raise
+        if stream:
+            return _instrument_copilot_stream(
+                response,
+                provider=self.provider,
+                model=model,
+                started_at=started_at,
+            )
+        record_copilot_gateway_request(
+            provider=self.provider,
+            model=model,
+            stream=False,
+            status="succeeded",
+            duration_seconds=time.perf_counter() - started_at,
+        )
+        return response
+
+    async def _responses_core(
         self,
         *,
         user_id: str,
@@ -404,6 +459,28 @@ class CopilotModelGateway:
             raise CopilotTransportError(
                 f"GitHub Copilot /responses transport failed: {message}"
             ) from exc
+
+
+async def _instrument_copilot_stream(
+    events: AsyncIterator[dict[str, Any]],
+    *,
+    provider: str,
+    model: str,
+    started_at: float,
+) -> AsyncIterator[dict[str, Any]]:
+    status = "failed"
+    try:
+        async for event in events:
+            yield event
+        status = "succeeded"
+    finally:
+        record_copilot_gateway_request(
+            provider=provider,
+            model=model,
+            stream=True,
+            status=status,
+            duration_seconds=time.perf_counter() - started_at,
+        )
 
 
 def _looks_like_source_token(token: str) -> bool:

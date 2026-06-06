@@ -8,6 +8,7 @@ import pytest
 
 from app.config import Settings
 from app.core.security import decrypt_token
+from app.observability import metrics_text
 from app.services.copilot_model_gateway import (
     COPILOT_TOKEN_EXCHANGE_URL,
     CopilotCredentialError,
@@ -113,6 +114,13 @@ async def test_source_token_exchange_proxy_base_responses_payload_and_output_par
         decrypt_token(cached.encrypted_token, store.settings.credential_encryption_key)
         == copilot_token
     )
+    body = metrics_text()
+    assert (
+        'logan_copilot_gateway_requests_total{model="gpt-5.4",provider="github_copilot",'
+        'status="succeeded",stream="false"}'
+    ) in body
+    assert source_token not in body
+    assert copilot_token not in body
     await http_client.aclose()
 
 
@@ -361,6 +369,12 @@ async def test_response_transport_errors_redact_plugin_token() -> None:
 
     assert plugin_token not in str(error.value)
     assert "<redacted-token>" in str(error.value)
+    body = metrics_text()
+    assert (
+        'logan_copilot_gateway_requests_total{model="gpt-5.4",provider="github_copilot",'
+        'status="failed",stream="false"}'
+    ) in body
+    assert plugin_token not in body
     await http_client.aclose()
 
 

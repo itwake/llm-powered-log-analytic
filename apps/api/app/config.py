@@ -70,6 +70,13 @@ class Settings:
     rate_limit_requests_per_minute: int = int(
         os.getenv("LOGAN_RATE_LIMIT_REQUESTS_PER_MINUTE", "120")
     )
+    metrics_enabled: bool = _env_bool("LOGAN_METRICS_ENABLED", True)
+    metrics_path: str = os.getenv("LOGAN_METRICS_PATH", "/metrics")
+    otel_enabled: bool = _env_bool("LOGAN_OTEL_ENABLED", False)
+    otel_service_name: str = os.getenv("LOGAN_OTEL_SERVICE_NAME", "logan-api")
+    otel_exporter_otlp_endpoint: str | None = (
+        os.getenv("LOGAN_OTEL_EXPORTER_OTLP_ENDPOINT") or None
+    )
     analytics_sinks_enabled: bool = _env_bool("LOGAN_ANALYTICS_SINKS_ENABLED", False)
     clickhouse_url: str | None = os.getenv("LOGAN_CLICKHOUSE_URL") or None
     clickhouse_database: str = os.getenv("LOGAN_CLICKHOUSE_DATABASE", "logan")

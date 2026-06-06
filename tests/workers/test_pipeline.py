@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from app.observability import metrics_text
 from logan_workers.activities.ingestion import ingest_paths
+from logan_workers.activities.inference import MockCopilotAnnotationGateway
 from logan_workers.activities.preprocessing import merge_entries, preprocess_entries
 from logan_workers.algorithms.redactors import redact_text
 from logan_workers.models import OFFENDING_SIGNALS
@@ -13,6 +15,11 @@ from logan_workers.pipeline import AnalyzeCasePipeline
 
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
+
+
+class FailingAnnotationGateway(MockCopilotAnnotationGateway):
+    async def responses(self, **kwargs):
+        raise RuntimeError("annotation failed token=gho_pipeline_secret_token password=hunter2")
 
 
 @pytest.mark.asyncio
@@ -157,6 +164,36 @@ async def test_pipeline_emits_step_progress_events() -> None:
     assert all(event["analysis_run_id"] == "run-events" for event in events)
     assert result.progress["current_step"] == "completed"
     assert result.progress["steps"]["copilot_annotation"]["metadata"]["annotations"] > 0
+    body = metrics_text()
+    assert 'logan_pipeline_runs_total{status="started"}' in body
+    assert 'logan_pipeline_runs_total{status="completed"}' in body
+    assert 'logan_pipeline_steps_total{status="started",step_name="ingest_paths"}' in body
+    assert 'logan_pipeline_steps_total{status="completed",step_name="export_artifacts"}' in body
+    assert (
+        'logan_pipeline_step_duration_seconds_count{status="completed",'
+        'step_name="export_artifacts"}'
+    ) in body
+
+
+@pytest.mark.asyncio
+async def test_pipeline_metrics_record_failure_without_sensitive_error_labels() -> None:
+    with pytest.raises(RuntimeError):
+        await AnalyzeCasePipeline().run(
+            case_id="case-metrics-fail",
+            analysis_run_id="run-metrics-fail",
+            paths=[str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
+            gateway=FailingAnnotationGateway(),
+        )
+
+    body = metrics_text()
+    assert 'logan_pipeline_runs_total{status="failed"}' in body
+    assert 'logan_pipeline_steps_total{status="failed",step_name="copilot_annotation"}' in body
+    assert (
+        'logan_pipeline_step_duration_seconds_count{status="failed",'
+        'step_name="copilot_annotation"}'
+    ) in body
+    assert "gho_pipeline_secret_token" not in body
+    assert "hunter2" not in body
 
 
 @pytest.mark.asyncio

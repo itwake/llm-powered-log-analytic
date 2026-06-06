@@ -20,6 +20,7 @@ from logan_workers.models import (
 
 from app.config import Settings
 from app.models import tables
+from app.observability import metrics_text
 from app.services.analytics_sinks import (
     AnalyticsSinkError,
     AnalyticsSinkPublisher,
@@ -434,6 +435,16 @@ def test_sqlalchemy_sink_writes_skip_succeeded_targets(tmp_path: Path) -> None:
         case_id=result.case_id, action="analytics_sink.publish"
     )
     assert publish_audits[-1].metadata["skipped_writes"] == 3
+    body = metrics_text()
+    assert 'logan_analytics_sink_operations_total{sink_name="clickhouse",status="succeeded"}' in body
+    assert 'logan_analytics_sink_operations_total{sink_name="opensearch",status="succeeded"}' in body
+    assert 'logan_analytics_sink_operations_total{sink_name="clickhouse",status="skipped"}' in body
+    assert 'logan_analytics_sink_operations_total{sink_name="opensearch",status="skipped"}' in body
+    assert 'logan_analytics_sink_rows_total{sink_name="clickhouse",status="succeeded"}' in body
+    assert 'logan_analytics_sink_rows_total{sink_name="opensearch",status="succeeded"}' in body
+    assert result.analysis_run_id not in body
+    assert "analytics-sink:" not in body
+    assert "secret-token" not in body
 
 
 def test_sqlalchemy_failed_sink_write_retries_next_publish(tmp_path: Path) -> None:
@@ -488,6 +499,9 @@ def test_sqlalchemy_failed_sink_write_retries_next_publish(tmp_path: Path) -> No
     assert writes["logan.enriched_log_lines"].attempt_count == 1
     assert writes["logan.window_aggregates"].status == "succeeded"
     assert writes["logan.window_aggregates"].attempt_count == 1
+    body = metrics_text()
+    assert 'logan_analytics_sink_operations_total{sink_name="clickhouse",status="failed"}' in body
+    assert "temporarily unavailable" not in body
     assert store.list_audit_logs(
         case_id=result.case_id, action="analytics_sink.publish_failed"
     )

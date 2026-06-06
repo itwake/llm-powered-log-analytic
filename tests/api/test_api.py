@@ -275,6 +275,35 @@ async def _create_completed_sample_run(client: AsyncClient) -> tuple[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_prometheus_metrics_endpoint_records_safe_api_request_metrics() -> None:
+    store = InMemoryStore(Settings(metrics_enabled=True))
+    app = create_app(
+        store=store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    client = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+
+    response = await client.get("/api/capabilities")
+    assert response.status_code == 200
+
+    metrics = await client.get("/metrics")
+    assert metrics.status_code == 200
+    assert "text/plain" in metrics.headers["content-type"]
+    assert "version=" in metrics.headers["content-type"]
+    body = metrics.text
+    assert (
+        'logan_http_requests_total{method="GET",route="/api/capabilities",status_code="200"}'
+        in body
+    )
+    assert "gho_metrics_secret_token_123456" not in body
+    assert "postgresql+psycopg://logan:secret@postgres:5432/logan" not in body
+    assert "logan-secret" not in body
+    assert "Checkout API intermittent 500 errors" not in body
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_temporal_start_path_passes_safe_workflow_params(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -697,6 +726,13 @@ async def test_api_rate_limit_only_when_enabled() -> None:
     limited = await enabled_client.get("/api/cases")
     assert limited.status_code == 429
     assert "rate limit exceeded" in limited.json()["detail"]
+    body = (await enabled_client.get("/metrics")).text
+    assert 'logan_rate_limit_rejections_total{key_type="ip"}' in body
+    assert "127.0.0.1" not in body
+    assert "session:" not in body
+    assert "logan_session" not in body
+    assert "gho_secret_token_1234567890" not in body
+    assert "password=hunter2" not in body
     await enabled_client.aclose()
 
 

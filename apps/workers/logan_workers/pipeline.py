@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from app.observability import (
+    record_pipeline_run_completed,
+    record_pipeline_run_failed,
+    record_pipeline_run_started,
+    record_pipeline_step_completed,
+    record_pipeline_step_failed,
+    record_pipeline_step_started,
+)
 from logan_workers.activities.broadcasting import broadcast_annotations
 from logan_workers.activities.causal import infer_causal_graph
 from logan_workers.activities.export import export_analysis
@@ -69,6 +78,34 @@ class AnalyzeCasePipeline:
         gateway: MockCopilotAnnotationGateway | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> AnalysisResult:
+        record_pipeline_run_started()
+        try:
+            result = await self._run_core(
+                case_id=case_id,
+                analysis_run_id=analysis_run_id,
+                paths=paths,
+                case_context=case_context,
+                config=config,
+                gateway=gateway,
+                progress_callback=progress_callback,
+            )
+        except Exception:
+            record_pipeline_run_failed()
+            raise
+        record_pipeline_run_completed()
+        return result
+
+    async def _run_core(
+        self,
+        *,
+        case_id: str,
+        analysis_run_id: str,
+        paths: list[str],
+        case_context: dict[str, Any] | None = None,
+        config: dict[str, Any] | None = None,
+        gateway: MockCopilotAnnotationGateway | None = None,
+        progress_callback: ProgressCallback | None = None,
+    ) -> AnalysisResult:
         config = config or {}
         case_context = {
             "case_id": case_id,
@@ -111,12 +148,18 @@ class AnalyzeCasePipeline:
             action: Callable[[], Any] | Callable[[], Awaitable[Any]],
             metadata: Callable[[Any], dict[str, Any]],
         ) -> Any:
+            record_pipeline_step_started(step_name)
+            step_started_at = time.perf_counter()
             await emit(step_name=step_name, event_type="started")
             try:
                 value = action()
                 if isinstance(value, Awaitable):
                     value = await value
             except Exception as exc:
+                record_pipeline_step_failed(
+                    step_name,
+                    time.perf_counter() - step_started_at,
+                )
                 await emit(
                     step_name=step_name,
                     event_type="failed",
@@ -127,6 +170,10 @@ class AnalyzeCasePipeline:
                 step_name=step_name,
                 event_type="completed",
                 metadata=metadata(value),
+            )
+            record_pipeline_step_completed(
+                step_name,
+                time.perf_counter() - step_started_at,
             )
             return value
 

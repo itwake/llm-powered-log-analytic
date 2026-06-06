@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, auth, capabilities, cases, chat, copilot_auth
+from app.observability import configure_otel, install_metrics
 from app.rate_limit import RateLimitMiddleware
 from app.services.copilot_auth_service import DeviceCodeClient, GitHubDeviceCodeClient
 from app.services.copilot_model_gateway import CopilotModelGateway
@@ -41,6 +42,8 @@ def create_app(
     app.include_router(cases.router)
     app.include_router(chat.router)
     app.include_router(admin.router)
+    configure_otel(app, app.state.store.settings)
+    install_metrics(app, app.state.store.settings)
     return app
 
 
