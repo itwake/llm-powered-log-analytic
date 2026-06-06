@@ -11,7 +11,7 @@ dependencies = [
   "fastapi>=0.110",
   "pydantic>=2",
   "sqlalchemy>=2",
-  "passlib[bcrypt]>=1.7",
+  "bcrypt>=5",
   "cryptography>=42",
   "httpx>=0.27"
 ]

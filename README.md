@@ -17,7 +17,7 @@ This repository is the staged foundation for the final product. The current impl
 Python 3.11+ is required. Node 20+ with pnpm is recommended for the web workspace.
 
 ```bash
-python3 -m pip install -e . pytest pytest-asyncio httpx fastapi sqlalchemy passlib bcrypt cryptography
+python3 -m pip install -e . pytest pytest-asyncio
 corepack enable
 corepack prepare pnpm@10.13.1 --activate
 pnpm install

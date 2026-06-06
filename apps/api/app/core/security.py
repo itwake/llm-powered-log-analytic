@@ -5,19 +5,34 @@ import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 from cryptography.fernet import Fernet
-from passlib.context import CryptContext
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+PASSWORD_HASH_SCHEME = "bcrypt_sha256$"
+LEGACY_BCRYPT_PREFIXES = ("$2a$", "$2b$", "$2x$", "$2y$")
+
+
+def _bcrypt_password_material(password: str) -> bytes:
+    digest = hashlib.sha256(password.encode("utf-8")).digest()
+    return base64.b64encode(digest)
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    hashed = bcrypt.hashpw(_bcrypt_password_material(password), bcrypt.gensalt())
+    return f"{PASSWORD_HASH_SCHEME}{hashed.decode('ascii')}"
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return pwd_context.verify(password, password_hash)
+    try:
+        if password_hash.startswith(PASSWORD_HASH_SCHEME):
+            stored_hash = password_hash.removeprefix(PASSWORD_HASH_SCHEME).encode("ascii")
+            return bcrypt.checkpw(_bcrypt_password_material(password), stored_hash)
+        if password_hash.startswith(LEGACY_BCRYPT_PREFIXES):
+            return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("ascii"))
+    except Exception:
+        return False
+    return False
 
 
 def issue_session_token() -> str:

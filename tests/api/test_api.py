@@ -17,7 +17,7 @@ async def _authenticated_client() -> tuple[AsyncClient, str]:
     app = create_app(store=store)
     transport = ASGITransport(app=app)
     client = AsyncClient(transport=transport, base_url="http://testserver")
-    await client.post(
+    register = await client.post(
         "/api/auth/register",
         json={
             "email": "engineer@example.com",
@@ -26,6 +26,7 @@ async def _authenticated_client() -> tuple[AsyncClient, str]:
             "password": "password123",
         },
     )
+    assert register.status_code == 200, register.text
     login = await client.post(
         "/api/auth/login",
         json={"email_or_username": "engineer", "password": "password123"},
