@@ -66,7 +66,7 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
         <span className="topbar-title">{caseTitle || "Incident workbench"}</span>
         <span className="status">
           {authState === "loading" && "Checking session"}
-          {authState === "signed-in" && `${user?.username || "Signed in"} · ${copilotStatus}`}
+          {authState === "signed-in" && `${user?.username || "Signed in"} | ${copilotStatus}`}
           {authState === "signed-out" && <Link href="/login">Sign in</Link>}
         </span>
       </header>

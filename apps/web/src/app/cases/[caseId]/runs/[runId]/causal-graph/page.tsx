@@ -81,11 +81,11 @@ export default function CausalGraphPage() {
                     <strong>{node.label}</strong>
                     <br />
                     <span className="muted">
-                      {node.golden_signal} · rank {formatPercent(node.rank_score)}
+                      {node.golden_signal} | rank {formatPercent(node.rank_score)}
                     </span>
                     <br />
                     <span className="muted">
-                      {node.occurrence_count} occurrences · first {formatDateTime(node.first_seen)}
+                      {node.occurrence_count} occurrences | first {formatDateTime(node.first_seen)}
                     </span>
                   </div>
                 ))}

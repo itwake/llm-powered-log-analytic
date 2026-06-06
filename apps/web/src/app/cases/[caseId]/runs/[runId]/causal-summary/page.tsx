@@ -174,7 +174,7 @@ export default function CausalSummaryPage() {
                   {textField(action, "description")}
                   <br />
                   <span className="muted">
-                    {textField(action, "priority")} · {textField(action, "owner_role")}
+                    {textField(action, "priority")} | {textField(action, "owner_role")}
                   </span>
                 </p>
               ))}
