@@ -85,10 +85,6 @@ class CopilotModelGateway:
     ) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
         if self.settings.llm_provider != "github_copilot":
             raise CopilotGatewayError("LogAn only supports github_copilot as its LLM provider")
-        if stream:
-            raise CopilotModelGatewayStreamUnsupported(
-                "Copilot /responses streaming is not implemented in this backend stage"
-            )
 
         payload = self._build_payload(
             model=model,
@@ -102,12 +98,14 @@ class CopilotModelGateway:
             response_format=response_format,
         )
         resolved = await self._resolve_token(user_id=user_id)
-        api_base_url = (
-            self.settings.copilot_base_url
-            or resolved.api_base_url
-            or _api_base_from_copilot_token(resolved.token)
-            or COPILOT_DEFAULT_API_BASE
-        ).rstrip("/")
+        api_base_url = self._responses_api_base_url(resolved)
+        if stream:
+            return self._stream_response_events(
+                api_base_url=api_base_url,
+                payload=payload,
+                resolved=resolved,
+                model=model,
+            )
         try:
             response = await self.http_client.post(
                 f"{api_base_url}/responses",
@@ -317,6 +315,96 @@ class CopilotModelGateway:
             payload["response_format"] = response_format
         return payload
 
+    def _responses_api_base_url(self, resolved: ResolvedCopilotToken) -> str:
+        return (
+            self.settings.copilot_base_url
+            or resolved.api_base_url
+            or _api_base_from_copilot_token(resolved.token)
+            or COPILOT_DEFAULT_API_BASE
+        ).rstrip("/")
+
+    async def _stream_response_events(
+        self,
+        *,
+        api_base_url: str,
+        payload: dict[str, Any],
+        resolved: ResolvedCopilotToken,
+        model: str,
+    ) -> AsyncIterator[dict[str, Any]]:
+        completed_emitted = False
+        accumulated_text: list[str] = []
+        try:
+            async with self.http_client.stream(
+                "POST",
+                f"{api_base_url}/responses",
+                json=payload,
+                headers=self._responses_headers(resolved.token, stream=True),
+            ) as response:
+                response.raise_for_status()
+                async for data in _iter_sse_data(response):
+                    if data.strip() == "[DONE]":
+                        if not completed_emitted:
+                            completed_emitted = True
+                            yield {
+                                "type": "message.completed",
+                                "provider": "github_copilot",
+                                "model": model,
+                                "output_text": "".join(accumulated_text),
+                                "token_source": resolved.source,
+                            }
+                        continue
+                    try:
+                        provider_event = json.loads(data)
+                    except json.JSONDecodeError as exc:
+                        raise CopilotTransportError(
+                            "GitHub Copilot /responses stream returned invalid JSON"
+                        ) from exc
+                    if not isinstance(provider_event, dict):
+                        continue
+
+                    delta = _extract_stream_delta(provider_event)
+                    if delta:
+                        accumulated_text.append(delta)
+                        yield {
+                            "type": "message.delta",
+                            "delta": delta,
+                            "provider_event": provider_event,
+                        }
+
+                    completed = _extract_stream_completed(provider_event)
+                    if completed is not None:
+                        completed_emitted = True
+                        output_text = completed.get("output_text")
+                        if not isinstance(output_text, str):
+                            output_text = "".join(accumulated_text)
+                        yield {
+                            "type": "message.completed",
+                            "provider": "github_copilot",
+                            "model": model,
+                            "output_text": output_text,
+                            "provider_json": completed.get("provider_json", provider_event),
+                            "token_source": resolved.source,
+                        }
+                if not completed_emitted:
+                    yield {
+                        "type": "message.completed",
+                        "provider": "github_copilot",
+                        "model": model,
+                        "output_text": "".join(accumulated_text),
+                        "token_source": resolved.source,
+                    }
+        except httpx.HTTPStatusError as exc:
+            message = f"GitHub Copilot /responses failed with HTTP {exc.response.status_code}"
+            raise CopilotTransportError(_redact_token_material(message, [resolved.token])) from exc
+        except CopilotTransportError as exc:
+            message = _redact_token_material(str(exc), [resolved.token])
+            raise CopilotTransportError(message) from exc
+        except Exception as exc:
+            message = _redact_token_material(str(exc) or exc.__class__.__name__, [resolved.token])
+            raise CopilotTransportError(
+                f"GitHub Copilot /responses transport failed: {message}"
+            ) from exc
+
 
 def _looks_like_source_token(token: str) -> bool:
     return token.startswith(SOURCE_TOKEN_PREFIXES)
@@ -398,6 +486,80 @@ def _extract_output_text(provider_json: Any) -> str:
                 if isinstance(first.get("text"), str):
                     return first["text"]
     return ""
+
+
+async def _iter_sse_data(response: httpx.Response) -> AsyncIterator[str]:
+    data_lines: list[str] = []
+    async for raw_line in response.aiter_lines():
+        line = raw_line.rstrip("\r")
+        if not line:
+            if data_lines:
+                yield "\n".join(data_lines)
+                data_lines = []
+            continue
+        if line.startswith(":"):
+            continue
+        if not line.startswith("data:"):
+            continue
+        data = line[5:]
+        if data.startswith(" "):
+            data = data[1:]
+        data_lines.append(data)
+    if data_lines:
+        yield "\n".join(data_lines)
+
+
+def _extract_stream_delta(provider_event: dict[str, Any]) -> str:
+    event_type = provider_event.get("type")
+    delta = provider_event.get("delta")
+    if event_type in {"response.output_text.delta", "output_text_delta"} and isinstance(delta, str):
+        return delta
+    choices = provider_event.get("choices")
+    if isinstance(choices, list):
+        texts: list[str] = []
+        for choice in choices:
+            if not isinstance(choice, dict):
+                continue
+            choice_delta = choice.get("delta")
+            if isinstance(choice_delta, dict) and isinstance(choice_delta.get("content"), str):
+                texts.append(choice_delta["content"])
+            elif isinstance(choice.get("text"), str):
+                texts.append(choice["text"])
+        if texts:
+            return "".join(texts)
+    output_text = provider_event.get("output_text")
+    if isinstance(output_text, str):
+        return output_text
+    nested_text = _extract_output_text(provider_event)
+    return nested_text
+
+
+def _extract_stream_completed(provider_event: dict[str, Any]) -> dict[str, Any] | None:
+    event_type = provider_event.get("type")
+    if event_type in {
+        "response.completed",
+        "response.output_text.done",
+        "message.completed",
+        "done",
+        "completed",
+    }:
+        provider_json = provider_event.get("response")
+        if not isinstance(provider_json, dict):
+            provider_json = provider_event
+        return {
+            "provider_json": provider_json,
+            "output_text": _extract_output_text(provider_json),
+        }
+    if isinstance(provider_event.get("usage"), dict) and provider_event.get("choices"):
+        choices = provider_event.get("choices")
+        if isinstance(choices, list) and any(
+            isinstance(choice, dict) and choice.get("finish_reason") for choice in choices
+        ):
+            return {
+                "provider_json": provider_event,
+                "output_text": _extract_output_text(provider_event),
+            }
+    return None
 
 
 def _extract_text_from_output_item(item: Any) -> list[str]:

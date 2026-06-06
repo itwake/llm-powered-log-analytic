@@ -40,12 +40,19 @@ The default API path uses real GitHub Copilot auth and model calls:
 - `POST /api/copilot/auth/check` stores only an encrypted `github_source_oauth` credential when authorized.
 - `DELETE /api/copilot/auth/credential` disconnects the current user by revoking stored source and plugin credentials.
 - analysis runs use `CopilotModelGateway` and require a stored credential or one of `LOGAN_GITHUB_COPILOT_TOKEN` / `LOGAN_GITHUB_SOURCE_TOKEN`.
+- case workspace chat uses `POST /api/chat/stream` to stream Copilot answers over SSE when a completed analysis result is available.
 
 When stored source credentials are used, the gateway exchanges them for Copilot plugin tokens,
 persists the plugin token with its `expires_at`, and reuses it until expiration. Set
 `LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS=60` to control the pre-expiration refresh window.
 `LOGAN_GITHUB_SOURCE_TOKEN` remains an environment fallback and is exchanged per call without
 being written to the user credential store.
+
+The chat stream route is authenticated by the same `logan_session` cookie as the rest of the API.
+It sends only compact, redacted analysis context to Copilot: user question, case/run ids, causal
+summary text, up to five evidence refs, and up to five template-level summary rows. If no context
+exists, it streams a short fallback response without calling Copilot. Credential and gateway
+failures are serialized as sanitized `event: error` SSE frames.
 
 The test suite injects fake auth/model clients and does not require GitHub network access.
 Analysis completion in the SQLAlchemy backend now writes normalized analytics rows into
@@ -92,8 +99,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web
 browser requests with `credentials: "include"` for the `logan_session` cookie. The current
 workbench creates cases, uploads selected log/archive files, starts analysis by
 `input_file_ids`, preserves a sample/local fixture run action, lists real runs, loads report
-views from API endpoints, submits feedback/exports, and drives Copilot device auth start/check
-through the backend.
+views from API endpoints, streams case-workspace Copilot answers with fetch-based SSE parsing,
+submits feedback/exports, and drives Copilot device auth start/check through the backend.
 
 Run the full service skeleton:
 
@@ -108,7 +115,6 @@ docker compose up --build
 - Add external sink retry/idempotency records for ClickHouse/OpenSearch writes.
 - Add report/query reads over external analytics stores.
 - Add resumable/multipart uploads for large files and interrupted browser sessions.
-- Implement Copilot `/responses` streaming plus `/api/chat/stream` SSE.
 - Replace the Temporal placeholder with real activities backed by durable retries and replay-safe
   idempotency; job event rows already provide the run-scoped progress/event stream.
 - Add PGEM and Granger methods behind the current causal method seams.

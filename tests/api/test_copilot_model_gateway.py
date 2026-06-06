@@ -279,6 +279,67 @@ async def test_environment_copilot_token_fallback() -> None:
 
 
 @pytest.mark.asyncio
+async def test_streaming_responses_parse_sse_deltas_and_send_stream_headers() -> None:
+    store, user_id = _store_and_user()
+    plugin_token = "streaming-copilot-plugin-token"
+    store.save_credential(
+        user_id=user_id,
+        credential_type="copilot_plugin_token",
+        token=plugin_token,
+        github_base_url="https://github.com",
+    )
+    seen_payloads: list[dict[str, object]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert str(request.url) == "https://api.githubcopilot.com/responses"
+        assert request.headers["authorization"] == f"Bearer {plugin_token}"
+        assert request.headers["accept"] == "text/event-stream"
+        payload = json.loads(request.content)
+        assert payload["stream"] is True
+        assert payload["metadata"] == {"case_id": "case-1"}
+        seen_payloads.append(payload)
+        return httpx.Response(
+            200,
+            content=(
+                'data: {"type":"response.output_text.delta","delta":"Hello "}\n\n'
+                'data: {"type":"output_text_delta","delta":"from "}\n\n'
+                'data: {"choices":[{"delta":{"content":"Copilot"}}]}\n\n'
+                'data: {"type":"response.completed","response":{"id":"resp_1","output_text":"Hello from Copilot"}}\n\n'
+                "data: [DONE]\n\n"
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = CopilotModelGateway(store=store, http_client=http_client)
+
+    stream = await gateway.responses(
+        user_id=user_id,
+        model="gpt-5.4",
+        instructions="case_chat",
+        input=[{"role": "user", "content": [{"type": "input_text", "text": "hello"}]}],
+        stream=True,
+        metadata={"case_id": "case-1"},
+    )
+    events = [event async for event in stream]
+
+    assert len(seen_payloads) == 1
+    assert [event["type"] for event in events] == [
+        "message.delta",
+        "message.delta",
+        "message.delta",
+        "message.completed",
+    ]
+    assert "".join(event["delta"] for event in events if event["type"] == "message.delta") == (
+        "Hello from Copilot"
+    )
+    assert events[-1]["output_text"] == "Hello from Copilot"
+    assert events[-1]["provider_json"]["id"] == "resp_1"
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_response_transport_errors_redact_plugin_token() -> None:
     store, user_id = _store_and_user()
     plugin_token = "copilot-secret-token"

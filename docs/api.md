@@ -46,6 +46,7 @@ Tests and local no-network checks inject a deterministic fake client through `cr
 
 - `GET /api/capabilities`
 - `POST /api/chat`
+- `POST /api/chat/stream`
 - `POST /api/tasks/execute`
 
 The model provider is `github_copilot` by default and the default model is `gpt-5.4`.
@@ -59,10 +60,27 @@ The backend model gateway resolves credentials in this order:
 Stored source OAuth exchanges cache the returned Copilot plugin token with its parsed `expires_at`.
 Environment source tokens are exchanged in memory and are not persisted to user credentials.
 
-The gateway posts non-streaming requests to `<copilot api base>/responses` with Copilot preview
-headers. It returns parsed backend objects with the original provider JSON, `output_text`, and
-`output_json` when `response_format={"type": "json_object"}` and the output text is valid JSON.
-Streaming `/responses` and `/api/chat/stream` are deferred to the next runtime stage.
+The gateway posts requests to `<copilot api base>/responses` with Copilot preview headers.
+Non-streaming calls return parsed backend objects with the original provider JSON, `output_text`,
+and `output_json` when `response_format={"type": "json_object"}` and the output text is valid
+JSON. Streaming calls use `Accept: text/event-stream`, parse provider SSE `data:` frames, normalize
+common text-delta shapes into `{"type":"message.delta","delta":"..."}`, and emit
+`{"type":"message.completed", ...}` for provider completion or `[DONE]`.
+
+`POST /api/chat/stream` accepts the same `ChatRequest` shape as `POST /api/chat` and requires the
+session cookie. Because it is a POST stream, web clients use `fetch` plus `ReadableStream` rather
+than `EventSource`. When `case_id` and `analysis_run_id` resolve to an analysis result, the API
+sends Copilot a compact redacted context containing the user message, case/run ids, causal summary
+text, up to five causal evidence refs, and up to five template-level summary rows. It does not send
+raw log text, stored credentials, source tokens, or model prompts. Without context, the endpoint
+streams the same clear fallback message as `POST /api/chat` and does not call Copilot.
+
+SSE frames are JSON:
+
+- `event: delta`, `data: {"delta":"..."}`
+- `event: evidence`, `data: {"evidence_refs":[...]}`
+- `event: done`, `data: {"message":"..."}`
+- `event: error`, `data: {"message":"..."}` for sanitized credential or gateway failures
 
 ## Cases and Analysis
 

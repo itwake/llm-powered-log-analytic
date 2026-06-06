@@ -2,11 +2,11 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing, an in-memory test option, local object-byte uploads, synchronous worker pipeline, synthetic checkout incident fixtures, tests, a Next.js workbench shell, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing, an in-memory test option, local object-byte uploads, synchronous worker pipeline, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell, and deployment scaffolding.
 
 ## Architecture
 
-- `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, real GitHub Copilot device-code auth, Copilot `/responses` gateway, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters, and a lightweight in-memory store for explicit tests/local experimentation.
+- `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, real GitHub Copilot device-code auth, Copilot `/responses` gateway with streaming support, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters, and a lightweight in-memory store for explicit tests/local experimentation.
 - `apps/workers`: Python log-analysis pipeline for ingestion, multi-line merge, timestamp parsing, redaction, templating, representative sampling, model annotation, label broadcasting, temporal aggregation, candidate causal graph generation, causal summary rendering, and export generation.
 - `apps/web`: Next.js/React/TypeScript operational workbench shell aligned to final API shapes.
 - `infra/docker`: first-pass Dockerfiles for web, API, and worker.
@@ -78,6 +78,7 @@ Tests assert that model inputs are redacted, representative samples are used, an
 
 - GitHub Copilot is the default LLM provider (`github_copilot`) and `gpt-5.4` is the default model.
 - The default backend LLM runtime is GitHub Copilot Plugin `/responses`; OpenAI and Anthropic fallbacks are not configured.
+- `POST /api/chat/stream` streams authenticated case-workspace answers over SSE using compact redacted analysis context when a case/run is available.
 - Tests inject deterministic mocked Copilot auth and model gateways through `create_app(...)` or pipeline gateway arguments.
 - GitHub source OAuth and Copilot plugin tokens are encrypted at rest, decrypted only in backend services, and never returned to frontend responses.
 - Sensitive data redaction covers email, IP, bearer tokens, passwords, secrets, API keys, JWTs, UUIDs, card-like values, URL query secrets, and tenant/customer IDs before model calls.
@@ -116,4 +117,4 @@ See `.env.example` for the full list. Key defaults:
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are `/api/chat/stream` SSE wiring, ClickHouse/OpenSearch table and index lifecycle, external sink retry/idempotency records, service-backed analytics query paths, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are ClickHouse/OpenSearch table and index lifecycle, external sink retry/idempotency records, service-backed analytics query paths, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.

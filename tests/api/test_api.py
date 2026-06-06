@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 import zipfile
 
@@ -15,7 +16,11 @@ from logan_workers.activities.inference import MockCopilotAnnotationGateway
 from app.config import Settings
 from app.core.security import decrypt_token
 from app.main import create_app
-from app.services.copilot_model_gateway import CopilotCredentialError, CopilotModelGateway
+from app.services.copilot_model_gateway import (
+    CopilotCredentialError,
+    CopilotModelGateway,
+    CopilotTransportError,
+)
 from app.services.copilot_auth_service import DeviceCodePollResult, MockGitHubDeviceClient
 from app.store import InMemoryStore
 
@@ -42,6 +47,32 @@ class FailingAnnotationGateway(MockCopilotAnnotationGateway):
             "annotation failed source_token=gho_secret_token_1234567890 "
             "password=hunter2"
         )
+
+
+class StreamingChatGateway(MockCopilotAnnotationGateway):
+    async def responses(self, **kwargs):
+        if kwargs.get("stream"):
+            self.calls.append(kwargs)
+
+            async def stream() -> AsyncIterator[dict[str, object]]:
+                yield {"type": "message.delta", "delta": "Auth-service "}
+                yield {"type": "message.delta", "delta": "is candidate evidence."}
+                yield {
+                    "type": "message.completed",
+                    "output_text": "Auth-service is candidate evidence.",
+                }
+
+            return stream()
+        return await super().responses(**kwargs)
+
+
+class StreamingErrorGateway(MockCopilotAnnotationGateway):
+    async def responses(self, **kwargs):
+        if kwargs.get("stream"):
+            raise CopilotTransportError(
+                "stream failed source_token=gho_secret_token_1234567890 password=hunter2"
+            )
+        return await super().responses(**kwargs)
 
 
 class FakeS3NotFound(Exception):
@@ -71,12 +102,13 @@ class FakeS3Client:
 async def _authenticated_client(
     app_settings: Settings | None = None,
     s3_client_factory=None,
+    model_gateway=None,
 ) -> tuple[AsyncClient, InMemoryStore, str]:
     store = InMemoryStore(app_settings or Settings())
     app = create_app(
         store=store,
         copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        model_gateway=model_gateway or MockCopilotAnnotationGateway(),
         s3_client_factory=s3_client_factory,
     )
     transport = ASGITransport(app=app)
@@ -97,6 +129,23 @@ async def _authenticated_client(
     )
     assert login.status_code == 200
     return client, store, store.users_by_username["engineer"]
+
+
+def _parse_sse_frames(text: str) -> list[tuple[str, dict[str, object]]]:
+    frames: list[tuple[str, dict[str, object]]] = []
+    for block in text.strip().split("\n\n"):
+        if not block.strip():
+            continue
+        event = "message"
+        data_lines: list[str] = []
+        for line in block.splitlines():
+            if line.startswith("event:"):
+                event = line.removeprefix("event:").strip()
+            elif line.startswith("data:"):
+                data = line.removeprefix("data:")
+                data_lines.append(data[1:] if data.startswith(" ") else data)
+        frames.append((event, json.loads("\n".join(data_lines))))
+    return frames
 
 
 async def _create_case(client: AsyncClient) -> str:
@@ -138,6 +187,23 @@ async def _upload_content(
     )
     assert put.status_code == 200, put.text
     return put.json()
+
+
+async def _create_completed_sample_run(client: AsyncClient) -> tuple[str, str]:
+    case_id = await _create_case(client)
+    run = await client.post(
+        f"/api/cases/{case_id}/analysis-runs",
+        json={
+            "input_paths": [str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
+            "config": {"default_window_size_seconds": 60},
+        },
+    )
+    assert run.status_code == 200, run.text
+    run_id = run.json()["analysis_run_id"]
+    status = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")
+    assert status.status_code == 200, status.text
+    assert status.json()["status"] == "completed"
+    return case_id, str(run_id)
 
 
 @pytest.mark.asyncio
@@ -407,6 +473,107 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     assert "candidate" in chat.json()["message"].lower()
     tasks = await client.post("/api/tasks/execute", json={"task_name": "noop", "arguments": {}})
     assert tasks.json()["runtime_type"] == "github_copilot"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_fallback_without_context_does_not_call_gateway() -> None:
+    gateway = MockCopilotAnnotationGateway()
+    client, _, _ = await _authenticated_client(model_gateway=gateway)
+
+    response = await client.post("/api/chat/stream", json={"message": "What happened?"})
+    frames = _parse_sse_frames(response.text)
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert frames == [
+        ("delta", {"delta": "No case analysis context was found for this chat request."}),
+        ("evidence", {"evidence_refs": []}),
+        ("done", {"message": "No case analysis context was found for this chat request."}),
+    ]
+    assert gateway.calls == []
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_uses_injected_streaming_gateway_with_context() -> None:
+    gateway = StreamingChatGateway()
+    client, _, _ = await _authenticated_client(model_gateway=gateway)
+    case_id, run_id = await _create_completed_sample_run(client)
+    gateway.calls.clear()
+
+    response = await client.post(
+        "/api/chat/stream",
+        json={
+            "message": "Why is auth-service ranked?",
+            "case_id": case_id,
+            "analysis_run_id": run_id,
+        },
+    )
+    frames = _parse_sse_frames(response.text)
+
+    assert response.status_code == 200, response.text
+    assert [event for event, _payload in frames] == ["evidence", "delta", "delta", "done"]
+    evidence = frames[0][1]["evidence_refs"]
+    assert isinstance(evidence, list)
+    assert 1 <= len(evidence) <= 5
+    assert frames[1][1] == {"delta": "Auth-service "}
+    assert frames[2][1] == {"delta": "is candidate evidence."}
+    assert frames[3][1] == {"message": "Auth-service is candidate evidence."}
+
+    assert len(gateway.calls) == 1
+    call = gateway.calls[0]
+    assert call["stream"] is True
+    assert call["model"] == "gpt-5.4"
+    assert call["reasoning_effort"] == "high"
+    assert call["metadata"] == {
+        "case_id": case_id,
+        "analysis_run_id": run_id,
+        "purpose": "case_chat",
+    }
+    context_text = call["input"][0]["content"][0]["text"]
+    context = json.loads(context_text)
+    assert context["user_message"] == "Why is auth-service ranked?"
+    assert context["case_id"] == case_id
+    assert context["analysis_run_id"] == run_id
+    assert context["causal_summary"]
+    assert 1 <= len(context["summary_rows"]) <= 5
+    serialized_context = json.dumps(context, sort_keys=True)
+    assert "raw_entries" not in serialized_context
+    assert "raw_message" not in serialized_context
+    assert "model_inputs" not in serialized_context
+    assert "source_token" not in serialized_context
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_gateway_error_frame_is_sanitized() -> None:
+    client, _, _ = await _authenticated_client(model_gateway=StreamingErrorGateway())
+    case_id, run_id = await _create_completed_sample_run(client)
+
+    response = await client.post(
+        "/api/chat/stream",
+        json={
+            "message": "Summarize the candidate cause.",
+            "case_id": case_id,
+            "analysis_run_id": run_id,
+        },
+    )
+    frames = _parse_sse_frames(response.text)
+
+    assert response.status_code == 200, response.text
+    assert frames == [
+        (
+            "error",
+            {
+                "message": (
+                    "stream failed source_token=<REDACTED> password=<REDACTED>"
+                )
+            },
+        )
+    ]
+    assert "gho_secret_token_1234567890" not in response.text
+    assert "hunter2" not in response.text
     await client.aclose()
 
 

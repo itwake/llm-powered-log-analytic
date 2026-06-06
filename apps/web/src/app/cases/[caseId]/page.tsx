@@ -2,8 +2,15 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { AnalysisRunResponse, CaseResponse, casesApi, runsApi } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import {
+  AnalysisRunResponse,
+  CaseResponse,
+  EvidenceRef,
+  casesApi,
+  chatApi,
+  runsApi,
+} from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
 import { Metric, Shell } from "@/components/Shell";
 
@@ -25,6 +32,10 @@ function progressValue(run: AnalysisRunResponse | null, key: string): string {
   return typeof value === "number" ? String(value) : "n/a";
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 export default function CaseWorkspacePage() {
   const {caseId} = useParams<{caseId: string}>();
   const router = useRouter();
@@ -34,6 +45,12 @@ export default function CaseWorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState<"files" | "sample" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [askQuestion, setAskQuestion] = useState("");
+  const [askAnswer, setAskAnswer] = useState("");
+  const [askEvidenceRefs, setAskEvidenceRefs] = useState<EvidenceRef[]>([]);
+  const [askStreaming, setAskStreaming] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+  const askAbortRef = useRef<AbortController | null>(null);
 
   async function load() {
     setLoading(true);
@@ -55,6 +72,10 @@ export default function CaseWorkspacePage() {
   useEffect(() => {
     void load();
   }, [caseId]);
+
+  useEffect(() => () => {
+    askAbortRef.current?.abort();
+  }, []);
 
   async function startUploadedAnalysis() {
     if (selectedFiles.length === 0) {
@@ -91,6 +112,50 @@ export default function CaseWorkspacePage() {
     } finally {
       setStarting(null);
     }
+  }
+
+  async function askCopilot(latestRun: AnalysisRunResponse) {
+    const question = askQuestion.trim();
+    if (!question || askStreaming) {
+      return;
+    }
+    const controller = new AbortController();
+    askAbortRef.current = controller;
+    setAskStreaming(true);
+    setAskAnswer("");
+    setAskEvidenceRefs([]);
+    setAskError(null);
+    try {
+      await chatApi.stream(
+        {
+          message: question,
+          case_id: caseId,
+          analysis_run_id: latestRun.analysis_run_id,
+        },
+        {
+          delta: (delta) => setAskAnswer((current) => `${current}${delta}`),
+          evidence: (evidenceRefs) => setAskEvidenceRefs(evidenceRefs),
+          done: (message) => setAskAnswer((current) => current || message),
+          error: (message) => setAskError(message),
+        },
+        controller.signal,
+      );
+    } catch (caught) {
+      if (!isAbortError(caught)) {
+        setAskError(apiErrorMessage(caught));
+      }
+    } finally {
+      if (askAbortRef.current === controller) {
+        askAbortRef.current = null;
+      }
+      setAskStreaming(false);
+    }
+  }
+
+  function cancelAsk() {
+    askAbortRef.current?.abort();
+    askAbortRef.current = null;
+    setAskStreaming(false);
   }
 
   const latestRun = runs[0] || null;
@@ -161,6 +226,54 @@ export default function CaseWorkspacePage() {
               deterministic fixture set.
             </p>
           </section>
+
+          {latestRun && (
+            <section className="panel ask-panel" style={{marginTop: 14}}>
+              <h2>Copilot Ask</h2>
+              <label className="field">
+                Question
+                <textarea
+                  disabled={askStreaming}
+                  value={askQuestion}
+                  onChange={(event) => setAskQuestion(event.target.value)}
+                />
+              </label>
+              <div className="form-actions">
+                {!askStreaming && (
+                  <button
+                    className="button"
+                    disabled={!askQuestion.trim()}
+                    type="button"
+                    onClick={() => void askCopilot(latestRun)}
+                  >
+                    Ask
+                  </button>
+                )}
+                {askStreaming && (
+                  <button className="button secondary" type="button" onClick={cancelAsk}>
+                    Cancel
+                  </button>
+                )}
+              </div>
+              {askError && <div className="alert error compact">{askError}</div>}
+              {(askAnswer || askStreaming) && (
+                <div className="ask-answer">
+                  {askAnswer || <span className="muted">Waiting for response</span>}
+                </div>
+              )}
+              {askEvidenceRefs.length > 0 && (
+                <div className="evidence-list">
+                  <strong>Evidence refs ({askEvidenceRefs.length})</strong>
+                  {askEvidenceRefs.map((ref) => (
+                    <div key={`${ref.log_id}-${ref.line_number}`}>
+                      {ref.file_path}:{ref.line_number}
+                      {ref.template_id ? ` - ${ref.template_id}` : ""}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           <section className="grid two" style={{marginTop: 14}}>
             <div className="panel">
