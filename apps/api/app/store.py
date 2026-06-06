@@ -139,6 +139,8 @@ class CredentialRecord:
     github_base_url: str
     runtime_type: str = "github_copilot"
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    expires_at: datetime | None = None
+    revoked_at: datetime | None = None
 
 
 @dataclass
@@ -295,6 +297,26 @@ class AuditLogRecord:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
+COPILOT_AUTH_CREDENTIAL_TYPES = frozenset(
+    {"github_source_oauth", "copilot_plugin_token"}
+)
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
+
+
+def _credential_is_active(record: CredentialRecord, *, now: datetime | None = None) -> bool:
+    if record.revoked_at is not None:
+        return False
+    expires_at = _as_utc(record.expires_at)
+    return expires_at is None or expires_at > (now or datetime.now(UTC))
+
+
 class MetadataStore(Protocol):
     settings: Settings
 
@@ -311,12 +333,22 @@ class MetadataStore(Protocol):
     def revoke_session(self, token: str | None) -> None: ...
 
     def save_credential(
-        self, *, user_id: str, credential_type: str, token: str, github_base_url: str
+        self,
+        *,
+        user_id: str,
+        credential_type: str,
+        token: str,
+        github_base_url: str,
+        expires_at: datetime | None = None,
     ) -> CredentialRecord: ...
 
     def get_credential(
         self, *, user_id: str, credential_type: str
     ) -> CredentialRecord | None: ...
+
+    def revoke_credentials(
+        self, user_id: str, credential_types: set[str] | list[str] | tuple[str, ...] | None = None
+    ) -> int: ...
 
     def has_credential(self, user_id: str) -> bool: ...
 
@@ -511,6 +543,7 @@ class InMemoryStore:
         credential_type: str,
         token: str,
         github_base_url: str,
+        expires_at: datetime | None = None,
     ) -> CredentialRecord:
         record = CredentialRecord(
             id=str(uuid.uuid4()),
@@ -519,15 +552,39 @@ class InMemoryStore:
             encrypted_token=encrypt_token(token, self.settings.credential_encryption_key),
             token_hint=token_hint(token),
             github_base_url=github_base_url,
+            expires_at=_as_utc(expires_at),
         )
         self.credentials_by_user[(user_id, credential_type)] = record
         return record
 
     def get_credential(self, *, user_id: str, credential_type: str) -> CredentialRecord | None:
-        return self.credentials_by_user.get((user_id, credential_type))
+        record = self.credentials_by_user.get((user_id, credential_type))
+        if record is None or not _credential_is_active(record):
+            return None
+        return record
+
+    def revoke_credentials(
+        self, user_id: str, credential_types: set[str] | list[str] | tuple[str, ...] | None = None
+    ) -> int:
+        credential_type_filter = set(credential_types) if credential_types is not None else None
+        revoked_at = datetime.now(UTC)
+        revoked_count = 0
+        for (record_user_id, credential_type), record in self.credentials_by_user.items():
+            if record_user_id != user_id:
+                continue
+            if credential_type_filter is not None and credential_type not in credential_type_filter:
+                continue
+            if record.revoked_at is not None:
+                continue
+            record.revoked_at = revoked_at
+            revoked_count += 1
+        return revoked_count
 
     def has_credential(self, user_id: str) -> bool:
-        return any(key_user_id == user_id for key_user_id, _ in self.credentials_by_user)
+        return any(
+            self.get_credential(user_id=user_id, credential_type=credential_type) is not None
+            for credential_type in COPILOT_AUTH_CREDENTIAL_TYPES
+        )
 
     def create_copilot_auth(self, record: CopilotAuthRecord) -> CopilotAuthRecord:
         self.copilot_auth[record.auth_id] = record

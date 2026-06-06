@@ -29,7 +29,14 @@ The default API path uses real GitHub Copilot auth and model calls:
 
 - `POST /api/copilot/auth/start` starts GitHub device-code auth.
 - `POST /api/copilot/auth/check` stores only an encrypted `github_source_oauth` credential when authorized.
+- `DELETE /api/copilot/auth/credential` disconnects the current user by revoking stored source and plugin credentials.
 - analysis runs use `CopilotModelGateway` and require a stored credential or one of `LOGAN_GITHUB_COPILOT_TOKEN` / `LOGAN_GITHUB_SOURCE_TOKEN`.
+
+When stored source credentials are used, the gateway exchanges them for Copilot plugin tokens,
+persists the plugin token with its `expires_at`, and reuses it until expiration. Set
+`LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS=60` to control the pre-expiration refresh window.
+`LOGAN_GITHUB_SOURCE_TOKEN` remains an environment fallback and is exchanged per call without
+being written to the user credential store.
 
 The test suite injects fake auth/model clients and does not require GitHub network access.
 Analysis completion in the SQLAlchemy backend now writes normalized analytics rows into
@@ -93,8 +100,6 @@ docker compose up --build
 - Add report/query reads over external analytics stores.
 - Add an S3/MinIO presigned object-store adapter for production deployments.
 - Add resumable/multipart uploads for large files and interrupted browser sessions.
-- Cache Copilot plugin tokens until their `expires_at` instead of exchanging the source token per model call.
-- Add credential revocation/disconnect endpoints and UI.
 - Implement Copilot `/responses` streaming plus `/api/chat/stream` SSE.
 - Replace the Temporal placeholder with real activities backed by durable retries and replay-safe
   idempotency; job event rows already provide the run-scoped progress/event stream.

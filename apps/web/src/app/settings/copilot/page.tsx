@@ -13,6 +13,7 @@ export default function CopilotSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +49,24 @@ export default function CopilotSettingsPage() {
       setError(apiErrorMessage(caught));
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function disconnect() {
+    setDisconnecting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await copilotAuthApi.disconnect();
+      setDeviceAuth(null);
+      setPollStatus("idle");
+      setNextPollSeconds(null);
+      setMessage("Copilot disconnected");
+      await loadMe();
+    } catch (caught) {
+      setError(apiErrorMessage(caught));
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -96,9 +115,28 @@ export default function CopilotSettingsPage() {
     <Shell>
       <div className="toolbar">
         <h1>Copilot Settings</h1>
-        <button className="button" disabled={starting || loading} type="button" onClick={startAuth}>
-          {starting ? "Starting" : "Connect GitHub Copilot"}
+        <button
+          className="button"
+          disabled={starting || loading || disconnecting}
+          type="button"
+          onClick={startAuth}
+        >
+          {starting
+            ? "Starting"
+            : user?.has_copilot_credential
+              ? "Reconnect GitHub Copilot"
+              : "Connect GitHub Copilot"}
         </button>
+        {user?.has_copilot_credential && (
+          <button
+            className="button danger"
+            disabled={disconnecting || loading}
+            type="button"
+            onClick={disconnect}
+          >
+            {disconnecting ? "Disconnecting" : "Disconnect"}
+          </button>
+        )}
       </div>
 
       {error && <div className="alert error">{error}</div>}

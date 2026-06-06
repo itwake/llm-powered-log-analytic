@@ -401,6 +401,11 @@ export interface CopilotCheckResponse {
   expires_at?: string | null;
 }
 
+export interface CopilotDisconnectResponse {
+  status: string;
+  revoked_count: number;
+}
+
 export const authApi = {
   me: () => request<AuthUserResponse>("/api/auth/me"),
   login: (payload: LoginRequest) =>
@@ -495,5 +500,9 @@ export const copilotAuthApi = {
     request<CopilotCheckResponse>("/api/copilot/auth/check", {
       method: "POST",
       body: {auth_id},
+    }),
+  disconnect: () =>
+    request<CopilotDisconnectResponse>("/api/copilot/auth/credential", {
+      method: "DELETE",
     }),
 };

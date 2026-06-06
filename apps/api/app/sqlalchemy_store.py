@@ -32,6 +32,7 @@ from app.store import (
     AuditLogRecord,
     CaseRecord,
     CopilotAuthRecord,
+    COPILOT_AUTH_CREDENTIAL_TYPES,
     CredentialRecord,
     ExportRecord,
     FeedbackRecord,
@@ -262,9 +263,11 @@ class SQLAlchemyStore:
         credential_type: str,
         token: str,
         github_base_url: str,
+        expires_at: datetime | None = None,
     ) -> CredentialRecord:
         encrypted = encrypt_token(token, self.settings.credential_encryption_key)
         hint = token_hint(token)
+        credential_expires_at = _utc(expires_at)
         with self._session() as session:
             credential = session.scalar(
                 select(tables.CopilotCredential)
@@ -286,6 +289,7 @@ class SQLAlchemyStore:
                     runtime_type="github_copilot",
                     created_at=_now(),
                     updated_at=_now(),
+                    expires_at=credential_expires_at,
                 )
                 session.add(credential)
             else:
@@ -294,10 +298,12 @@ class SQLAlchemyStore:
                 credential.token_hint = hint
                 credential.github_base_url = github_base_url
                 credential.runtime_type = "github_copilot"
+                credential.expires_at = credential_expires_at
                 credential.updated_at = _now()
         return self._credential_record(credential)
 
     def get_credential(self, *, user_id: str, credential_type: str) -> CredentialRecord | None:
+        now = _now()
         with self._session() as session:
             credential = session.scalar(
                 select(tables.CopilotCredential)
@@ -305,12 +311,37 @@ class SQLAlchemyStore:
                     tables.CopilotCredential.user_id == user_id,
                     tables.CopilotCredential.credential_type == credential_type,
                     tables.CopilotCredential.revoked_at.is_(None),
+                    or_(
+                        tables.CopilotCredential.expires_at.is_(None),
+                        tables.CopilotCredential.expires_at > now,
+                    ),
                 )
                 .order_by(tables.CopilotCredential.created_at.desc())
             )
             return self._credential_record(credential) if credential else None
 
+    def revoke_credentials(
+        self, user_id: str, credential_types: set[str] | list[str] | tuple[str, ...] | None = None
+    ) -> int:
+        credential_type_filter = set(credential_types) if credential_types is not None else None
+        with self._session() as session:
+            query = select(tables.CopilotCredential).where(
+                tables.CopilotCredential.user_id == user_id,
+                tables.CopilotCredential.revoked_at.is_(None),
+            )
+            if credential_type_filter is not None:
+                query = query.where(
+                    tables.CopilotCredential.credential_type.in_(credential_type_filter)
+                )
+            credentials = session.scalars(query).all()
+            revoked_at = _now()
+            for credential in credentials:
+                credential.revoked_at = revoked_at
+                credential.updated_at = revoked_at
+            return len(credentials)
+
     def has_credential(self, user_id: str) -> bool:
+        now = _now()
         with self._session() as session:
             return (
                 session.scalar(
@@ -318,7 +349,14 @@ class SQLAlchemyStore:
                     .select_from(tables.CopilotCredential)
                     .where(
                         tables.CopilotCredential.user_id == user_id,
+                        tables.CopilotCredential.credential_type.in_(
+                            COPILOT_AUTH_CREDENTIAL_TYPES
+                        ),
                         tables.CopilotCredential.revoked_at.is_(None),
+                        or_(
+                            tables.CopilotCredential.expires_at.is_(None),
+                            tables.CopilotCredential.expires_at > now,
+                        ),
                     )
                 )
                 or 0
@@ -1845,6 +1883,8 @@ class SQLAlchemyStore:
             github_base_url=row.github_base_url,
             runtime_type=row.runtime_type,
             created_at=_utc(row.created_at) or _now(),
+            expires_at=_utc(row.expires_at),
+            revoked_at=_utc(row.revoked_at),
         )
 
     def _copilot_auth_record(self, row: tables.CopilotDeviceAuth) -> CopilotAuthRecord:

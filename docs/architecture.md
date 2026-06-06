@@ -52,7 +52,7 @@ The API owns runtime injection points on app state:
 - `model_gateway` defaults to the real GitHub Copilot `/responses` gateway.
 - tests pass deterministic fakes through `create_app(...)`.
 
-The Copilot gateway resolves stored plugin credentials, stored GitHub source OAuth credentials, and optional server-side environment tokens. Source tokens are exchanged for Copilot plugin tokens before calling `/responses`; no token material crosses the frontend boundary.
+The Copilot gateway resolves stored plugin credentials, stored GitHub source OAuth credentials, and optional server-side environment tokens. Stored source tokens are exchanged for Copilot plugin tokens, cached with `expires_at`, and revoked with the user disconnect flow; no token material crosses the frontend boundary.
 
 ## Traceability
 
@@ -78,5 +78,4 @@ Causal edges are candidate relationships only. API and worker fields use `candid
 - Replace the Temporal facade placeholder with replay-safe workflow activities and durable retry
   state.
 - Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.
-- Add Copilot plugin-token expiry caching and revocation flows.
 - Extend causal methods with PGEM and Granger implementations while retaining bin-size sensitivity checks.

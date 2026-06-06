@@ -29,6 +29,7 @@ CREATE TABLE copilot_credentials (
   runtime_type TEXT NOT NULL DEFAULT 'github_copilot',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ,
   revoked_at TIMESTAMPTZ
 );
 

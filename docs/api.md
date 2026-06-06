@@ -15,6 +15,7 @@ Sessions use an HttpOnly `logan_session` cookie and are revocable in the local s
 
 - `POST /api/copilot/auth/start`
 - `POST /api/copilot/auth/check`
+- `DELETE /api/copilot/auth/credential`
 
 Default app construction uses GitHub's real device-code flow with client id `Iv1.b507a08c87ecfe98`.
 `/start` posts to `https://github.com/login/device/code` and returns only:
@@ -35,6 +36,10 @@ always uses public `https://github.com`, and auth records store that public GitH
 Authorized responses return `token_type=github_source_oauth`, `runtime_type=github_copilot`,
 and `expires_at`; they never include source tokens, plugin tokens, or encrypted bytes.
 
+`DELETE /api/copilot/auth/credential` revokes active stored `github_source_oauth` and
+`copilot_plugin_token` credentials for the current user and returns only `status` and
+`revoked_count`.
+
 Tests and local no-network checks inject a deterministic fake client through `create_app(...)`.
 
 ## Platform
@@ -46,10 +51,13 @@ Tests and local no-network checks inject a deterministic fake client through `cr
 The model provider is `github_copilot` by default and the default model is `gpt-5.4`.
 The backend model gateway resolves credentials in this order:
 
-- stored `copilot_plugin_token`
+- stored, non-expired `copilot_plugin_token`
 - stored `github_source_oauth`, exchanged via `https://api.github.com/copilot_internal/v2/token`
 - `LOGAN_GITHUB_COPILOT_TOKEN`
 - `LOGAN_GITHUB_SOURCE_TOKEN`, exchanged per call
+
+Stored source OAuth exchanges cache the returned Copilot plugin token with its parsed `expires_at`.
+Environment source tokens are exchanged in memory and are not persisted to user credentials.
 
 The gateway posts non-streaming requests to `<copilot api base>/responses` with Copilot preview
 headers. It returns parsed backend objects with the original provider JSON, `output_text`, and

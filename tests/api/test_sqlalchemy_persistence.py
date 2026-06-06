@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy import func, select
 from logan_workers.activities.inference import MockCopilotAnnotationGateway
 
 from app.config import Settings
+from app.core.security import decrypt_token
 from app.main import create_app
 from app.models import tables
 from app.services.copilot_auth_service import MockGitHubDeviceClient
@@ -158,6 +160,73 @@ def _clear_result_json(store: SQLAlchemyStore, run_id: str) -> None:
         assert run is not None
         run.result_json = None
         session.commit()
+
+
+def test_sqlalchemy_credentials_persist_expiration_and_revocation(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    user = store.register_user(
+        email="credential-persistence@example.com",
+        username="credential-persistence",
+        full_name=None,
+        password="password123",
+    )
+    future_expires_at = datetime(2035, 1, 1, tzinfo=UTC)
+
+    saved_plugin = store.save_credential(
+        user_id=user.id,
+        credential_type="copilot_plugin_token",
+        token="persisted-plugin-token",
+        github_base_url="https://github.com",
+        expires_at=future_expires_at,
+    )
+
+    assert saved_plugin.expires_at == future_expires_at
+    with store.session_factory() as session:
+        row = session.scalar(
+            select(tables.CopilotCredential).where(
+                tables.CopilotCredential.id == saved_plugin.id
+            )
+        )
+        assert row is not None
+        row_expires_at = row.expires_at
+        assert row_expires_at is not None
+        if row_expires_at.tzinfo is None:
+            row_expires_at = row_expires_at.replace(tzinfo=UTC)
+        assert row_expires_at == future_expires_at
+
+    active_plugin = store.get_credential(
+        user_id=user.id, credential_type="copilot_plugin_token"
+    )
+    assert active_plugin is not None
+    assert decrypt_token(
+        active_plugin.encrypted_token, store.settings.credential_encryption_key
+    ) == "persisted-plugin-token"
+    assert store.has_credential(user.id) is True
+
+    store.save_credential(
+        user_id=user.id,
+        credential_type="copilot_plugin_token",
+        token="expired-plugin-token",
+        github_base_url="https://github.com",
+        expires_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+    assert store.get_credential(user_id=user.id, credential_type="copilot_plugin_token") is None
+    assert store.has_credential(user.id) is False
+
+    store.save_credential(
+        user_id=user.id,
+        credential_type="github_source_oauth",
+        token="gho_persisted_source_token",
+        github_base_url="https://github.com",
+    )
+    assert store.has_credential(user.id) is True
+
+    assert store.revoke_credentials(user.id) == 2
+    assert store.get_credential(user_id=user.id, credential_type="github_source_oauth") is None
+    assert store.get_credential(user_id=user.id, credential_type="copilot_plugin_token") is None
+    assert store.has_credential(user.id) is False
 
 
 @pytest.mark.asyncio

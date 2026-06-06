@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
 
 from app.config import Settings
+from app.core.security import decrypt_token
 from app.services.copilot_model_gateway import (
     COPILOT_TOKEN_EXCHANGE_URL,
+    CopilotCredentialError,
     CopilotModelGateway,
     CopilotTransportError,
 )
@@ -103,6 +106,112 @@ async def test_source_token_exchange_proxy_base_responses_payload_and_output_par
     assert response["token_source"] == "stored_github_source_oauth"
     assert response["output_text"] == json.dumps(output_json)
     assert response["output_json"] == output_json
+    cached = store.get_credential(user_id=user_id, credential_type="copilot_plugin_token")
+    assert cached is not None
+    assert cached.expires_at == datetime.fromtimestamp(9999999999, UTC)
+    assert (
+        decrypt_token(cached.encrypted_token, store.settings.credential_encryption_key)
+        == copilot_token
+    )
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_source_token_exchange_caches_plugin_token_for_second_response() -> None:
+    store, user_id = _store_and_user()
+    source_token = "gho_source_token_for_cache"
+    copilot_token = "cached-copilot-plugin-token"
+    exchange_calls = 0
+    response_tokens: list[str] = []
+    store.save_credential(
+        user_id=user_id,
+        credential_type="github_source_oauth",
+        token=source_token,
+        github_base_url="https://github.com",
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal exchange_calls
+        if request.method == "GET":
+            exchange_calls += 1
+            assert request.headers["authorization"] == f"Bearer {source_token}"
+            return httpx.Response(
+                200,
+                json={"token": copilot_token, "expires_at": "2035-01-01T00:00:00Z"},
+            )
+
+        assert request.method == "POST"
+        response_tokens.append(request.headers["authorization"])
+        return httpx.Response(200, json={"output_text": f"response-{len(response_tokens)}"})
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = CopilotModelGateway(store=store, http_client=http_client)
+
+    first = await gateway.responses(user_id=user_id, model="gpt-5.4", instructions=None, input=[])
+    second = await gateway.responses(user_id=user_id, model="gpt-5.4", instructions=None, input=[])
+
+    assert first["token_source"] == "stored_github_source_oauth"
+    assert second["token_source"] == "stored_copilot_plugin_token"
+    assert exchange_calls == 1
+    assert response_tokens == [f"Bearer {copilot_token}", f"Bearer {copilot_token}"]
+    cached = store.get_credential(user_id=user_id, credential_type="copilot_plugin_token")
+    assert cached is not None
+    assert cached.expires_at == datetime(2035, 1, 1, tzinfo=UTC)
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_expired_plugin_token_is_ignored_and_refreshed_from_source() -> None:
+    store, user_id = _store_and_user()
+    source_token = "gho_source_token_for_refresh"
+    expired_plugin_token = "expired-copilot-plugin-token"
+    refreshed_plugin_token = "refreshed-copilot-plugin-token"
+    seen_methods: list[str] = []
+    store.save_credential(
+        user_id=user_id,
+        credential_type="github_source_oauth",
+        token=source_token,
+        github_base_url="https://github.com",
+    )
+    store.save_credential(
+        user_id=user_id,
+        credential_type="copilot_plugin_token",
+        token=expired_plugin_token,
+        github_base_url="https://github.com",
+        expires_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen_methods.append(request.method)
+        if request.method == "GET":
+            assert request.headers["authorization"] == f"Bearer {source_token}"
+            return httpx.Response(
+                200,
+                json={"token": refreshed_plugin_token, "expires_at": 32503680000},
+            )
+
+        assert request.method == "POST"
+        assert request.headers["authorization"] == f"Bearer {refreshed_plugin_token}"
+        return httpx.Response(200, json={"output_text": "refreshed response"})
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = CopilotModelGateway(store=store, http_client=http_client)
+
+    response = await gateway.responses(
+        user_id=user_id,
+        model="gpt-5.4",
+        instructions=None,
+        input=[],
+    )
+
+    assert seen_methods == ["GET", "POST"]
+    assert response["token_source"] == "stored_github_source_oauth"
+    cached = store.get_credential(user_id=user_id, credential_type="copilot_plugin_token")
+    assert cached is not None
+    assert (
+        decrypt_token(cached.encrypted_token, store.settings.credential_encryption_key)
+        == refreshed_plugin_token
+    )
     await http_client.aclose()
 
 
@@ -216,4 +325,30 @@ async def test_exchange_transport_errors_redact_source_token() -> None:
 
     assert source_token not in str(error.value)
     assert "<redacted-token>" in str(error.value)
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_revoked_stored_credentials_are_not_used_without_env_fallback() -> None:
+    store, user_id = _store_and_user()
+    store.save_credential(
+        user_id=user_id,
+        credential_type="github_source_oauth",
+        token="gho_revoked_source_token",
+        github_base_url="https://github.com",
+    )
+    store.revoke_credentials(user_id)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"revoked credential should not make {request.method} request")
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = CopilotModelGateway(
+        store=store,
+        app_settings=Settings(github_copilot_token=None, github_source_token=None),
+        http_client=http_client,
+    )
+
+    with pytest.raises(CopilotCredentialError):
+        await gateway.responses(user_id=user_id, model="gpt-5.4", instructions=None, input=[])
     await http_client.aclose()

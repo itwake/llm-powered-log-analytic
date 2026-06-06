@@ -4,6 +4,7 @@ import json
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import unquote, urlparse, urlunparse
 
@@ -11,7 +12,7 @@ import httpx
 
 from app.config import Settings, settings
 from app.core.security import decrypt_token
-from app.store import MetadataStore
+from app.store import CredentialRecord, MetadataStore
 
 
 COPILOT_USER_AGENT = "GitHubCopilotChat/0.35.0"
@@ -44,6 +45,12 @@ class ResolvedCopilotToken:
     token: str
     api_base_url: str | None
     source: str
+
+
+@dataclass(frozen=True)
+class DecryptedCredential:
+    record: CredentialRecord
+    token: str
 
 
 class CopilotModelGateway:
@@ -140,17 +147,24 @@ class CopilotModelGateway:
 
     async def _resolve_token(self, *, user_id: str) -> ResolvedCopilotToken:
         if self.store is not None:
-            plugin_token = self._credential_token(user_id=user_id, credential_type="copilot_plugin_token")
-            if plugin_token:
+            plugin_credential = self._decrypted_credential(
+                user_id=user_id, credential_type="copilot_plugin_token"
+            )
+            if plugin_credential and self._credential_is_fresh(plugin_credential.record):
                 return ResolvedCopilotToken(
-                    token=plugin_token,
-                    api_base_url=_api_base_from_copilot_token(plugin_token),
+                    token=plugin_credential.token,
+                    api_base_url=_api_base_from_copilot_token(plugin_credential.token),
                     source="stored_copilot_plugin_token",
                 )
-            source_token = self._credential_token(user_id=user_id, credential_type="github_source_oauth")
-            if source_token:
+            source_credential = self._decrypted_credential(
+                user_id=user_id, credential_type="github_source_oauth"
+            )
+            if source_credential:
                 return await self._exchange_source_token(
-                    source_token, token_source="stored_github_source_oauth"
+                    source_credential.token,
+                    token_source="stored_github_source_oauth",
+                    persist_user_id=user_id,
+                    github_base_url=source_credential.record.github_base_url,
                 )
 
         if self.settings.github_copilot_token:
@@ -168,7 +182,9 @@ class CopilotModelGateway:
             "No GitHub Copilot credential is available for this user or server environment"
         )
 
-    def _credential_token(self, *, user_id: str, credential_type: str) -> str | None:
+    def _decrypted_credential(
+        self, *, user_id: str, credential_type: str
+    ) -> DecryptedCredential | None:
         if self.store is None:
             return None
         credential = self.store.get_credential(user_id=user_id, credential_type=credential_type)
@@ -183,10 +199,24 @@ class CopilotModelGateway:
             raise CopilotCredentialError(
                 f"Stored {credential_type} credential could not be decrypted"
             ) from exc
-        return token or None
+        return DecryptedCredential(record=credential, token=token) if token else None
+
+    def _credential_is_fresh(self, credential: CredentialRecord) -> bool:
+        if credential.expires_at is None:
+            return True
+        expires_at = credential.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        skew_seconds = max(0, self.settings.copilot_token_cache_skew_seconds)
+        return expires_at > datetime.now(UTC) + timedelta(seconds=skew_seconds)
 
     async def _exchange_source_token(
-        self, source_token: str, *, token_source: str
+        self,
+        source_token: str,
+        *,
+        token_source: str,
+        persist_user_id: str | None = None,
+        github_base_url: str = "https://github.com",
     ) -> ResolvedCopilotToken:
         if not _looks_like_source_token(source_token):
             raise CopilotCredentialError("GitHub source OAuth token has an unsupported token prefix")
@@ -211,6 +241,15 @@ class CopilotModelGateway:
         copilot_token = data.get("token")
         if not isinstance(copilot_token, str) or not copilot_token:
             raise CopilotTransportError("GitHub Copilot token exchange response did not include token")
+        expires_at = _parse_copilot_token_expires_at(data)
+        if self.store is not None and persist_user_id is not None and expires_at is not None:
+            self.store.save_credential(
+                user_id=persist_user_id,
+                credential_type="copilot_plugin_token",
+                token=copilot_token,
+                github_base_url=github_base_url,
+                expires_at=expires_at,
+            )
         return ResolvedCopilotToken(
             token=copilot_token,
             api_base_url=_api_base_from_copilot_token(copilot_token),
@@ -298,6 +337,43 @@ def _api_base_from_copilot_token(token: str) -> str | None:
     if parsed.port:
         netloc = f"{netloc}:{parsed.port}"
     return urlunparse((parsed.scheme, netloc, "", "", "", ""))
+
+
+def _parse_copilot_token_expires_at(data: dict[str, Any]) -> datetime | None:
+    expires_at = _parse_expires_at(data.get("expires_at"))
+    if expires_at is not None:
+        return expires_at
+    expires_in = data.get("expires_in")
+    if isinstance(expires_in, int | float) and expires_in > 0:
+        return datetime.now(UTC) + timedelta(seconds=float(expires_in))
+    return None
+
+
+def _parse_expires_at(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        try:
+            return datetime.fromtimestamp(float(value), UTC)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            return datetime.fromtimestamp(float(raw), UTC)
+        except (OverflowError, OSError, ValueError):
+            pass
+        iso_value = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+        try:
+            parsed = datetime.fromisoformat(iso_value)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+    return None
 
 
 def _extract_output_text(provider_json: Any) -> str:

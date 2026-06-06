@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.dependencies import current_user, get_copilot_auth_client, get_store
 from app.schemas.auth import CopilotCheckRequest, CopilotStartRequest
@@ -9,6 +9,7 @@ from app.store import MetadataStore, UserRecord
 
 
 router = APIRouter(prefix="/api/copilot/auth", tags=["copilot-auth"])
+_REVOCABLE_CREDENTIAL_TYPES = {"github_source_oauth", "copilot_plugin_token"}
 
 
 @router.post("/start")
@@ -40,3 +41,23 @@ def check(
     client: DeviceCodeClient = Depends(get_copilot_auth_client),
 ) -> dict[str, object]:
     return CopilotAuthService(store, client=client).check(user=user, auth_id=payload.auth_id)
+
+
+@router.delete("/credential")
+def disconnect(
+    request: Request,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> dict[str, object]:
+    revoked_count = store.revoke_credentials(
+        user.id, credential_types=_REVOCABLE_CREDENTIAL_TYPES
+    )
+    store.record_audit(
+        action="copilot.disconnect",
+        user_id=user.id,
+        target_type="copilot_credential",
+        metadata={"revoked_count": revoked_count},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return {"status": "disconnected", "revoked_count": revoked_count}

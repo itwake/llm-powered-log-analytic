@@ -99,6 +99,7 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_GITHUB_SOURCE_TOKEN=` optional server-side GitHub source OAuth/PAT token for tests/dev; it is exchanged for a Copilot plugin token per call.
 - `LOGAN_COPILOT_BASE_URL=` optional override for the Copilot API base URL.
 - `LOGAN_COPILOT_TIMEOUT_SECONDS=30`
+- `LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS=60`
 - `LOGAN_CREDENTIAL_ENCRYPTION_KEY=change-me-local-key`
 - `LOGAN_RAW_LOG_RETENTION_DAYS=30`
 - `LOGAN_REPORT_RETENTION_DAYS=365`
@@ -114,4 +115,4 @@ See `.env.example` for the full list. Key defaults:
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are Copilot plugin-token expiry caching/revocation, `/api/chat/stream` SSE wiring, ClickHouse/OpenSearch table and index lifecycle, external sink retry/idempotency records, service-backed analytics query paths, S3/MinIO presigned object-store adapters, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are `/api/chat/stream` SSE wiring, ClickHouse/OpenSearch table and index lifecycle, external sink retry/idempotency records, service-backed analytics query paths, S3/MinIO presigned object-store adapters, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.

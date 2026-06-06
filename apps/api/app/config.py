@@ -29,6 +29,9 @@ class Settings:
     github_copilot_token: str | None = os.getenv("LOGAN_GITHUB_COPILOT_TOKEN") or None
     github_source_token: str | None = os.getenv("LOGAN_GITHUB_SOURCE_TOKEN") or None
     copilot_timeout_seconds: float = float(os.getenv("LOGAN_COPILOT_TIMEOUT_SECONDS", "30"))
+    copilot_token_cache_skew_seconds: int = int(
+        os.getenv("LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS", "60")
+    )
     database_url: str | None = os.getenv("LOGAN_DATABASE_URL") or None
     store_backend: str = os.getenv("LOGAN_STORE_BACKEND", "auto")
     analysis_orchestrator: str = os.getenv("LOGAN_ANALYSIS_ORCHESTRATOR", "local")
