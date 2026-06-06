@@ -78,15 +78,40 @@ enabled and backed by succeeded sink write records.
 Analysis orchestration defaults to the current synchronous local path:
 
 - `LOGAN_ANALYSIS_ORCHESTRATOR=local` runs `AnalyzeCasePipeline` in the API process and keeps tests deterministic.
-- `LOGAN_ANALYSIS_ORCHESTRATOR=temporal` uses the lazy Temporal client facade to start `AnalyzeCaseWorkflow`.
+- `LOGAN_ANALYSIS_ORCHESTRATOR=temporal` creates the SQLAlchemy analysis run in the API, records `workflow_start` progress, and starts `AnalyzeCaseWorkflow`.
 - `LOGAN_TEMPORAL_ADDRESS=temporal:7233`
 - `LOGAN_TEMPORAL_NAMESPACE=default`
 - `LOGAN_TEMPORAL_TASK_QUEUE=logan-analysis`
+- `LOGAN_TEMPORAL_ACTIVITY_START_TO_CLOSE_SECONDS=3600`
+- `LOGAN_TEMPORAL_ACTIVITY_MAX_ATTEMPTS=3`
 
 The Temporal facade imports the SDK only when temporal orchestration is selected and raises a
-typed configuration/connectivity error if the SDK or server is unavailable. The real durable
-worker/activity implementation is still staged work; the tested local path remains the source
-of completed analysis results.
+typed configuration/connectivity error if the SDK or server is unavailable. Workflow history
+contains only deterministic analysis inputs: case/run ids, local file paths, non-secret case
+context, sanitized analysis config, and numeric activity retry/timeout settings. Database URLs,
+object-store access keys, Copilot/source tokens, and source log content stay out of workflow
+params.
+
+Run a Temporal analysis worker with:
+
+```bash
+LOGAN_STORE_BACKEND=sqlalchemy \
+LOGAN_DATABASE_URL=postgresql+psycopg://logan:logan@postgres:5432/logan \
+LOGAN_TEMPORAL_ADDRESS=temporal:7233 \
+python3 -m logan_workers.temporal_worker
+```
+
+The worker registers `AnalyzeCaseWorkflow` and `run_analysis_pipeline_activity`. The workflow
+executes the activity with a stable activity id of
+`{analysis_run_id}:run_analysis_pipeline`, a start-to-close timeout from
+`LOGAN_TEMPORAL_ACTIVITY_START_TO_CLOSE_SECONDS`, and a retry policy from
+`LOGAN_TEMPORAL_ACTIVITY_MAX_ATTEMPTS`. The activity instantiates the SQLAlchemy store from its
+own process settings, loads the existing run/case, records pipeline progress into
+`job_events`, updates `analysis_runs.progress_json`, completes through the same SQL fan-out and
+analytics sink publish path as local SQLAlchemy runs, and marks failures with sanitized error
+text before re-raising for Temporal retry/failure handling. If Temporal retries after the
+database commit succeeded but before the workflow observed the result, the activity returns the
+existing completed summary without rerunning the pipeline.
 
 External analytics sinks can be enabled for SQLAlchemy-backed runs with:
 
@@ -141,8 +166,8 @@ docker compose up --build
 
 ## Remaining Staged Work
 
-- Replace the Temporal placeholder with real activities backed by durable retries and replay-safe
-  idempotency; job event rows already provide the run-scoped progress/event stream.
+- Add step-level external artifact materialization for very large Temporal histories if pipeline
+  intermediates grow beyond comfortable activity payload sizes.
 - Add PGEM and Granger methods behind the current causal method seams.
 - Expand RBAC, collaborators, admin settings, audit log UI/API, retention jobs, and rate limits.
 - Add Playwright e2e tests once the web app is connected to a running API.

@@ -2,12 +2,12 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous worker pipeline, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell, and deployment scaffolding.
 
 ## Architecture
 
 - `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, real GitHub Copilot device-code auth, Copilot `/responses` gateway with streaming support, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters with lifecycle/idempotency tracking, opt-in external temporal/log report query paths, and a lightweight in-memory store for explicit tests/local experimentation.
-- `apps/workers`: Python log-analysis pipeline for ingestion, multi-line merge, timestamp parsing, redaction, templating, representative sampling, model annotation, label broadcasting, temporal aggregation, candidate causal graph generation, causal summary rendering, and export generation.
+- `apps/workers`: Python log-analysis pipeline plus Temporal workflow/activity worker for ingestion, multi-line merge, timestamp parsing, redaction, templating, representative sampling, model annotation, label broadcasting, temporal aggregation, candidate causal graph generation, causal summary rendering, and export generation.
 - `apps/web`: Next.js/React/TypeScript operational workbench shell aligned to final API shapes.
 - `infra/docker`: first-pass Dockerfiles for web, API, and worker.
 - `infra/k8s`: coherent Kubernetes manifests for namespace, config, secrets examples, deployments, services, ingress, PVCs, migration job, and network policy.
@@ -91,6 +91,9 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_LLM_PROVIDER=github_copilot`
 - `LOGAN_DATABASE_URL=` unset by default for lightweight local memory mode; set to `sqlite:///...` for local durable tests or `postgresql+psycopg://user:pass@host:5432/db` for PostgreSQL.
 - `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy when `LOGAN_DATABASE_URL` is set and memory otherwise. Use `memory` or `sqlalchemy` to force a backend.
+- `LOGAN_ANALYSIS_ORCHESTRATOR=local`; set to `temporal` to have the API create the SQLAlchemy run and start `AnalyzeCaseWorkflow`.
+- `LOGAN_TEMPORAL_ADDRESS=temporal:7233`, `LOGAN_TEMPORAL_NAMESPACE=default`, and `LOGAN_TEMPORAL_TASK_QUEUE=logan-analysis` configure the Temporal API client and worker.
+- `LOGAN_TEMPORAL_ACTIVITY_START_TO_CLOSE_SECONDS=3600` and `LOGAN_TEMPORAL_ACTIVITY_MAX_ATTEMPTS=3` are copied into replay-safe workflow params and used for the analysis activity timeout/retry policy.
 - `LOGAN_OBJECT_STORE_BACKEND=local`; local uploads store real file bytes on disk and record `file://` object URIs.
 - `LOGAN_LOCAL_OBJECT_STORE_DIR=.logan/object-store` relative to the API process working directory by default.
 - `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio` enables presigned S3/MinIO raw uploads; configure `LOGAN_S3_BUCKET`, `LOGAN_S3_ACCESS_KEY`, `LOGAN_S3_SECRET_KEY`, and `LOGAN_S3_ENDPOINT` for MinIO.
@@ -120,4 +123,4 @@ See `.env.example` for the full list. Key defaults:
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are step-level external artifact materialization for very large Temporal histories, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.

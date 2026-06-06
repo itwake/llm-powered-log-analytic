@@ -3,7 +3,7 @@
 LogAn is organized as a monorepo with three runtime surfaces:
 
 - FastAPI backend for auth, Copilot authorization, cases, uploads, analysis runs, reports, feedback, chat, tasks, and capabilities.
-- Python worker package for deterministic log analysis and future Temporal activities.
+- Python worker package for deterministic log analysis and Temporal workflow activities.
 - Next.js web workbench for operational incident review.
 
 The tested stage path runs synchronously:
@@ -42,11 +42,14 @@ Completion verifies object existence and size with `head_object` without reading
 The local object-store backend remains a direct authenticated API `PUT`.
 
 `LOGAN_ANALYSIS_ORCHESTRATOR=local` is the default and keeps the API path synchronous. The
-optional `temporal` setting starts `AnalyzeCaseWorkflow` through a lazy Temporal client facade
-using `LOGAN_TEMPORAL_ADDRESS`, `LOGAN_TEMPORAL_NAMESPACE`, and
-`LOGAN_TEMPORAL_TASK_QUEUE`. The workflow class remains locally runnable and accepts
-`case_context` and `config`, but real Temporal activities with durable retries are still an
-extension seam.
+optional `temporal` setting creates the SQLAlchemy analysis run in the API, records workflow
+start progress, and starts `AnalyzeCaseWorkflow` through a lazy Temporal client facade using
+`LOGAN_TEMPORAL_ADDRESS`, `LOGAN_TEMPORAL_NAMESPACE`, and `LOGAN_TEMPORAL_TASK_QUEUE`. The
+workflow is replay-safe and executes `run_analysis_pipeline_activity` with a stable activity id,
+configured start-to-close timeout, and configured retry policy. The activity reads SQLAlchemy
+settings from the worker process environment, records `job_events`, updates run progress, and
+completes through the same normalized fan-out and optional analytics sink path as the local
+SQLAlchemy run.
 
 The SQLAlchemy completion path is also the optional external analytics sink seam. When
 `LOGAN_ANALYTICS_SINKS_ENABLED=true` and sink URLs are configured, it publishes whitelisted
@@ -95,7 +98,6 @@ Causal edges are candidate relationships only. API and worker fields use `candid
 
 - Replace `StableDrainAdapter` with `drain3` behind the same `cluster()` interface.
 - Add S3 object storage adapters for report artifacts.
-- Replace the Temporal facade placeholder with replay-safe workflow activities and durable retry
-  state.
+- Add step-level external artifact materialization for very large Temporal histories if needed.
 - Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.
 - Extend causal methods with PGEM and Granger implementations while retaining bin-size sensitivity checks.

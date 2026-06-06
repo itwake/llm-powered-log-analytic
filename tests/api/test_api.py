@@ -246,6 +246,81 @@ async def _create_completed_sample_run(client: AsyncClient) -> tuple[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_temporal_start_path_passes_safe_workflow_params(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_start_analyze_case_workflow(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        "logan_workers.temporal_client.start_analyze_case_workflow",
+        fake_start_analyze_case_workflow,
+    )
+    client, store, _ = await _authenticated_client(
+        Settings(
+            analysis_orchestrator="temporal",
+            temporal_address="temporal.test:7233",
+            temporal_namespace="logan-test",
+            temporal_task_queue="logan-analysis-test",
+            temporal_activity_start_to_close_seconds=17,
+            temporal_activity_max_attempts=4,
+            database_url="postgresql+psycopg://logan:secret@postgres/logan",
+            github_source_token="gho_source_secret_1234567890",
+            github_copilot_token="copilot_secret_1234567890",
+            s3_access_key="access-key",
+            s3_secret_key="secret-key",
+        )
+    )
+    case_id = await _create_case(client)
+
+    response = await client.post(
+        f"/api/cases/{case_id}/analysis-runs",
+        json={
+            "input_paths": [str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
+            "config": {
+                "default_window_size_seconds": 60,
+                "model": {"model": "gpt-5.4"},
+                "api_key": "sk-should-not-enter-history",
+                "database_url": "postgresql://secret",
+                "nested": {
+                    "keep": 1,
+                    "source_token": "gho_nested_secret_1234567890",
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    run_id = response.json()["analysis_run_id"]
+    run = store.get_analysis_run(run_id)
+    assert run is not None
+    assert run.status == "processing"
+    assert run.progress == {"current_step": "workflow_start", "orchestrator": "temporal"}
+    assert captured["case_id"] == case_id
+    assert captured["analysis_run_id"] == run_id
+    assert captured["activity_start_to_close_seconds"] == 17
+    assert captured["activity_max_attempts"] == 4
+    workflow_config = captured["config"]
+    assert isinstance(workflow_config, dict)
+    assert workflow_config["model"] == {"model": "gpt-5.4"}
+    assert workflow_config["nested"] == {"keep": 1}
+    assert "api_key" not in workflow_config
+    assert "database_url" not in workflow_config
+    serialized_capture = json.dumps(
+        {
+            "paths": captured["paths"],
+            "case_context": captured["case_context"],
+            "config": workflow_config,
+        },
+        sort_keys=True,
+    )
+    assert "secret" not in serialized_capture.lower()
+    assert "token" not in serialized_capture.lower()
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_auth_and_copilot_auth_api() -> None:
     client, _, _ = await _authenticated_client()
     me = await client.get("/api/auth/me")

@@ -66,6 +66,22 @@ _SENSITIVE_METADATA_KEY_PARTS = {
     "token",
 }
 _SAFE_STRING_LIST_METADATA = {"export_types"}
+_SECRET_WORKFLOW_KEY_PARTS = {
+    "access_key",
+    "api_key",
+    "authorization",
+    "credential",
+    "database_url",
+    "log_content",
+    "password",
+    "raw_log",
+    "raw_message",
+    "raw_text",
+    "secret",
+    "source_log",
+    "source_token",
+    "token",
+}
 
 
 def sanitize_error_message(error: object, *, max_length: int = 500) -> str:
@@ -111,6 +127,25 @@ def sanitize_job_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
         if sanitized_value is not None:
             sanitized[key_text] = sanitized_value
     return sanitized
+
+
+def sanitize_workflow_payload(value: Any) -> Any:
+    if value is None or isinstance(value, bool | int | float):
+        return value
+    if isinstance(value, str):
+        return sanitize_error_message(value, max_length=2000)
+    if isinstance(value, list):
+        return [sanitize_workflow_payload(item) for item in value]
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            lowered = key_text.lower()
+            if any(part in lowered for part in _SECRET_WORKFLOW_KEY_PARTS):
+                continue
+            sanitized[key_text] = sanitize_workflow_payload(item)
+        return sanitized
+    return None
 
 
 @dataclass
@@ -436,6 +471,18 @@ class MetadataStore(Protocol):
         metadata: dict[str, Any] | None = None,
         error_message: str | None = None,
     ) -> JobEventRecord: ...
+
+    def apply_analysis_job_event(
+        self, *, run_id: str, event: dict[str, Any]
+    ) -> JobEventRecord: ...
+
+    def complete_analysis_run(
+        self, *, run_id: str, result: AnalysisResult, user_id: str
+    ) -> AnalysisRunRecord: ...
+
+    def fail_analysis_run(
+        self, *, run_id: str, error_message: str, user_id: str
+    ) -> AnalysisRunRecord: ...
 
     def list_job_events(
         self,
@@ -765,14 +812,20 @@ class InMemoryStore:
                     case_id=case_id,
                     analysis_run_id=run.id,
                     paths=input_paths,
-                    case_context={
-                        "title": case.title,
-                        "issue_description": case.issue_description,
-                        "product": case.product,
-                        "environment": case.environment,
-                        "user_id": user_id,
-                    },
-                    config=config,
+                    case_context=sanitize_workflow_payload(
+                        {
+                            "title": case.title,
+                            "issue_description": case.issue_description,
+                            "product": case.product,
+                            "environment": case.environment,
+                            "user_id": user_id,
+                        }
+                    ),
+                    config=sanitize_workflow_payload(config),
+                    activity_start_to_close_seconds=(
+                        self.settings.temporal_activity_start_to_close_seconds
+                    ),
+                    activity_max_attempts=self.settings.temporal_activity_max_attempts,
                     temporal_config=TemporalClientConfig(
                         address=self.settings.temporal_address,
                         namespace=self.settings.temporal_namespace,
@@ -880,6 +933,78 @@ class InMemoryStore:
         self.job_events[record.id] = record
         self.job_event_keys[key] = record.id
         return record
+
+    def apply_analysis_job_event(
+        self, *, run_id: str, event: dict[str, Any]
+    ) -> JobEventRecord:
+        run = self.runs.get(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        job_event = self.record_job_event(
+            case_id=run.case_id,
+            analysis_run_id=run.id,
+            step_name=str(event["step_name"]),
+            event_type=str(event["event_type"]),
+            status=str(event["status"]),
+            attempt=int(event.get("attempt", 1)),
+            idempotency_key=str(event["idempotency_key"]),
+            metadata=event.get("metadata") if isinstance(event.get("metadata"), dict) else {},
+            error_message=event.get("error_message"),
+        )
+        run.progress = apply_job_event_progress(run.progress, job_event)
+        return job_event
+
+    def complete_analysis_run(
+        self, *, run_id: str, result: AnalysisResult, user_id: str
+    ) -> AnalysisRunRecord:
+        run = self.runs.get(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        if run.status == "completed" and run.result is not None:
+            return run
+        case = self.cases.get(run.case_id)
+        run.result = result
+        run.progress = result.progress
+        run.status = "completed"
+        run.completed_at = datetime.now(UTC)
+        run.error_message = None
+        if case is not None:
+            case.status = "ready"
+        self.record_audit(
+            action="analysis.complete",
+            user_id=user_id,
+            target_type="analysis_run",
+            target_id=run.id,
+            case_id=run.case_id,
+            metadata={"progress": run.progress},
+        )
+        return run
+
+    def fail_analysis_run(
+        self, *, run_id: str, error_message: str, user_id: str
+    ) -> AnalysisRunRecord:
+        run = self.runs.get(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        case = self.cases.get(run.case_id)
+        sanitized_error = sanitize_error_message(error_message)
+        run.status = "failed"
+        run.error_message = sanitized_error
+        progress = dict(run.progress or {})
+        progress["error_message"] = sanitized_error
+        progress.setdefault("current_step", "failed")
+        run.progress = progress
+        if case is not None:
+            case.status = "failed"
+        self.record_audit(
+            action="analysis.fail",
+            user_id=user_id,
+            target_type="analysis_run",
+            target_id=run.id,
+            case_id=run.case_id,
+            metadata={"error_message": sanitized_error},
+        )
+        return run
 
     def list_job_events(
         self,

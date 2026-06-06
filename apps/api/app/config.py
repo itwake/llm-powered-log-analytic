@@ -38,6 +38,12 @@ class Settings:
     temporal_address: str = os.getenv("LOGAN_TEMPORAL_ADDRESS", "temporal:7233")
     temporal_namespace: str = os.getenv("LOGAN_TEMPORAL_NAMESPACE", "default")
     temporal_task_queue: str = os.getenv("LOGAN_TEMPORAL_TASK_QUEUE", "logan-analysis")
+    temporal_activity_start_to_close_seconds: int = int(
+        os.getenv("LOGAN_TEMPORAL_ACTIVITY_START_TO_CLOSE_SECONDS", "3600")
+    )
+    temporal_activity_max_attempts: int = int(
+        os.getenv("LOGAN_TEMPORAL_ACTIVITY_MAX_ATTEMPTS", "3")
+    )
     object_store_backend: str = os.getenv("LOGAN_OBJECT_STORE_BACKEND", "local")
     local_object_store_dir: str = os.getenv(
         "LOGAN_LOCAL_OBJECT_STORE_DIR", str(Path.cwd() / ".logan" / "object-store")

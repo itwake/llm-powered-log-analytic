@@ -1,10 +1,42 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any
 
-from logan_workers.pipeline import AnalyzeCasePipeline
+try:
+    from temporalio import workflow
+    from temporalio.common import RetryPolicy
+except ImportError:
+
+    @dataclass(frozen=True)
+    class RetryPolicy:  # type: ignore[no-redef]
+        maximum_attempts: int = 1
+
+    class _WorkflowShim:
+        @staticmethod
+        def defn(target=None, **_kwargs):
+            def decorate(value):
+                return value
+
+            return decorate(target) if target is not None else decorate
+
+        @staticmethod
+        def run(target=None, **_kwargs):
+            def decorate(value):
+                return value
+
+            return decorate(target) if target is not None else decorate
+
+        @staticmethod
+        async def execute_activity(activity_name: str, params: Any, **_kwargs: Any) -> Any:
+            from logan_workers.activities.analysis import run_analysis_pipeline_activity
+
+            if activity_name != "run_analysis_pipeline_activity":
+                raise ValueError(f"unknown local activity {activity_name}")
+            return await run_analysis_pipeline_activity(params)
+
+    workflow = _WorkflowShim()  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -14,6 +46,8 @@ class AnalyzeCaseParams:
     paths: list[str]
     case_context: dict[str, Any] = field(default_factory=dict)
     config: dict[str, Any] = field(default_factory=dict)
+    activity_start_to_close_seconds: int = 3600
+    activity_max_attempts: int = 3
 
 
 @dataclass(frozen=True)
@@ -25,33 +59,18 @@ class AnalyzeCaseResult:
     causal_edges: int
 
 
+@workflow.defn
 class AnalyzeCaseWorkflow:
-    """Temporal-compatible workflow placeholder.
+    """Replay-safe Temporal workflow for one analysis run."""
 
-    Later stages should replace this synchronous runner with Temporal SDK decorators and
-    durable idempotent activities. The tested stage path uses the same orchestration order.
-    """
-
+    @workflow.run
     async def run(self, params: AnalyzeCaseParams) -> AnalyzeCaseResult:
-        result = await AnalyzeCasePipeline().run(
-            case_id=params.case_id,
-            analysis_run_id=params.analysis_run_id,
-            paths=params.paths,
-            case_context=params.case_context,
-            config=params.config,
+        return await workflow.execute_activity(
+            "run_analysis_pipeline_activity",
+            params,
+            activity_id=f"{params.analysis_run_id}:run_analysis_pipeline",
+            start_to_close_timeout=timedelta(
+                seconds=params.activity_start_to_close_seconds
+            ),
+            retry_policy=RetryPolicy(maximum_attempts=params.activity_max_attempts),
         )
-        return AnalyzeCaseResult(
-            case_id=result.case_id,
-            analysis_run_id=result.analysis_run_id,
-            status="completed",
-            templates=len(result.templates),
-            causal_edges=len(result.causal_graph.edges),
-        )
-
-
-if __name__ == "__main__":
-    asyncio.run(
-        AnalyzeCaseWorkflow().run(
-            AnalyzeCaseParams(case_id="local", analysis_run_id="local-run", paths=[])
-        )
-    )

@@ -16,6 +16,7 @@ spec:
       containers:
         - name: worker
           image: ghcr.io/itwake/logan-worker:latest
+          command: ["python", "-m", "logan_workers.temporal_worker"]
           envFrom:
             - configMapRef:
                 name: logan-config

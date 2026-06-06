@@ -27,6 +27,8 @@ async def start_analyze_case_workflow(
     paths: list[str],
     case_context: dict[str, Any] | None = None,
     config: dict[str, Any] | None = None,
+    activity_start_to_close_seconds: int = 3600,
+    activity_max_attempts: int = 3,
     temporal_config: TemporalClientConfig | None = None,
     workflow_id: str | None = None,
 ) -> Any:
@@ -56,6 +58,8 @@ async def start_analyze_case_workflow(
         paths=paths,
         case_context=case_context or {},
         config=config or {},
+        activity_start_to_close_seconds=activity_start_to_close_seconds,
+        activity_max_attempts=activity_max_attempts,
     )
     try:
         return await client.start_workflow(

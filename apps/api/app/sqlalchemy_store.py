@@ -62,6 +62,7 @@ from app.store import (
     apply_job_event_progress,
     sanitize_error_message,
     sanitize_job_metadata,
+    sanitize_workflow_payload,
 )
 
 
@@ -587,14 +588,20 @@ class SQLAlchemyStore:
                     case_id=case_id,
                     analysis_run_id=run.id,
                     paths=input_paths,
-                    case_context={
-                        "title": case.title,
-                        "issue_description": case.issue_description,
-                        "product": case.product,
-                        "environment": case.environment,
-                        "user_id": user_id,
-                    },
-                    config=config,
+                    case_context=sanitize_workflow_payload(
+                        {
+                            "title": case.title,
+                            "issue_description": case.issue_description,
+                            "product": case.product,
+                            "environment": case.environment,
+                            "user_id": user_id,
+                        }
+                    ),
+                    config=sanitize_workflow_payload(config),
+                    activity_start_to_close_seconds=(
+                        self.settings.temporal_activity_start_to_close_seconds
+                    ),
+                    activity_max_attempts=self.settings.temporal_activity_max_attempts,
                     temporal_config=TemporalClientConfig(
                         address=self.settings.temporal_address,
                         namespace=self.settings.temporal_namespace,
@@ -709,6 +716,45 @@ class SQLAlchemyStore:
                 if existing is not None:
                     return self._job_event_record(existing)
             raise
+
+    def apply_analysis_job_event(
+        self, *, run_id: str, event: dict[str, Any]
+    ) -> JobEventRecord:
+        run = self.get_analysis_run(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        job_event = self.record_job_event(
+            case_id=run.case_id,
+            analysis_run_id=run.id,
+            step_name=str(event["step_name"]),
+            event_type=str(event["event_type"]),
+            status=str(event["status"]),
+            attempt=int(event.get("attempt", 1)),
+            idempotency_key=str(event["idempotency_key"]),
+            metadata=event.get("metadata") if isinstance(event.get("metadata"), dict) else {},
+            error_message=event.get("error_message"),
+        )
+        self._update_analysis_progress(run_id=run.id, event=job_event)
+        return job_event
+
+    def complete_analysis_run(
+        self, *, run_id: str, result: AnalysisResult, user_id: str
+    ) -> AnalysisRunRecord:
+        run = self.get_analysis_run(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        if run.status == "completed" and run.result is not None:
+            return run
+        return self._complete_analysis_run(run_id=run_id, result=result, user_id=user_id)
+
+    def fail_analysis_run(
+        self, *, run_id: str, error_message: str, user_id: str
+    ) -> AnalysisRunRecord:
+        return self._fail_analysis_run(
+            run_id=run_id,
+            error_message=sanitize_error_message(error_message),
+            user_id=user_id,
+        )
 
     def list_job_events(
         self,
