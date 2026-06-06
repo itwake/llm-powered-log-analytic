@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
-from logan_workers.models import AnalysisResult
+from logan_workers.models import AnalysisResult, OFFENDING_SIGNALS
 from logan_workers.pipeline import AnalyzeCasePipeline
 from sqlalchemy import create_engine, delete, func, or_, select
 from sqlalchemy.engine import Engine
@@ -64,6 +64,65 @@ def _uuid_or_none(value: str | None) -> str | None:
 
 def _worker_uuid(value: str | None, fallback_key: str) -> str:
     return _uuid_or_none(value) or str(uuid.uuid5(uuid.NAMESPACE_URL, fallback_key))
+
+
+def _iso(value: datetime | None) -> str | None:
+    return _utc(value).isoformat() if value else None
+
+
+def _str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item is not None]
+
+
+def _entities(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+    entities: dict[str, list[str]] = {}
+    for key, raw_values in value.items():
+        if isinstance(raw_values, list):
+            entities[str(key)] = [str(item) for item in raw_values if item is not None]
+        elif raw_values is not None:
+            entities[str(key)] = [str(raw_values)]
+    return entities
+
+
+def _entity_values(value: Any) -> list[str]:
+    entities = _entities(value)
+    return [item for values in entities.values() for item in values]
+
+
+def _line_numbers(parsed_fields: Any, fallback_line_number: int) -> list[int]:
+    if isinstance(parsed_fields, dict) and isinstance(parsed_fields.get("stack_trace_lines"), list):
+        values = [int(item) for item in parsed_fields["stack_trace_lines"] if isinstance(item, int)]
+        if values:
+            return values
+    return [fallback_line_number]
+
+
+def _template_label(template_text: str) -> str:
+    return template_text.replace("<*>", "...")[:96]
+
+
+def _evidence_ref_payload(
+    *,
+    case_id: str,
+    run_id: str,
+    template_id: str | None,
+    line: tables.NormalizedLogLine,
+    raw_line: tables.RawLogLine,
+    raw_file: tables.RawFile,
+) -> dict[str, object]:
+    return {
+        "case_id": case_id,
+        "analysis_run_id": run_id,
+        "template_id": template_id,
+        "log_id": line.id,
+        "file_path": raw_file.original_filename,
+        "line_number": raw_line.line_number,
+        "timestamp": _iso(line.timestamp),
+    }
 
 
 def _sqlite_connect_args(database_url: str) -> dict[str, Any]:
@@ -463,6 +522,547 @@ class SQLAlchemyStore:
             if not run or run.case_id != case_id or not run.result_json:
                 return None
             return AnalysisResult.model_validate(run.result_json)
+
+    def get_report_summary(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        golden_signal: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, object] | None:
+        with self._session() as session:
+            rows = session.execute(
+                select(tables.LogTemplate, tables.TemplateAnnotation)
+                .join(
+                    tables.TemplateAnnotation,
+                    tables.TemplateAnnotation.template_id == tables.LogTemplate.id,
+                )
+                .where(
+                    tables.LogTemplate.case_id == case_id,
+                    tables.LogTemplate.analysis_run_id == run_id,
+                    tables.TemplateAnnotation.analysis_run_id == run_id,
+                )
+            ).all()
+            if not rows:
+                return None
+
+            template_ids = [template.id for template, _annotation in rows]
+            sample_lines: dict[str, tuple[tables.RepresentativeSample, tables.NormalizedLogLine]] = {}
+            if template_ids:
+                for sample, line in session.execute(
+                    select(tables.RepresentativeSample, tables.NormalizedLogLine)
+                    .join(
+                        tables.NormalizedLogLine,
+                        tables.RepresentativeSample.log_id == tables.NormalizedLogLine.id,
+                    )
+                    .where(tables.RepresentativeSample.template_id.in_(template_ids))
+                    .order_by(
+                        tables.RepresentativeSample.template_id,
+                        tables.RepresentativeSample.sample_rank,
+                        tables.RepresentativeSample.id,
+                    )
+                ).all():
+                    sample_lines.setdefault(sample.template_id, (sample, line))
+
+            representative_ids = {
+                template.representative_log_id
+                for template, _annotation in rows
+                if template.representative_log_id
+            }
+            representative_lines = (
+                {
+                    line.id: line
+                    for line in session.scalars(
+                        select(tables.NormalizedLogLine).where(
+                            tables.NormalizedLogLine.id.in_(representative_ids)
+                        )
+                    ).all()
+                }
+                if representative_ids
+                else {}
+            )
+
+            items: list[dict[str, object]] = []
+            for template, annotation in rows:
+                if golden_signal and annotation.golden_signal != golden_signal:
+                    continue
+                if not golden_signal and annotation.golden_signal not in OFFENDING_SIGNALS:
+                    continue
+
+                sample_with_line = sample_lines.get(template.id)
+                sample = sample_with_line[0] if sample_with_line else None
+                sample_line = sample_with_line[1] if sample_with_line else None
+                representative_line = representative_lines.get(template.representative_log_id or "")
+                representative_log_id = (
+                    sample.log_id if sample else template.representative_log_id
+                )
+                representative_message = (
+                    sample_line.redacted_message
+                    if sample_line
+                    else representative_line.redacted_message
+                    if representative_line
+                    else template.template_text
+                )
+                items.append(
+                    {
+                        "template_id": template.id,
+                        "representative_log_id": representative_log_id,
+                        "template_text": template.template_text,
+                        "representative_message": representative_message,
+                        "golden_signal": annotation.golden_signal,
+                        "fault_categories": _str_list(annotation.fault_categories),
+                        "entities": _entities(annotation.entities),
+                        "occurrence_count": template.occurrence_count,
+                        "first_seen": _iso(template.first_seen),
+                        "last_seen": _iso(template.last_seen),
+                        "files": _str_list(template.files),
+                        "services": _str_list(template.services),
+                        "severity_score": annotation.severity_score,
+                        "confidence": annotation.confidence,
+                    }
+                )
+
+            items.sort(key=lambda item: (-float(item["severity_score"]), item["first_seen"] or ""))
+            raw_count = (
+                session.scalar(
+                    select(func.count())
+                    .select_from(tables.RawLogLine)
+                    .where(
+                        tables.RawLogLine.case_id == case_id,
+                        tables.RawLogLine.analysis_run_id == run_id,
+                    )
+                )
+                or 0
+            )
+            total = len(items)
+            safe_offset = max(0, offset)
+            safe_limit = max(0, limit)
+            return {
+                "items": items[safe_offset : safe_offset + safe_limit],
+                "total": total,
+                "reduction": {
+                    "raw_log_lines": raw_count,
+                    "offending_templates": total,
+                    "estimated_review_reduction": 1 - (total / raw_count) if raw_count else 0,
+                },
+            }
+
+    def get_report_temporal(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        group_by: str = "golden_signal",
+    ) -> dict[str, object] | None:
+        with self._session() as session:
+            rows = session.scalars(
+                select(tables.TimeWindowSignal)
+                .where(
+                    tables.TimeWindowSignal.case_id == case_id,
+                    tables.TimeWindowSignal.analysis_run_id == run_id,
+                )
+                .order_by(
+                    tables.TimeWindowSignal.window_start,
+                    tables.TimeWindowSignal.golden_signal,
+                    tables.TimeWindowSignal.service,
+                    tables.TimeWindowSignal.template_id,
+                )
+            ).all()
+            if not rows:
+                return None
+
+            grouped: dict[str, dict[str, int]] = {}
+            for row in rows:
+                if group_by == "service":
+                    name = row.service or "unknown"
+                elif group_by == "fault_category":
+                    name = row.fault_category or "unknown"
+                elif group_by == "template":
+                    name = row.template_id or "unknown"
+                else:
+                    name = row.golden_signal
+                points = grouped.setdefault(name, {})
+                window_start = _iso(row.window_start) or ""
+                points[window_start] = points.get(window_start, 0) + row.count
+
+            return {
+                "window_size_seconds": rows[0].window_size_seconds,
+                "series": [
+                    {
+                        "name": name,
+                        "points": [
+                            {"window_start": window_start, "count": count}
+                            for window_start, count in sorted(points.items())
+                        ],
+                    }
+                    for name, points in sorted(grouped.items())
+                ],
+            }
+
+    def get_report_logs(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        window_start: datetime | None = None,
+        window_end: datetime | None = None,
+        q: str | None = None,
+        service: str | None = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> dict[str, object] | None:
+        with self._session() as session:
+            has_rows = (
+                session.scalar(
+                    select(func.count())
+                    .select_from(tables.NormalizedLogLine)
+                    .where(
+                        tables.NormalizedLogLine.case_id == case_id,
+                        tables.NormalizedLogLine.analysis_run_id == run_id,
+                    )
+                )
+                or 0
+            )
+            if not has_rows:
+                return None
+
+            query = (
+                select(
+                    tables.NormalizedLogLine,
+                    tables.RawLogLine,
+                    tables.RawFile,
+                    tables.LogTemplate,
+                    tables.TemplateAnnotation,
+                )
+                .join(
+                    tables.RawLogLine,
+                    tables.NormalizedLogLine.raw_log_id == tables.RawLogLine.id,
+                )
+                .join(tables.RawFile, tables.RawLogLine.file_id == tables.RawFile.id)
+                .outerjoin(
+                    tables.LogTemplate,
+                    tables.NormalizedLogLine.template_id == tables.LogTemplate.id,
+                )
+                .outerjoin(
+                    tables.TemplateAnnotation,
+                    tables.TemplateAnnotation.template_id == tables.NormalizedLogLine.template_id,
+                )
+                .where(
+                    tables.NormalizedLogLine.case_id == case_id,
+                    tables.NormalizedLogLine.analysis_run_id == run_id,
+                )
+                .order_by(
+                    tables.NormalizedLogLine.timestamp.is_(None),
+                    tables.NormalizedLogLine.timestamp,
+                    tables.RawFile.original_filename,
+                    tables.RawLogLine.line_number,
+                    tables.NormalizedLogLine.id,
+                )
+            )
+            if window_start:
+                query = query.where(tables.NormalizedLogLine.timestamp >= window_start)
+            if window_end:
+                query = query.where(tables.NormalizedLogLine.timestamp <= window_end)
+            if service:
+                query = query.where(tables.NormalizedLogLine.service == service)
+
+            rows = list(session.execute(query).all())
+            if q:
+                lowered = q.lower()
+
+                def matches(row: Any) -> bool:
+                    line, _raw_line, _raw_file, template, annotation = row
+                    template_text = template.template_text if template else ""
+                    entities = annotation.entities if annotation else {}
+                    return (
+                        lowered in line.redacted_message.lower()
+                        or lowered in template_text.lower()
+                        or any(lowered in value.lower() for value in _entity_values(entities))
+                    )
+
+                rows = [row for row in rows if matches(row)]
+
+            service_counts: dict[str, int] = {}
+            signal_counts: dict[str, int] = {}
+            category_counts: dict[str, int] = {}
+            for line, _raw_line, _raw_file, _template, annotation in rows:
+                service_key = line.service or "unknown"
+                signal_key = annotation.golden_signal if annotation else "unknown"
+                service_counts[service_key] = service_counts.get(service_key, 0) + 1
+                signal_counts[signal_key] = signal_counts.get(signal_key, 0) + 1
+                for category in _str_list(annotation.fault_categories if annotation else []):
+                    category_counts[category] = category_counts.get(category, 0) + 1
+
+            safe_offset = max(0, offset)
+            safe_limit = max(0, limit)
+            paged_rows = rows[safe_offset : safe_offset + safe_limit]
+            return {
+                "items": [
+                    {
+                        "log_id": line.id,
+                        "timestamp": _iso(line.timestamp),
+                        "level": line.level,
+                        "service": line.service,
+                        "file_path": raw_file.original_filename,
+                        "line_number": raw_line.line_number,
+                        "line_numbers": _line_numbers(
+                            line.parsed_fields,
+                            raw_line.line_number,
+                        ),
+                        "message": line.redacted_message,
+                        "template_id": line.template_id,
+                        "template_text": template.template_text if template else None,
+                        "golden_signal": annotation.golden_signal if annotation else "unknown",
+                        "fault_categories": _str_list(
+                            annotation.fault_categories if annotation else []
+                        ),
+                        "entities": _entities(annotation.entities if annotation else {}),
+                    }
+                    for line, raw_line, raw_file, template, annotation in paged_rows
+                ],
+                "total": len(rows),
+                "facets": {
+                    "service": [
+                        {"value": value, "count": count}
+                        for value, count in sorted(service_counts.items())
+                    ],
+                    "golden_signal": [
+                        {"value": value, "count": count}
+                        for value, count in sorted(signal_counts.items())
+                    ],
+                    "fault_category": [
+                        {"value": value, "count": count}
+                        for value, count in sorted(category_counts.items())
+                    ],
+                },
+            }
+
+    def get_report_causal_graph(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        max_nodes: int = 100,
+        min_confidence: float = 0.0,
+    ) -> dict[str, object] | None:
+        with self._session() as session:
+            node_rows = session.execute(
+                select(tables.CausalNode, tables.LogTemplate, tables.TemplateAnnotation)
+                .join(tables.LogTemplate, tables.CausalNode.template_id == tables.LogTemplate.id)
+                .outerjoin(
+                    tables.TemplateAnnotation,
+                    tables.TemplateAnnotation.template_id == tables.CausalNode.template_id,
+                )
+                .where(
+                    tables.CausalNode.case_id == case_id,
+                    tables.CausalNode.analysis_run_id == run_id,
+                )
+                .order_by(
+                    tables.CausalNode.first_seen.is_(None),
+                    tables.CausalNode.first_seen,
+                    tables.LogTemplate.template_text,
+                    tables.CausalNode.id,
+                )
+            ).all()
+            if not node_rows:
+                return None
+
+            evidence_refs = self._evidence_refs_by_template(
+                session=session,
+                case_id=case_id,
+                run_id=run_id,
+                template_ids=[node.template_id for node, _template, _annotation in node_rows],
+            )
+            nodes = [
+                {
+                    "id": node.id,
+                    "label": _template_label(template.template_text),
+                    "template_id": node.template_id,
+                    "golden_signal": node.golden_signal
+                    or (annotation.golden_signal if annotation else "unknown"),
+                    "fault_categories": _str_list(
+                        node.fault_categories
+                        or (annotation.fault_categories if annotation else [])
+                    ),
+                    "occurrence_count": node.occurrence_count,
+                    "first_seen": _iso(node.first_seen),
+                    "last_seen": _iso(node.last_seen),
+                    "rank_score": node.rank_score,
+                    "pagerank_score": node.pagerank_score,
+                    "confidence": annotation.confidence if annotation else 0.0,
+                    "evidence_refs": evidence_refs.get(node.template_id, []),
+                }
+                for node, template, annotation in node_rows
+            ]
+            safe_max_nodes = max(0, max_nodes)
+            returned_nodes = nodes[:safe_max_nodes]
+            node_id_by_template = {
+                str(node["template_id"]): str(node["id"]) for node in returned_nodes
+            }
+
+            edge_rows = session.scalars(
+                select(tables.CausalEdge)
+                .where(
+                    tables.CausalEdge.case_id == case_id,
+                    tables.CausalEdge.analysis_run_id == run_id,
+                    tables.CausalEdge.confidence >= min_confidence,
+                )
+                .order_by(
+                    tables.CausalEdge.confidence.desc(),
+                    tables.CausalEdge.lag_seconds,
+                    tables.CausalEdge.id,
+                )
+            ).all()
+            edges = []
+            for edge in edge_rows:
+                source = node_id_by_template.get(edge.source_template_id)
+                target = node_id_by_template.get(edge.target_template_id)
+                if not source or not target:
+                    continue
+                edges.append(
+                    {
+                        "id": edge.id,
+                        "source": source,
+                        "target": target,
+                        "source_template_id": edge.source_template_id,
+                        "target_template_id": edge.target_template_id,
+                        "edge_type": edge.edge_type,
+                        "method": edge.method,
+                        "lag_seconds": edge.lag_seconds,
+                        "support_windows": edge.support_windows,
+                        "confidence": edge.confidence,
+                        "p_value_adj": edge.p_value_adj,
+                        "lift": edge.lift,
+                        "temporal_precedence_score": edge.temporal_precedence_score,
+                        "correlation_score": edge.correlation_score,
+                        "evidence": edge.evidence or {},
+                        "needs_validation": True,
+                    }
+                )
+
+            ranked_nodes = sorted(nodes, key=lambda node: float(node["rank_score"]), reverse=True)
+            return {
+                "nodes": returned_nodes,
+                "edges": edges,
+                "root_cause_candidates": [
+                    {
+                        "template_id": node["template_id"],
+                        "rank": index + 1,
+                        "score": node["rank_score"],
+                        "reason": (
+                            "High PageRank/early occurrence/outgoing candidate edges; "
+                            "needs validation."
+                        ),
+                    }
+                    for index, node in enumerate(ranked_nodes[:5])
+                ],
+            }
+
+    def get_report_causal_summary(
+        self, *, case_id: str, run_id: str
+    ) -> dict[str, object] | None:
+        with self._session() as session:
+            row = session.scalar(
+                select(tables.CausalSummary)
+                .where(
+                    tables.CausalSummary.case_id == case_id,
+                    tables.CausalSummary.analysis_run_id == run_id,
+                )
+                .order_by(tables.CausalSummary.created_at.desc(), tables.CausalSummary.id)
+            )
+            if not row:
+                return None
+            return {
+                "summary_markdown": row.summary_markdown,
+                "customer_update_markdown": row.customer_update_markdown,
+                "next_actions": list(row.next_actions_json or []),
+                "evidence_refs": list(row.evidence_refs_json or []),
+                "confidence": row.confidence,
+                "edited": bool(row.edited_by or row.edited_at),
+            }
+
+    def _evidence_refs_by_template(
+        self,
+        *,
+        session: Session,
+        case_id: str,
+        run_id: str,
+        template_ids: list[str],
+    ) -> dict[str, list[dict[str, object]]]:
+        if not template_ids:
+            return {}
+
+        refs: dict[str, list[dict[str, object]]] = {}
+        sample_rows = session.execute(
+            select(
+                tables.RepresentativeSample.template_id,
+                tables.NormalizedLogLine,
+                tables.RawLogLine,
+                tables.RawFile,
+            )
+            .join(
+                tables.NormalizedLogLine,
+                tables.RepresentativeSample.log_id == tables.NormalizedLogLine.id,
+            )
+            .join(tables.RawLogLine, tables.NormalizedLogLine.raw_log_id == tables.RawLogLine.id)
+            .join(tables.RawFile, tables.RawLogLine.file_id == tables.RawFile.id)
+            .where(tables.RepresentativeSample.template_id.in_(template_ids))
+            .order_by(
+                tables.RepresentativeSample.template_id,
+                tables.RepresentativeSample.sample_rank,
+                tables.RepresentativeSample.id,
+            )
+        ).all()
+        for template_id, line, raw_line, raw_file in sample_rows:
+            refs.setdefault(
+                template_id,
+                [
+                    _evidence_ref_payload(
+                        case_id=case_id,
+                        run_id=run_id,
+                        template_id=template_id,
+                        line=line,
+                        raw_line=raw_line,
+                        raw_file=raw_file,
+                    )
+                ],
+            )
+
+        missing_template_ids = [template_id for template_id in template_ids if template_id not in refs]
+        if missing_template_ids:
+            fallback_rows = session.execute(
+                select(tables.NormalizedLogLine, tables.RawLogLine, tables.RawFile)
+                .join(
+                    tables.RawLogLine,
+                    tables.NormalizedLogLine.raw_log_id == tables.RawLogLine.id,
+                )
+                .join(tables.RawFile, tables.RawLogLine.file_id == tables.RawFile.id)
+                .where(tables.NormalizedLogLine.template_id.in_(missing_template_ids))
+                .order_by(
+                    tables.NormalizedLogLine.template_id,
+                    tables.NormalizedLogLine.timestamp.is_(None),
+                    tables.NormalizedLogLine.timestamp,
+                    tables.RawFile.original_filename,
+                    tables.RawLogLine.line_number,
+                    tables.NormalizedLogLine.id,
+                )
+            ).all()
+            for line, raw_line, raw_file in fallback_rows:
+                if not line.template_id or line.template_id in refs:
+                    continue
+                refs[line.template_id] = [
+                    _evidence_ref_payload(
+                        case_id=case_id,
+                        run_id=run_id,
+                        template_id=line.template_id,
+                        line=line,
+                        raw_line=raw_line,
+                        raw_file=raw_file,
+                    )
+                ]
+        return refs
 
     def create_export(
         self,

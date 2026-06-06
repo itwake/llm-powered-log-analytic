@@ -36,6 +36,9 @@ Analysis completion in the SQLAlchemy backend now writes normalized analytics ro
 PostgreSQL/SQLite tables in the same local path. ClickHouse/OpenSearch payload builders and
 optional HTTP publishers are implemented, but external sinks are disabled by default and Docker
 is not required for deterministic tests.
+SQLAlchemy-backed report endpoints read summary, temporal, log table, causal graph, and causal
+summary views from the normalized fan-out tables, with the in-memory backend and missing fan-out
+rows still falling back to the legacy `analysis_runs.result_json` path.
 
 External analytics sinks can be enabled for SQLAlchemy-backed runs with:
 
@@ -48,7 +51,7 @@ External analytics sinks can be enabled for SQLAlchemy-backed runs with:
 The adapters publish only redacted/normalized log content and derived metadata. They do not
 publish raw log text, model prompts, model inputs, source tokens, or credential material.
 ClickHouse/OpenSearch table/index creation, schema migrations, retries, idempotency records,
-and service-backed query paths remain production work.
+and service-backed external analytics queries remain production work.
 
 Run the web workspace against the local API:
 
@@ -74,8 +77,7 @@ docker compose up --build
 - Add managed ClickHouse table lifecycle for `enriched_log_lines` and `window_aggregates`.
 - Add managed OpenSearch index lifecycle for `logan-logs-{case_id}-{analysis_run_id}`.
 - Add external sink retry/idempotency records for ClickHouse/OpenSearch writes.
-- Move report/query endpoints from `analysis_runs.result_json` to service-backed reads over
-  normalized SQL and external analytics stores.
+- Add report/query reads over external analytics stores.
 - Add an S3/MinIO presigned object-store adapter for production deployments.
 - Add resumable/multipart uploads for large files and interrupted browser sessions.
 - Cache Copilot plugin tokens until their `expires_at` instead of exchanging the source token per model call.

@@ -139,6 +139,14 @@ def _raw_file_analysis_run_id(store: SQLAlchemyStore, file_id: str) -> str | Non
         )
 
 
+def _clear_result_json(store: SQLAlchemyStore, run_id: str) -> None:
+    with store.session_factory() as session:
+        run = session.get(tables.AnalysisRun, run_id)
+        assert run is not None
+        run.result_json = None
+        session.commit()
+
+
 @pytest.mark.asyncio
 async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
@@ -409,6 +417,102 @@ async def test_sqlalchemy_fanout_scopes_raw_file_ids_per_run(tmp_path: Path) -> 
     assert first_counts["normalized_log_lines"] > 0
     assert second_counts["normalized_log_lines"] > 0
     assert _run_raw_file_ids(store, first.id).isdisjoint(_run_raw_file_ids(store, second.id))
+
+
+@pytest.mark.asyncio
+async def test_sqlalchemy_report_endpoints_read_fanout_without_result_json(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    user = store.register_user(
+        email="fanout-reports@example.com",
+        username="fanout-reports",
+        full_name=None,
+        password="password123",
+    )
+    token, _session = store.create_session(user.id)
+    case = store.create_case(
+        user_id=user.id,
+        data={
+            "title": "Checkout reports from fanout",
+            "issue_description": "Report endpoints should not need result_json.",
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "test",
+            "timezone": "UTC",
+        },
+    )
+    secret_log = tmp_path / "secret-payment.log"
+    secret_log.write_text(
+        (
+            "2026-06-06T10:12:30Z ERROR payment-service timeout calling auth-service "
+            "after 30000ms Authorization=Bearer raw-secret-token password=hunter2 "
+            "request_id=req-secret\n"
+        ),
+        encoding="utf-8",
+    )
+    input_paths = [str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))]
+    input_paths.append(str(secret_log))
+    run = await store.start_analysis(
+        case_id=case.id,
+        user_id=user.id,
+        input_paths=input_paths,
+        config={"default_window_size_seconds": 60},
+        gateway=MockCopilotAnnotationGateway(),
+    )
+    assert run.status == "completed"
+    assert store.get_analysis_result(case.id, run.id) is not None
+
+    _clear_result_json(store, run.id)
+    assert store.get_analysis_result(case.id, run.id) is None
+
+    client = await _client(store)
+    client.cookies.set("logan_session", token)
+    summary = await client.get(f"/api/cases/{case.id}/analysis-runs/{run.id}/summary")
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["items"]
+    assert summary.json()["reduction"]["raw_log_lines"] > 0
+
+    temporal = await client.get(f"/api/cases/{case.id}/analysis-runs/{run.id}/temporal")
+    assert temporal.status_code == 200, temporal.text
+    assert temporal.json()["series"]
+
+    logs = await client.get(
+        f"/api/cases/{case.id}/analysis-runs/{run.id}/logs",
+        params={"q": "auth-service", "service": "payment-service"},
+    )
+    assert logs.status_code == 200, logs.text
+    logs_body = logs.json()
+    assert logs_body["items"]
+    assert logs_body["facets"]["service"]
+    serialized_logs = json.dumps(logs_body, sort_keys=True)
+    assert "raw-secret-token" not in serialized_logs
+    assert "hunter2" not in serialized_logs
+    assert "raw_text" not in serialized_logs
+    assert "raw_message" not in serialized_logs
+    assert any("<TOKEN>" in item["message"] for item in logs_body["items"])
+    assert any("<SECRET>" in item["message"] for item in logs_body["items"])
+
+    graph = await client.get(f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-graph")
+    assert graph.status_code == 200, graph.text
+    graph_body = graph.json()
+    assert graph_body["nodes"]
+    assert graph_body["edges"]
+    node_ids = {node["id"] for node in graph_body["nodes"]}
+    assert all(edge["source"] in node_ids and edge["target"] in node_ids for edge in graph_body["edges"])
+    assert all(edge["needs_validation"] for edge in graph_body["edges"])
+    assert graph_body["root_cause_candidates"]
+
+    causal_summary = await client.get(
+        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary"
+    )
+    assert causal_summary.status_code == 200, causal_summary.text
+    assert "candidate" in causal_summary.json()["summary_markdown"].lower()
+    assert causal_summary.json()["evidence_refs"]
+    assert causal_summary.json()["edited"] is False
+    await client.aclose()
 
 
 def test_create_store_auto_uses_sqlalchemy_when_database_url_is_set(tmp_path: Path) -> None:
