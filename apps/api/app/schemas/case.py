@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CaseCreateRequest(BaseModel):
@@ -138,6 +138,18 @@ class ExportRequest(BaseModel):
     export_type: str
     include_sections: list[str] = Field(default_factory=list)
     redaction_mode: str = "customer_safe"
+
+
+class CausalSummaryUpdateRequest(BaseModel):
+    summary_markdown: str = Field(min_length=1, max_length=12000)
+    customer_update_markdown: str | None = Field(default=None, max_length=12000)
+
+    @field_validator("summary_markdown")
+    @classmethod
+    def summary_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("summary_markdown must not be blank")
+        return value
 
 
 class FeedbackRequest(BaseModel):

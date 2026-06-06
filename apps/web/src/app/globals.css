@@ -500,6 +500,35 @@ th {
   white-space: pre-wrap;
 }
 
+.summary-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.summary-editor {
+  align-content: start;
+  display: grid;
+}
+
+.summary-textarea {
+  min-height: 360px;
+}
+
+.customer-update-textarea {
+  min-height: 120px;
+}
+
+.customer-update-view {
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  line-height: 1.45;
+  min-height: 92px;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
 .code-block {
   background: #f2f5f2;
   border: 1px solid var(--line);

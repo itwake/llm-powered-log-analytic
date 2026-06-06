@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
+import html
+import json
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from logan_workers.models import OFFENDING_SIGNALS
+from logan_workers.activities.export import export_analysis
+from logan_workers.models import OFFENDING_SIGNALS, ExportArtifact
 
 from app.dependencies import current_user, get_model_gateway, get_store, require_case_permission
 from app.schemas.case import (
@@ -20,6 +24,7 @@ from app.schemas.case import (
     CaseCollaboratorResponse,
     CaseCreateRequest,
     CaseResponse,
+    CausalSummaryUpdateRequest,
     ExportRequest,
     FeedbackRequest,
     JobEventListResponse,
@@ -921,6 +926,44 @@ def _query_report(store: MetadataStore, method_name: str, **kwargs: Any) -> dict
     return method(**kwargs)
 
 
+def _causal_summary_export_artifact(
+    *,
+    case_id: str,
+    run_id: str,
+    export_type: str,
+    summary: dict[str, object],
+) -> ExportArtifact:
+    export_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{run_id}:{export_type}"))
+    summary_markdown = str(summary.get("summary_markdown") or "")
+    if export_type == "markdown":
+        content = summary_markdown
+    elif export_type == "html":
+        content = (
+            "<!doctype html><html><head><meta charset=\"utf-8\"><title>LogAn Export</title></head>"
+            "<body><main><pre>"
+            + html.escape(summary_markdown)
+            + "</pre></main></body></html>"
+        )
+    elif export_type == "json":
+        content = json.dumps(
+            {
+                "case_id": case_id,
+                "analysis_run_id": run_id,
+                "summary": summary,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    else:
+        raise ValueError(f"unsupported export type: {export_type}")
+    return ExportArtifact(
+        export_id=export_id,
+        export_type=export_type,  # type: ignore[arg-type]
+        content=content,
+        object_uri=f"memory://exports/{run_id}/{export_id}.{export_type}",
+    )
+
+
 def _record_raw_log_search(
     *,
     store: MetadataStore,
@@ -1272,6 +1315,33 @@ def causal_summary(
     return result.causal_summary.model_dump(mode="json")
 
 
+@router.patch("/{case_id}/analysis-runs/{run_id}/causal-summary")
+def update_causal_summary(
+    case_id: str,
+    run_id: str,
+    payload: CausalSummaryUpdateRequest,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> dict[str, object]:
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
+    updated = store.update_causal_summary(
+        case_id=case_id,
+        run_id=run_id,
+        summary_markdown=payload.summary_markdown,
+        customer_update_markdown=payload.customer_update_markdown,
+        user_id=user.id,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="analysis result not found")
+    return updated
+
+
 @router.post("/{case_id}/analysis-runs/{run_id}/exports")
 def create_export(
     case_id: str,
@@ -1287,8 +1357,32 @@ def create_export(
         permission="edit",
         hide_forbidden=False,
     )
-    result = _require_result(store, case_id, run_id)
-    artifact = result.exports.get(payload.export_type)
+    result = store.get_analysis_result(case_id, run_id)
+    if result is not None:
+        try:
+            artifact = export_analysis(result, payload.export_type)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="unsupported export type") from None
+    else:
+        summary = _query_report(
+            store,
+            "get_report_causal_summary",
+            case_id=case_id,
+            run_id=run_id,
+        )
+        if summary is None:
+            raise HTTPException(status_code=404, detail="analysis result not found")
+        if payload.include_sections and "causal_summary" not in payload.include_sections:
+            raise HTTPException(status_code=404, detail="analysis result not found")
+        try:
+            artifact = _causal_summary_export_artifact(
+                case_id=case_id,
+                run_id=run_id,
+                export_type=payload.export_type,
+                summary=summary,
+            )
+        except ValueError:
+            raise HTTPException(status_code=400, detail="unsupported export type") from None
     if not artifact:
         raise HTTPException(status_code=400, detail="unsupported export type")
     store.create_export(

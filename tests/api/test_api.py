@@ -555,6 +555,11 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
         },
     )
     assert viewer_feedback.status_code == 403
+    viewer_summary_edit = await collaborator.patch(
+        f"/api/cases/{case_id}/analysis-runs/{run_id}/causal-summary",
+        json={"summary_markdown": "viewer edit is not allowed"},
+    )
+    assert viewer_summary_edit.status_code == 403
 
     editor = await owner.post(
         f"/api/cases/{case_id}/collaborators",
@@ -801,7 +806,7 @@ async def test_disconnect_revokes_credentials_for_gateway_use() -> None:
 
 @pytest.mark.asyncio
 async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
-    client, _, _ = await _authenticated_client(
+    client, store, _ = await _authenticated_client(
         Settings(local_object_store_dir=str(tmp_path / "object-store"))
     )
     case_id = await _create_case(client)
@@ -912,8 +917,47 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     assert all(edge["needs_validation"] for edge in graph_body["edges"])
 
     causal_summary = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/causal-summary")
-    assert "candidate" in causal_summary.json()["summary_markdown"].lower()
-    assert causal_summary.json()["evidence_refs"]
+    original_causal_summary = causal_summary.json()
+    assert "candidate" in original_causal_summary["summary_markdown"].lower()
+    assert original_causal_summary["evidence_refs"]
+    edited_summary = "# Edited Incident Diagnosis\n\nCandidate evidence has been reviewed."
+    edited_customer_update = "Engineering has updated the customer-safe incident summary."
+    patched_summary = await client.patch(
+        f"/api/cases/{case_id}/analysis-runs/{run_id}/causal-summary",
+        json={
+            "summary_markdown": edited_summary,
+            "customer_update_markdown": edited_customer_update,
+        },
+    )
+    assert patched_summary.status_code == 200, patched_summary.text
+    patched_body = patched_summary.json()
+    assert patched_body["summary_markdown"] == edited_summary
+    assert patched_body["customer_update_markdown"] == edited_customer_update
+    assert patched_body["edited"] is True
+    assert patched_body["evidence_refs"] == original_causal_summary["evidence_refs"]
+    assert patched_body["next_actions"] == original_causal_summary["next_actions"]
+    assert patched_body["confidence"] == original_causal_summary["confidence"]
+    fetched_patched_summary = await client.get(
+        f"/api/cases/{case_id}/analysis-runs/{run_id}/causal-summary"
+    )
+    assert fetched_patched_summary.json()["summary_markdown"] == edited_summary
+    assert fetched_patched_summary.json()["edited"] is True
+    result = store.get_analysis_result(case_id, run_id)
+    assert result is not None
+    assert result.causal_summary.summary_markdown == edited_summary
+    assert result.causal_summary.edited is True
+    assert result.exports["markdown"].content == edited_summary
+    audit = store.list_audit_logs(case_id=case_id, action="causal_summary.edit")
+    assert len(audit) == 1
+    assert audit[0].target_type == "causal_summary"
+    assert audit[0].target_id == run_id
+    assert audit[0].metadata == {
+        "analysis_run_id": run_id,
+        "summary_length": len(edited_summary),
+        "customer_update_length": len(edited_customer_update),
+        "evidence_refs_count": len(original_causal_summary["evidence_refs"]),
+        "edited": True,
+    }
 
     for export_type in ("markdown", "html", "json"):
         export = await client.post(

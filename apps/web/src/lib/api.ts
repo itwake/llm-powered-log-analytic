@@ -456,6 +456,11 @@ export interface CausalSummaryResponse {
   edited: boolean;
 }
 
+export interface CausalSummaryUpdateRequest {
+  summary_markdown: string;
+  customer_update_markdown?: string | null;
+}
+
 export interface ExportRequest {
   export_type: "markdown" | "html" | "json";
   include_sections?: string[];
@@ -698,6 +703,11 @@ export const reportsApi = {
     request<CausalGraphResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/causal-graph`, {query}),
   causalSummary: (caseId: string, runId: string) =>
     request<CausalSummaryResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/causal-summary`),
+  updateCausalSummary: (caseId: string, runId: string, payload: CausalSummaryUpdateRequest) =>
+    request<CausalSummaryResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/causal-summary`, {
+      method: "PATCH",
+      body: payload,
+    }),
   createExport: (caseId: string, runId: string, payload: ExportRequest) =>
     request<ExportResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/exports`, {
       method: "POST",

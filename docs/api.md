@@ -175,10 +175,20 @@ Add/remove operations are audited.
 - `GET /api/cases/{case_id}/analysis-runs/{run_id}/logs`
 - `GET /api/cases/{case_id}/analysis-runs/{run_id}/causal-graph`
 - `GET /api/cases/{case_id}/analysis-runs/{run_id}/causal-summary`
+- `PATCH /api/cases/{case_id}/analysis-runs/{run_id}/causal-summary`
 - `POST /api/cases/{case_id}/analysis-runs/{run_id}/exports`
 - `POST /api/cases/{case_id}/feedback`
 
 Report responses are generated from the stored analysis result, not static fixtures.
+`PATCH /causal-summary` requires case edit permission and accepts only
+`summary_markdown` (required, 1-12000 characters) plus optional
+`customer_update_markdown` (up to 12000 characters; omit or send `null` to keep the current
+customer update). The response has the same shape as `GET /causal-summary` and returns
+`edited: true`; evidence refs, confidence, and next actions remain graph-generated evidence and
+are not accepted in the update request. Edits are audited as `causal_summary.edit` with summary
+lengths and evidence counts only, never raw logs, prompts, tokens, or secrets. Causal-summary
+exports are generated from the current summary, including edited summaries and SQL fan-out
+fallback when retained report rows exist.
 
 ## Admin
 

@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
+from logan_workers.activities.export import export_analysis
 from logan_workers.models import AnalysisResult, OFFENDING_SIGNALS
 from logan_workers.pipeline import AnalyzeCasePipeline
 from sqlalchemy import create_engine, delete, func, or_, select
@@ -1329,6 +1330,117 @@ class SQLAlchemyStore:
             if not run or run.case_id != case_id or not run.result_json:
                 return None
             return AnalysisResult.model_validate(run.result_json)
+
+    def update_causal_summary(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        summary_markdown: str,
+        customer_update_markdown: str | None,
+        user_id: str,
+    ) -> dict[str, object] | None:
+        now = _now()
+        with self._session() as session:
+            run = session.get(tables.AnalysisRun, run_id)
+            if not run or run.case_id != case_id:
+                return None
+
+            row = session.scalar(
+                select(tables.CausalSummary)
+                .where(
+                    tables.CausalSummary.case_id == case_id,
+                    tables.CausalSummary.analysis_run_id == run_id,
+                )
+                .order_by(tables.CausalSummary.created_at.desc(), tables.CausalSummary.id)
+            )
+            result = AnalysisResult.model_validate(run.result_json) if run.result_json else None
+            if row is None and result is None:
+                return None
+
+            current_customer_update = (
+                row.customer_update_markdown
+                if row is not None
+                else result.causal_summary.customer_update_markdown
+            )
+            updated_customer_update = (
+                current_customer_update
+                if customer_update_markdown is None
+                else customer_update_markdown
+            )
+
+            updated_result = None
+            if result is not None:
+                updated_summary = result.causal_summary.model_copy(
+                    update={
+                        "summary_markdown": summary_markdown,
+                        "customer_update_markdown": updated_customer_update,
+                        "edited": True,
+                    }
+                )
+                result_with_summary = result.model_copy(update={"causal_summary": updated_summary})
+                updated_exports = {
+                    export_type: export_analysis(result_with_summary, export_type)
+                    for export_type in ("markdown", "html", "json")
+                }
+                updated_result = result_with_summary.model_copy(update={"exports": updated_exports})
+                result_json = updated_result.model_dump(mode="json")
+                result_json["model_inputs"] = []
+                run.result_json = result_json
+
+            if row is None:
+                assert updated_result is not None
+                summary = updated_result.causal_summary
+                row = tables.CausalSummary(
+                    id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{run.id}:causal_summary")),
+                    case_id=case_id,
+                    analysis_run_id=run.id,
+                    summary_markdown=summary.summary_markdown,
+                    customer_update_markdown=summary.customer_update_markdown,
+                    next_actions_json=summary.next_actions,
+                    evidence_refs_json=[
+                        evidence_ref.model_dump(mode="json")
+                        for evidence_ref in summary.evidence_refs
+                    ],
+                    confidence=summary.confidence,
+                    model_provider=run.model_provider,
+                    model_name=run.model_name,
+                    prompt_version=run.prompt_version,
+                    raw_model_response={},
+                    edited_by=user_id,
+                    edited_at=now,
+                    created_at=now,
+                )
+                session.add(row)
+            else:
+                row.summary_markdown = summary_markdown
+                row.customer_update_markdown = updated_customer_update
+                row.edited_by = user_id
+                row.edited_at = now
+
+            self._add_audit(
+                session,
+                action="causal_summary.edit",
+                user_id=user_id,
+                target_type="causal_summary",
+                target_id=run_id,
+                case_id=case_id,
+                metadata={
+                    "analysis_run_id": run_id,
+                    "summary_length": len(summary_markdown),
+                    "customer_update_length": len(updated_customer_update),
+                    "evidence_refs_count": len(row.evidence_refs_json or []),
+                    "edited": True,
+                },
+            )
+            return {
+                "summary_markdown": row.summary_markdown,
+                "customer_update_markdown": row.customer_update_markdown,
+                "next_actions": list(row.next_actions_json or []),
+                "evidence_refs": list(row.evidence_refs_json or []),
+                "confidence": row.confidence,
+                "edited": True,
+            }
 
     def get_report_summary(
         self,

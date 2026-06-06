@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 from typing import Any, Protocol
 
+from logan_workers.activities.export import export_analysis
 from logan_workers.models import AnalysisResult
 from logan_workers.pipeline import AnalyzeCasePipeline
 
@@ -707,6 +708,16 @@ class MetadataStore(Protocol):
     ) -> list[AnalysisStepArtifactRecord]: ...
 
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None: ...
+
+    def update_causal_summary(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        summary_markdown: str,
+        customer_update_markdown: str | None,
+        user_id: str,
+    ) -> dict[str, object] | None: ...
 
     def create_export(
         self,
@@ -1537,6 +1548,53 @@ class InMemoryStore:
         if not run or run.case_id != case_id:
             return None
         return run.result
+
+    def update_causal_summary(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        summary_markdown: str,
+        customer_update_markdown: str | None,
+        user_id: str,
+    ) -> dict[str, object] | None:
+        run = self.runs.get(run_id)
+        if not run or run.case_id != case_id or run.result is None:
+            return None
+
+        current_summary = run.result.causal_summary
+        updated_summary = current_summary.model_copy(
+            update={
+                "summary_markdown": summary_markdown,
+                "customer_update_markdown": (
+                    current_summary.customer_update_markdown
+                    if customer_update_markdown is None
+                    else customer_update_markdown
+                ),
+                "edited": True,
+            }
+        )
+        updated_result = run.result.model_copy(update={"causal_summary": updated_summary})
+        updated_exports = {
+            export_type: export_analysis(updated_result, export_type)
+            for export_type in ("markdown", "html", "json")
+        }
+        run.result = updated_result.model_copy(update={"exports": updated_exports})
+        self.record_audit(
+            action="causal_summary.edit",
+            user_id=user_id,
+            target_type="causal_summary",
+            target_id=run_id,
+            case_id=case_id,
+            metadata={
+                "analysis_run_id": run_id,
+                "summary_length": len(summary_markdown),
+                "customer_update_length": len(updated_summary.customer_update_markdown),
+                "evidence_refs_count": len(updated_summary.evidence_refs),
+                "edited": True,
+            },
+        )
+        return run.result.causal_summary.model_dump(mode="json")
 
     def create_export(
         self,

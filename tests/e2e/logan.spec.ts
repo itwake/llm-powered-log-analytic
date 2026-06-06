@@ -157,4 +157,26 @@ test("sample case analysis can be explored through report views", async ({page},
   await expect(page.getByText("Evidence refs", {exact: true})).toBeVisible();
   await expect(page.getByRole("heading", {name: "Next Actions"})).toBeVisible();
   await expect(page.getByRole("heading", {name: "Evidence"})).toBeVisible();
+
+  await page.getByRole("button", {name: "Edit"}).click();
+  await page.getByLabel("Summary markdown").fill("# Canceled Candidate Summary\n\nThis should not persist.");
+  await page.getByLabel("Customer update markdown").fill("Canceled customer update.");
+  await page.getByRole("button", {name: "Cancel"}).click();
+  await expect(page.getByText("Incident Diagnosis Summary")).toBeVisible();
+
+  await page.getByRole("button", {name: "Edit"}).click();
+  await page
+    .getByLabel("Summary markdown")
+    .fill("# E2E Edited Candidate Summary\n\nCandidate evidence remains available after editing.");
+  await page
+    .getByLabel("Customer update markdown")
+    .fill("Customer-facing update edited by Playwright.");
+  await page.getByRole("button", {name: "Save"}).click();
+  await expect(page.getByText("Causal summary saved")).toBeVisible({timeout: 30_000});
+  await expect(page.getByText("E2E Edited Candidate Summary")).toBeVisible();
+  await expect(page.getByText("Customer-facing update edited by Playwright.")).toBeVisible();
+  await expect(page.getByText("Edited", {exact: true})).toBeVisible();
+
+  await page.getByRole("button", {name: "Export Markdown"}).click();
+  await expect(page.getByText(/markdown export ready:/)).toBeVisible({timeout: 30_000});
 });

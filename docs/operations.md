@@ -243,6 +243,16 @@ and a succeeded write exists for `{index}/_bulk`. External query failures are au
 the API falls back to SQL fan-out. Summary, causal graph, and causal summary reports continue
 to use SQL fan-out intentionally.
 
+Causal summaries are editable by case owners, editors, and global engineer/admin users through
+`PATCH /api/cases/{case_id}/analysis-runs/{run_id}/causal-summary`. The edit updates only the
+summary markdown and customer-safe update; graph evidence refs, confidence, and next actions stay
+attached to the generated evidence. SQLAlchemy stores the edit in `causal_summaries` and, when
+available, mirrors it into `analysis_runs.result_json.causal_summary` and regenerated export
+content. Audit events use `causal_summary.edit` and include only lengths/counts plus ids, not raw
+logs, prompts, token material, or secrets. Markdown, HTML, and JSON causal-summary exports are
+generated from the current edited summary; when retention has cleared `result_json`, the API uses
+the retained SQL fan-out summary row for causal-summary-only exports.
+
 Retention execution is built into both stores and can be invoked through
 `POST /api/admin/retention/run`. It deletes audit logs older than
 `LOGAN_AUDIT_RETENTION_DAYS`, scrubs `raw_log_lines.raw_text` and `raw_text_redacted` older than

@@ -14,10 +14,14 @@ function textField(item: Record<string, unknown>, key: string): string {
 export default function CausalSummaryPage() {
   const {caseId, runId} = useParams<{caseId: string; runId: string}>();
   const [data, setData] = useState<CausalSummaryResponse | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [customerUpdateDraft, setCustomerUpdateDraft] = useState("");
   const [feedbackType, setFeedbackType] = useState("useful");
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState<ExportRequest["export_type"] | null>(null);
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -27,7 +31,11 @@ export default function CausalSummaryPage() {
     setLoading(true);
     setError(null);
     try {
-      setData(await reportsApi.causalSummary(caseId, runId));
+      const response = await reportsApi.causalSummary(caseId, runId);
+      setData(response);
+      setSummaryDraft(response.summary_markdown);
+      setCustomerUpdateDraft(response.customer_update_markdown);
+      setEditing(false);
     } catch (caught) {
       setError(apiErrorMessage(caught));
     } finally {
@@ -38,6 +46,47 @@ export default function CausalSummaryPage() {
   useEffect(() => {
     void load();
   }, [caseId, runId]);
+
+  function startEditing() {
+    if (!data) {
+      return;
+    }
+    setSummaryDraft(data.summary_markdown);
+    setCustomerUpdateDraft(data.customer_update_markdown);
+    setStatusMessage(null);
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    if (data) {
+      setSummaryDraft(data.summary_markdown);
+      setCustomerUpdateDraft(data.customer_update_markdown);
+    }
+    setError(null);
+    setEditing(false);
+  }
+
+  async function saveSummary(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setStatusMessage(null);
+    try {
+      const response = await reportsApi.updateCausalSummary(caseId, runId, {
+        summary_markdown: summaryDraft,
+        customer_update_markdown: customerUpdateDraft,
+      });
+      setData(response);
+      setSummaryDraft(response.summary_markdown);
+      setCustomerUpdateDraft(response.customer_update_markdown);
+      setEditing(false);
+      setStatusMessage("Causal summary saved");
+    } catch (caught) {
+      setError(apiErrorMessage(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function createExport(exportType: ExportRequest["export_type"]) {
     setExporting(exportType);
@@ -84,9 +133,14 @@ export default function CausalSummaryPage() {
     <Shell caseId={caseId} runId={runId}>
       <div className="toolbar">
         <h1>Causal Summary</h1>
+        {!editing && data && (
+          <button className="button" type="button" onClick={startEditing}>
+            Edit
+          </button>
+        )}
         <button
           className="button"
-          disabled={exporting !== null}
+          disabled={exporting !== null || editing}
           type="button"
           onClick={() => void createExport("markdown")}
         >
@@ -94,7 +148,7 @@ export default function CausalSummaryPage() {
         </button>
         <button
           className="button secondary"
-          disabled={exporting !== null}
+          disabled={exporting !== null || editing}
           type="button"
           onClick={() => void createExport("html")}
         >
@@ -102,7 +156,7 @@ export default function CausalSummaryPage() {
         </button>
         <button
           className="button secondary"
-          disabled={exporting !== null}
+          disabled={exporting !== null || editing}
           type="button"
           onClick={() => void createExport("json")}
         >
@@ -116,7 +170,7 @@ export default function CausalSummaryPage() {
 
       {!loading && data && (
         <>
-          <section className="grid three">
+          <section className="grid four">
             <div className="panel metric">
               <span className="muted">Confidence</span>
               <strong>{formatPercent(data.confidence)}</strong>
@@ -129,10 +183,58 @@ export default function CausalSummaryPage() {
               <span className="muted">Next actions</span>
               <strong>{String(data.next_actions.length)}</strong>
             </div>
+            <div className="panel metric">
+              <span className="muted">Status</span>
+              <strong>
+                <span className={`pill ${data.edited ? "amber" : "green"}`}>
+                  {data.edited ? "Edited" : "Generated"}
+                </span>
+              </strong>
+            </div>
           </section>
 
           <section className="report-grid" style={{marginTop: 14}}>
-            <div className="markdown-view">{data.summary_markdown}</div>
+            {editing ? (
+              <form className="panel summary-editor" onSubmit={saveSummary}>
+                <label className="field">
+                  Summary markdown
+                  <textarea
+                    className="summary-textarea"
+                    maxLength={12000}
+                    required
+                    value={summaryDraft}
+                    onChange={(event) => setSummaryDraft(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  Customer update markdown
+                  <textarea
+                    className="customer-update-textarea"
+                    maxLength={12000}
+                    value={customerUpdateDraft}
+                    onChange={(event) => setCustomerUpdateDraft(event.target.value)}
+                  />
+                </label>
+                <div className="form-actions">
+                  <button className="button" disabled={saving} type="submit">
+                    {saving ? "Saving" : "Save"}
+                  </button>
+                  <button className="button secondary" disabled={saving} type="button" onClick={cancelEditing}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="summary-stack">
+                <div className="markdown-view">{data.summary_markdown}</div>
+                <div className="panel">
+                  <h2>Customer Update</h2>
+                  <div className="customer-update-view">
+                    {data.customer_update_markdown || "No customer update"}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="panel">
               <h2>Feedback</h2>
               <form onSubmit={submitFeedback}>

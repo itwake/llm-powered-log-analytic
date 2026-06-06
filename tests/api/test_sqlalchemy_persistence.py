@@ -798,11 +798,51 @@ async def test_sqlalchemy_report_endpoints_read_fanout_without_result_json(
     assert run.status == "completed"
     assert store.get_analysis_result(case.id, run.id) is not None
 
+    client = await _client(store)
+    client.cookies.set("logan_session", token)
+    original_causal_summary = await client.get(
+        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary"
+    )
+    assert original_causal_summary.status_code == 200, original_causal_summary.text
+    original_causal_summary_body = original_causal_summary.json()
+    result_json_summary = "## Edited candidate summary from result_json"
+    result_json_customer_update = "Customer update from result_json edit."
+    result_json_patch = await client.patch(
+        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary",
+        json={
+            "summary_markdown": result_json_summary,
+            "customer_update_markdown": result_json_customer_update,
+        },
+    )
+    assert result_json_patch.status_code == 200, result_json_patch.text
+    assert result_json_patch.json()["summary_markdown"] == result_json_summary
+    assert result_json_patch.json()["edited"] is True
+    result_after_patch = store.get_analysis_result(case.id, run.id)
+    assert result_after_patch is not None
+    assert result_after_patch.causal_summary.summary_markdown == result_json_summary
+    assert result_after_patch.causal_summary.customer_update_markdown == result_json_customer_update
+    assert result_after_patch.causal_summary.evidence_refs
+    assert result_after_patch.exports["markdown"].content == result_json_summary
+    with store.session_factory() as session:
+        row = session.scalar(
+            select(tables.CausalSummary).where(tables.CausalSummary.analysis_run_id == run.id)
+        )
+        assert row is not None
+        assert row.summary_markdown == result_json_summary
+        assert row.customer_update_markdown == result_json_customer_update
+        assert row.edited_by == user.id
+        assert row.edited_at is not None
+        assert row.evidence_refs_json == original_causal_summary_body["evidence_refs"]
+        assert row.next_actions_json == original_causal_summary_body["next_actions"]
+        run_row = session.get(tables.AnalysisRun, run.id)
+        assert run_row is not None and run_row.result_json is not None
+        assert run_row.result_json["causal_summary"]["summary_markdown"] == result_json_summary
+        assert run_row.result_json["causal_summary"]["edited"] is True
+        assert run_row.result_json["exports"]["markdown"]["content"] == result_json_summary
+
     _clear_result_json(store, run.id)
     assert store.get_analysis_result(case.id, run.id) is None
 
-    client = await _client(store)
-    client.cookies.set("logan_session", token)
     summary = await client.get(f"/api/cases/{case.id}/analysis-runs/{run.id}/summary")
     assert summary.status_code == 200, summary.text
     assert summary.json()["items"]
@@ -842,9 +882,42 @@ async def test_sqlalchemy_report_endpoints_read_fanout_without_result_json(
         f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary"
     )
     assert causal_summary.status_code == 200, causal_summary.text
-    assert "candidate" in causal_summary.json()["summary_markdown"].lower()
+    assert causal_summary.json()["summary_markdown"] == result_json_summary
     assert causal_summary.json()["evidence_refs"]
-    assert causal_summary.json()["edited"] is False
+    assert causal_summary.json()["edited"] is True
+    fanout_summary = "## Edited candidate summary from SQL fanout"
+    fanout_patch = await client.patch(
+        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary",
+        json={
+            "summary_markdown": fanout_summary,
+            "customer_update_markdown": None,
+        },
+    )
+    assert fanout_patch.status_code == 200, fanout_patch.text
+    fanout_body = fanout_patch.json()
+    assert fanout_body["summary_markdown"] == fanout_summary
+    assert fanout_body["customer_update_markdown"] == result_json_customer_update
+    assert fanout_body["edited"] is True
+    assert store.get_analysis_result(case.id, run.id) is None
+    fanout_fetch = await client.get(
+        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary"
+    )
+    assert fanout_fetch.json()["summary_markdown"] == fanout_summary
+    fanout_export = await client.post(
+        f"/api/cases/{case.id}/analysis-runs/{run.id}/exports",
+        json={"export_type": "markdown", "include_sections": ["causal_summary"]},
+    )
+    assert fanout_export.status_code == 200, fanout_export.text
+    assert fanout_export.json()["download_url"].startswith("memory://")
+    audit = store.list_audit_logs(case_id=case.id, action="causal_summary.edit")
+    assert len(audit) == 2
+    assert {
+        "analysis_run_id": run.id,
+        "summary_length": len(fanout_summary),
+        "customer_update_length": len(result_json_customer_update),
+        "evidence_refs_count": len(original_causal_summary_body["evidence_refs"]),
+        "edited": True,
+    } in [record.metadata for record in audit]
     await client.aclose()
 
 
