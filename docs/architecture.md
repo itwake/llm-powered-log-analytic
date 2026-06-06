@@ -25,6 +25,13 @@ case files
 
 Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services, and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy. Uploaded bytes use a local disk object store by default, so tests can still inject the deterministic in-memory store, fake device-code client, and mock model gateway with no Docker services or external model network required.
 
+The SQLAlchemy completion path is also the optional external analytics sink seam. When
+`LOGAN_ANALYTICS_SINKS_ENABLED=true` and sink URLs are configured, it publishes whitelisted
+redacted/normalized payloads to ClickHouse and/or OpenSearch after the normalized SQL fan-out.
+The default remains no external sink network calls. In `warn` mode sink failures are audited
+and analysis completion continues; in `fail` mode the typed sink error is allowed to fail the
+run.
+
 The API owns runtime injection points on app state:
 
 - `copilot_auth_client` defaults to the real GitHub device-code client.
@@ -50,7 +57,9 @@ Causal edges are candidate relationships only. API and worker fields use `candid
 ## Extension Seams
 
 - Replace `StableDrainAdapter` with `drain3` behind the same `cluster()` interface.
-- Fan out metadata-backed analysis results into ClickHouse, OpenSearch, and S3 object storage adapters.
+- Extend the ClickHouse/OpenSearch sink adapters with managed table/index lifecycle, retries,
+  idempotency records, and service-backed query paths.
+- Add S3 object storage adapters for report artifacts and production upload storage.
 - Add S3/MinIO presigned uploads and resumable/multipart support behind the object-store seam.
 - Replace synchronous orchestration with Temporal workflow activities.
 - Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.

@@ -25,6 +25,7 @@ from app.core.security import (
 )
 from app.db import Base
 from app.models import tables
+from app.services.analytics_sinks import AnalyticsSinkError, AnalyticsSinkPublisher
 from app.services.object_store import is_local_backend, local_upload_object_uri, safe_filename
 from app.store import (
     AnalysisRunRecord,
@@ -85,8 +86,10 @@ class SQLAlchemyStore:
         database_url: str,
         engine: Engine | None = None,
         create_schema: bool = True,
+        analytics_sink_publisher: Any | None = None,
     ) -> None:
         self.settings = app_settings
+        self.analytics_sink_publisher = analytics_sink_publisher
         self.database_url = _sync_database_url(database_url)
         self.engine = engine or create_engine(
             self.database_url,
@@ -644,6 +647,12 @@ class SQLAlchemyStore:
             run.progress_json = result.progress
             run.result_json = result_json
             self._fan_out_analysis_result(session=session, run=run, result=result)
+            self._publish_analytics_sinks(
+                session=session,
+                run=run,
+                result=result,
+                user_id=user_id,
+            )
             if case:
                 case.status = "ready"
                 case.updated_at = _now()
@@ -657,6 +666,58 @@ class SQLAlchemyStore:
                 metadata={"progress": result.progress},
             )
         return self._analysis_run_record(run)
+
+    def _publish_analytics_sinks(
+        self,
+        *,
+        session: Session,
+        run: tables.AnalysisRun,
+        result: AnalysisResult,
+        user_id: str,
+    ) -> None:
+        if not self.settings.analytics_sinks_enabled:
+            return
+        if not (self.settings.clickhouse_url or self.settings.opensearch_url):
+            return
+
+        publisher = self.analytics_sink_publisher or AnalyticsSinkPublisher.from_settings(
+            self.settings
+        )
+        try:
+            publish_result = publisher.publish(result)
+        except AnalyticsSinkError as exc:
+            failure_mode = self.settings.analytics_sink_failure_mode.lower()
+            self._add_audit(
+                session,
+                action="analytics_sink.publish_failed",
+                user_id=user_id,
+                target_type="analysis_run",
+                target_id=run.id,
+                case_id=run.case_id,
+                metadata={
+                    "error": str(exc),
+                    "failure_mode": failure_mode,
+                },
+            )
+            if failure_mode == "fail":
+                raise
+            return
+
+        if hasattr(publish_result, "to_dict"):
+            metadata = publish_result.to_dict()
+        elif isinstance(publish_result, dict):
+            metadata = publish_result
+        else:
+            metadata = {}
+        self._add_audit(
+            session,
+            action="analytics_sink.publish",
+            user_id=user_id,
+            target_type="analysis_run",
+            target_id=run.id,
+            case_id=run.case_id,
+            metadata=metadata,
+        )
 
     def _fan_out_analysis_result(
         self, *, session: Session, run: tables.AnalysisRun, result: AnalysisResult

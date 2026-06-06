@@ -33,8 +33,22 @@ The default API path uses real GitHub Copilot auth and model calls:
 
 The test suite injects fake auth/model clients and does not require GitHub network access.
 Analysis completion in the SQLAlchemy backend now writes normalized analytics rows into
-PostgreSQL/SQLite tables in the same local path; ClickHouse, OpenSearch, and Docker are not
-required for deterministic tests.
+PostgreSQL/SQLite tables in the same local path. ClickHouse/OpenSearch payload builders and
+optional HTTP publishers are implemented, but external sinks are disabled by default and Docker
+is not required for deterministic tests.
+
+External analytics sinks can be enabled for SQLAlchemy-backed runs with:
+
+- `LOGAN_ANALYTICS_SINKS_ENABLED=true`
+- `LOGAN_CLICKHOUSE_URL=http://clickhouse:8123` for ClickHouse JSONEachRow inserts.
+- `LOGAN_OPENSEARCH_URL=http://opensearch:9200` for OpenSearch `_bulk` indexing.
+- `LOGAN_ANALYTICS_SINK_FAILURE_MODE=warn` to audit and continue on sink errors, or `fail`
+  to fail the analysis run.
+
+The adapters publish only redacted/normalized log content and derived metadata. They do not
+publish raw log text, model prompts, model inputs, source tokens, or credential material.
+ClickHouse/OpenSearch table/index creation, schema migrations, retries, idempotency records,
+and service-backed query paths remain production work.
 
 Run the web workspace against the local API:
 
@@ -57,8 +71,8 @@ docker compose up --build
 
 ## Remaining Staged Work
 
-- Persist enriched logs and window aggregates into ClickHouse.
-- Index redacted/normalized logs into OpenSearch.
+- Add managed ClickHouse table lifecycle for `enriched_log_lines` and `window_aggregates`.
+- Add managed OpenSearch index lifecycle for `logan-logs-{case_id}-{analysis_run_id}`.
 - Add external sink retry/idempotency records for ClickHouse/OpenSearch writes.
 - Move report/query endpoints from `analysis_runs.result_json` to service-backed reads over
   normalized SQL and external analytics stores.

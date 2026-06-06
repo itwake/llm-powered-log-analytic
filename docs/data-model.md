@@ -25,15 +25,28 @@ When an analysis completes, the SQLAlchemy store keeps the full `AnalysisResult`
 on `analysis_runs.result_json` with `model_inputs=[]` and also fans worker artifacts out into
 the normalized analytics tables listed above. Worker file IDs are source-path deterministic,
 so persisted `raw_files.id` values are generated per analysis run before raw log rows are
-inserted. Existing report API endpoints continue to read from `result_json` for this stage.
+inserted. If `LOGAN_ANALYTICS_SINKS_ENABLED=true` and a ClickHouse or OpenSearch URL is
+configured, SQLAlchemy completion can also publish redacted external analytics payloads after
+the SQL fan-out. Existing report API endpoints continue to read from `result_json` for this
+stage.
 
 ## Analytics Shape
 
-ClickHouse and OpenSearch are included in deployment skeletons, but are still deferred. Later
-stages should add:
+ClickHouse and OpenSearch adapters are implemented as optional HTTP publishers. Payloads are
+whitelisted from normalized result fields and include redacted/normalized messages, stable ids,
+timestamps, level/service/file evidence, template ids/text, golden signals, fault categories,
+entities, severity/confidence, and ingestion order. They deliberately exclude raw log text,
+model inputs, model prompt payloads, and credential material.
 
-- ClickHouse `enriched_log_lines`
-- ClickHouse `window_aggregates`
-- OpenSearch `logan-logs-{case_id}-{analysis_run_id}`
-- External sink retry/idempotency records
-- Service-backed query paths that can read from the normalized and external analytics stores
+Implemented external payload targets:
+
+- ClickHouse `enriched_log_lines` JSONEachRow rows.
+- ClickHouse `window_aggregates` JSONEachRow rows.
+- OpenSearch `logan-logs-{case_id}-{analysis_run_id}` `_bulk` documents with evidence refs.
+
+Remaining production data-model work:
+
+- Managed ClickHouse table lifecycle and migrations.
+- Managed OpenSearch index templates, mappings, aliases, and retention.
+- External sink retry/idempotency records.
+- Service-backed query paths that can read from the normalized and external analytics stores.
