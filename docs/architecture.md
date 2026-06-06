@@ -29,6 +29,15 @@ tests, and updates `analysis_runs.progress_json.current_step` plus a per-step st
 run advances. Event metadata is count-only, such as files, raw lines, templates, samples,
 annotations, windows, causal nodes/edges, and export types; raw log text, prompt payloads,
 model inputs, source tokens, and credential material are not stored in event metadata.
+After each `completed` event, the API or worker process also writes a safe step-level
+`step_manifest` artifact to the configured object store and upserts a row in
+`analysis_step_artifacts`. Local manifests use
+`.logan/object-store/cases/{case_id}/analysis-runs/{run_id}/steps/{step_name}.json` by default;
+S3/MinIO manifests use
+`s3://{bucket}/cases/{case_id}/analysis-runs/{run_id}/steps/{step_name}.json`. Manifest bodies
+contain case/run ids, step name, artifact type, created timestamp, and sanitized completed-event
+metadata only. They intentionally exclude raw log text, redacted raw text payloads, model inputs,
+prompts, credentials, tokens, cookies, database URLs, S3 secrets, and full file paths.
 
 Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services,
 and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy.
@@ -112,6 +121,5 @@ tested directions. These scores are ranking and validation aids, not definitive 
 
 - Replace `StableDrainAdapter` with `drain3` behind the same `cluster()` interface.
 - Add S3 object storage adapters for report artifacts.
-- Add step-level external artifact materialization for very large Temporal histories if needed.
 - Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.
 - Add bin-size sensitivity reporting for causal methods if operators need multi-bin comparisons.

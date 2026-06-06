@@ -200,6 +200,29 @@ class AnalyticsSinkWrite(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class AnalysisStepArtifact(Base):
+    __tablename__ = "analysis_step_artifacts"
+    __table_args__ = (
+        UniqueConstraint("analysis_run_id", "step_name", "artifact_type"),
+    )
+
+    id: Mapped[str] = uuid_pk()
+    case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
+    step_name: Mapped[str] = mapped_column(Text, nullable=False)
+    artifact_type: Mapped[str] = mapped_column(Text, nullable=False)
+    object_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON_TYPE, nullable=False, default=dict, server_default="{}"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class RawFile(Base):
     __tablename__ = "raw_files"
 

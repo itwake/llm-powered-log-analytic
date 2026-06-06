@@ -557,6 +557,29 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     )
     assert "model_inputs" not in serialized_event_metadata
     assert "representative_lines" not in serialized_event_metadata
+    artifacts = recreated_store.list_analysis_step_artifacts(
+        case_id=case_id,
+        analysis_run_id=run_id,
+    )
+    assert [artifact.step_name for artifact in artifacts] == PIPELINE_STEPS
+    assert {artifact.artifact_type for artifact in artifacts} == {"step_manifest"}
+    assert all(artifact.object_uri.startswith("file://") for artifact in artifacts)
+    assert all(len(artifact.sha256) == 64 for artifact in artifacts)
+    serialized_artifact_metadata = json.dumps(
+        [artifact.metadata for artifact in artifacts],
+        sort_keys=True,
+    ).lower()
+    for forbidden in (
+        "raw_text",
+        "raw_text_redacted",
+        "model_inputs",
+        "prompt",
+        "token",
+        "secret",
+        "cookie",
+        "representative_lines",
+    ):
+        assert forbidden not in serialized_artifact_metadata
     duplicate = recreated_store.record_job_event(
         case_id=case_id,
         analysis_run_id=run_id,
@@ -576,6 +599,16 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
         metadata={"files": 2},
     )
     assert duplicate_again.id == duplicate.id
+    assert (
+        len(
+            recreated_store.list_analysis_step_artifacts(
+                case_id=case_id,
+                analysis_run_id=run_id,
+                step_name="manual_idempotency",
+            )
+        )
+        == 1
+    )
     with recreated_store.session_factory() as session:
         duplicate_count = session.scalar(
             select(func.count())
@@ -586,7 +619,17 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
                 tables.JobEvent.event_type == "completed",
             )
         )
+        artifact_duplicate_count = session.scalar(
+            select(func.count())
+            .select_from(tables.AnalysisStepArtifact)
+            .where(
+                tables.AnalysisStepArtifact.analysis_run_id == run_id,
+                tables.AnalysisStepArtifact.step_name == "manual_idempotency",
+                tables.AnalysisStepArtifact.artifact_type == "step_manifest",
+            )
+        )
     assert duplicate_count == 1
+    assert artifact_duplicate_count == 1
     assert _raw_file_analysis_run_id(recreated_store, file_id) is None
     persisted_result = recreated_store.get_analysis_result(case_id, run_id)
     assert persisted_result is not None
@@ -869,8 +912,14 @@ async def test_sqlalchemy_retention_scrubs_raw_text_and_preserves_reports(
             .select_from(tables.NormalizedLogLine)
             .where(tables.NormalizedLogLine.analysis_run_id == run.id)
         )
+        artifact_count = session.scalar(
+            select(func.count())
+            .select_from(tables.AnalysisStepArtifact)
+            .where(tables.AnalysisStepArtifact.analysis_run_id == run.id)
+        )
         assert raw_count and raw_count > 0
         assert normalized_count and normalized_count > 0
+        assert artifact_count == len(PIPELINE_STEPS)
         session.execute(delete(tables.AuditLog))
         session.add_all(
             [
@@ -899,6 +948,12 @@ async def test_sqlalchemy_retention_scrubs_raw_text_and_preserves_reports(
             select(tables.RawLogLine).where(tables.RawLogLine.analysis_run_id == run.id)
         ):
             raw_line.created_at = old
+        for artifact in session.scalars(
+            select(tables.AnalysisStepArtifact).where(
+                tables.AnalysisStepArtifact.analysis_run_id == run.id
+            )
+        ):
+            artifact.created_at = old
         session.commit()
 
     retention = store.run_retention(now=now)
@@ -907,8 +962,10 @@ async def test_sqlalchemy_retention_scrubs_raw_text_and_preserves_reports(
     assert retention.raw_log_lines_scrubbed == raw_count
     assert retention.exports_deleted == 1
     assert retention.analysis_results_cleared == 1
+    assert retention.step_artifacts_deleted == artifact_count
     assert store.get_export(export_artifact.export_id) is None
     assert store.get_analysis_result(case.id, run.id) is None
+    assert store.list_analysis_step_artifacts(case_id=case.id, analysis_run_id=run.id) == []
 
     with store.session_factory() as session:
         remaining_audits = session.scalars(select(tables.AuditLog.action)).all()

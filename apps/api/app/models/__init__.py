@@ -1,5 +1,6 @@
 from app.models.tables import (
     AnalysisRun,
+    AnalysisStepArtifact,
     AuditLog,
     Case,
     CausalEdge,
@@ -22,6 +23,7 @@ from app.models.tables import (
 
 __all__ = [
     "AnalysisRun",
+    "AnalysisStepArtifact",
     "AuditLog",
     "Case",
     "CausalEdge",

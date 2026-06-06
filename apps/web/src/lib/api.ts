@@ -575,6 +575,7 @@ export interface RetentionRunResponse {
   raw_log_lines_scrubbed: number;
   exports_deleted: number;
   analysis_results_cleared: number;
+  step_artifacts_deleted: number;
 }
 
 export const authApi = {

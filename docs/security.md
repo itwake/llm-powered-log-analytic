@@ -47,5 +47,5 @@ metadata so raw log text, credential material, database URLs, tokens, and secret
 
 Retention defaults are declared in `.env.example`. Running retention deletes old audit logs,
 scrubs old raw log text to a retained marker while preserving normalized evidence/report rows,
-deletes old export rows, and conservatively clears SQLAlchemy `analysis_runs.result_json` only when
-fan-out report tables can still serve reports.
+deletes old export rows, deletes old step artifact records, and conservatively clears SQLAlchemy
+`analysis_runs.result_json` only when fan-out report tables can still serve reports.

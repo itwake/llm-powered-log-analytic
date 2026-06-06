@@ -2,7 +2,7 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, RBAC case access with per-case collaborators, admin user/audit/settings/retention APIs, optional API rate limiting, Prometheus `/metrics`, optional OpenTelemetry FastAPI tracing, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell with ECharts Temporal View and Cytoscape Causal Graph visualizations, a minimal admin view, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, step-level analysis manifest artifacts in local object storage or S3/MinIO, RBAC case access with per-case collaborators, admin user/audit/settings/retention APIs, optional API rate limiting, Prometheus `/metrics`, optional OpenTelemetry FastAPI tracing, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell with ECharts Temporal View and Cytoscape Causal Graph visualizations, a minimal admin view, and deployment scaffolding.
 
 ## Architecture
 
@@ -138,6 +138,8 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_LOCAL_OBJECT_STORE_DIR=.logan/object-store` relative to the API process working directory by default.
 - `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio` enables presigned S3/MinIO raw uploads; configure `LOGAN_S3_BUCKET`, `LOGAN_S3_ACCESS_KEY`, `LOGAN_S3_SECRET_KEY`, and `LOGAN_S3_ENDPOINT` for MinIO.
 - `LOGAN_S3_MULTIPART_THRESHOLD_BYTES=104857600`, `LOGAN_S3_MULTIPART_PART_SIZE_BYTES=67108864`, and `LOGAN_S3_MULTIPART_MAX_PARTS=10000` control S3/MinIO multipart upload planning. Local uploads remain direct authenticated API `PUT` requests.
+- `LOGAN_STEP_ARTIFACTS_ENABLED=true` writes one safe `step_manifest` JSON artifact per completed pipeline step.
+- `LOGAN_STEP_ARTIFACT_FAILURE_MODE=warn`; use `fail` only when step artifact storage errors should fail analysis runs.
 - `LOGAN_COPILOT_MODEL=gpt-5.4`
 - `LOGAN_COPILOT_REASONING_EFFORT=high`
 - `LOGAN_COPILOT_OAUTH_CLIENT_ID=Iv1.b507a08c87ecfe98`
@@ -170,4 +172,4 @@ See `.env.example` for the full list. Key defaults:
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are step-level external artifact materialization for very large Temporal histories, advanced policy groups/SCIM integration, and continued E2E expansion for enterprise workflows.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are advanced policy groups/SCIM integration and continued E2E expansion for enterprise workflows.

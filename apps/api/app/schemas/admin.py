@@ -63,3 +63,4 @@ class RetentionRunResponse(BaseModel):
     raw_log_lines_scrubbed: int = 0
     exports_deleted: int = 0
     analysis_results_cleared: int = 0
+    step_artifacts_deleted: int = 0

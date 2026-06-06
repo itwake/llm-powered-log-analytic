@@ -3,13 +3,14 @@
 The production metadata model follows the final specification and is represented in two places:
 
 - SQLAlchemy classes under `apps/api/app/models`.
-- First-pass DDL under `apps/api/migrations/0001_initial.sql`.
+- First-pass DDL under `apps/api/migrations/0001_initial.sql` plus incremental SQL files in
+  the same directory.
 
 Core tables:
 
 - `users`, `sessions`, `copilot_credentials`, `copilot_device_auth`
 - `cases`, `case_collaborators`
-- `analysis_runs`, `job_events`, `analytics_sink_writes`
+- `analysis_runs`, `job_events`, `analysis_step_artifacts`, `analytics_sink_writes`
 - `raw_files`, `raw_log_lines`, `normalized_log_lines`
 - `log_templates`, `representative_samples`, `template_annotations`
 - `time_window_signals`
@@ -47,6 +48,17 @@ Fields include `step_name`, `event_type`, `status`, `attempt`, sanitized count-o
 `metadata`, sanitized `error_message`, and `created_at`. The API exposes these rows at
 `GET /api/cases/{case_id}/analysis-runs/{run_id}/events` after enforcing that the run belongs
 to the case.
+
+`analysis_step_artifacts` stores one safe external manifest pointer per completed pipeline step.
+Rows are unique by `(analysis_run_id, step_name, artifact_type)`, so activity retries and
+duplicate completion events upsert the existing row instead of creating duplicates. Fields include
+`case_id`, `analysis_run_id`, `step_name`, `artifact_type`, `object_uri`, `sha256`,
+`size_bytes`, safe `metadata`, and create/update timestamps. The stored `step_manifest` object is
+small and count-oriented. It includes sanitized completed-event metadata and never stores raw log
+text, `raw_text_redacted`, model inputs, prompts, credentials, tokens, cookies, database URLs, S3
+secrets, or full file paths. The API exposes only the rows at
+`GET /api/cases/{case_id}/analysis-runs/{run_id}/artifacts`; it does not return artifact body
+content.
 
 `analytics_sink_writes` stores durable per-target external sink write state for SQLAlchemy
 completion. Fields include `case_id`, `analysis_run_id`, `sink_name`, `destination`,
@@ -86,8 +98,9 @@ Retention preserves report readability. Audit rows older than
 `LOGAN_AUDIT_RETENTION_DAYS` are deleted. Raw log text older than
 `LOGAN_RAW_LOG_RETENTION_DAYS` is scrubbed in-place to a retained marker while raw row ids,
 normalized log rows, samples, templates, causal nodes/edges, and evidence refs are preserved.
-Report retention deletes old export rows and clears `analysis_runs.result_json` only when
-normalized fan-out rows remain available for the report endpoints.
+Report retention deletes old export rows, deletes old step artifact rows with best-effort local
+file cleanup, and clears `analysis_runs.result_json` only when normalized fan-out rows remain
+available for the report endpoints.
 
 Remaining production data-model work:
 

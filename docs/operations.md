@@ -74,6 +74,22 @@ there. Clients can resume with `GET /api/cases/{case_id}/uploads/{file_id}/multi
 returns fresh part URLs and S3 `list_parts` data, or abort with `DELETE` on the same route. The
 local backend intentionally remains a direct authenticated API `PUT`.
 
+Step artifact manifests use the same object-store backend:
+
+- `LOGAN_STEP_ARTIFACTS_ENABLED=true`
+- `LOGAN_STEP_ARTIFACT_FAILURE_MODE=warn`, or `fail` to fail analysis when manifest storage fails.
+
+Each completed pipeline step writes a small `step_manifest` JSON object and upserts
+`analysis_step_artifacts` by `(analysis_run_id, step_name, artifact_type)`. Local manifests are
+stored under
+`.logan/object-store/cases/{case_id}/analysis-runs/{run_id}/steps/{step_name}.json`; S3/MinIO
+manifests are stored under
+`s3://{bucket}/cases/{case_id}/analysis-runs/{run_id}/steps/{step_name}.json`. Manifest bodies
+contain only case/run ids, step name, artifact type, timestamp, and sanitized completed-event
+metadata. They do not include raw log text, `raw_text_redacted`, model prompts, model inputs,
+credentials, tokens, cookies, database URLs, S3 secrets, or full file paths. In `warn` mode,
+storage errors are audited with a sanitized `artifact_error` and analysis continues.
+
 The default API path uses real GitHub Copilot auth and model calls:
 
 - `POST /api/copilot/auth/start` starts GitHub device-code auth.
@@ -99,7 +115,7 @@ routes. Global `engineer` users can create cases and access only cases they crea
 they are collaborators. New case creators are stored as `owner` collaborators. Case `owner`
 collaborators can manage collaborators and perform edit actions; `editor` collaborators can upload
 files, start analysis, submit feedback, and create exports; `viewer` collaborators can read case,
-run, event, report, log, and chat context views but cannot mutate analysis/upload state. Read
+run, event, artifact, report, log, and chat context views but cannot mutate analysis/upload state. Read
 routes hide inaccessible cases with `404`; mutating routes return `403` when the case exists but
 the caller lacks the required role.
 
@@ -188,11 +204,12 @@ executes the activity with a stable activity id of
 `LOGAN_TEMPORAL_ACTIVITY_START_TO_CLOSE_SECONDS`, and a retry policy from
 `LOGAN_TEMPORAL_ACTIVITY_MAX_ATTEMPTS`. The activity instantiates the SQLAlchemy store from its
 own process settings, loads the existing run/case, records pipeline progress into
-`job_events`, updates `analysis_runs.progress_json`, completes through the same SQL fan-out and
-analytics sink publish path as local SQLAlchemy runs, and marks failures with sanitized error
-text before re-raising for Temporal retry/failure handling. If Temporal retries after the
-database commit succeeded but before the workflow observed the result, the activity returns the
-existing completed summary without rerunning the pipeline.
+`job_events`, writes/upserts step artifact manifests after completed events, updates
+`analysis_runs.progress_json`, completes through the same SQL fan-out and analytics sink publish
+path as local SQLAlchemy runs, and marks failures with sanitized error text before re-raising for
+Temporal retry/failure handling. If Temporal retries after the database commit succeeded but
+before the workflow observed the result, the activity returns the existing completed summary
+without rerunning the pipeline.
 
 External analytics sinks can be enabled for SQLAlchemy-backed runs with:
 
@@ -232,7 +249,9 @@ Retention execution is built into both stores and can be invoked through
 `LOGAN_RAW_LOG_RETENTION_DAYS` to a retained marker while preserving row/evidence references,
 deletes old export rows, and clears large SQLAlchemy `analysis_runs.result_json` only when the
 normalized fan-out report tables remain readable. The response returns counts for deleted audits,
-scrubbed raw lines, deleted exports, and cleared analysis results.
+scrubbed raw lines, deleted exports, deleted step artifact rows, and cleared analysis results.
+Local step artifact object deletion is best-effort and never exposes filesystem paths or secrets
+through the API response.
 
 The built-in API rate limiter is disabled by default:
 
@@ -302,8 +321,6 @@ docker compose up --build
 
 ## Remaining Staged Work
 
-- Add step-level external artifact materialization for very large Temporal histories if pipeline
-  intermediates grow beyond comfortable activity payload sizes.
 - Add advanced policy groups, SCIM/user-directory sync, and richer approval workflows if enterprise
   deployments need them.
 - Extend Playwright e2e coverage as richer workflows and visualizations are added.

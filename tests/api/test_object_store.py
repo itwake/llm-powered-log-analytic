@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from pathlib import Path
 
 from app.config import Settings
+from app.services import analysis_artifacts
+from app.services.analysis_artifacts import write_step_manifest
 from app.services.object_store import (
     create_multipart_upload_plan,
     create_presigned_upload,
@@ -14,15 +18,21 @@ from app.services.object_store import (
     s3_upload_object_uri,
     safe_filename,
 )
+from app.store import JobEventRecord
 
 
 class FakeS3Client:
     def __init__(self) -> None:
         self.presign_calls: list[dict[str, object]] = []
+        self.put_object_calls: list[dict[str, object]] = []
 
     def generate_presigned_url(self, operation: str, **kwargs: object) -> str:
         self.presign_calls.append({"operation": operation, **kwargs})
         return "https://minio.example/logan/upload?signature=fake"
+
+    def put_object(self, **kwargs: object) -> dict[str, object]:
+        self.put_object_calls.append(dict(kwargs))
+        return {"ETag": '"fake-etag"'}
 
 
 def test_safe_filename_sanitizes_posix_and_windows_path_separators() -> None:
@@ -137,6 +147,89 @@ def test_presigned_upload_uses_fake_s3_client_without_network() -> None:
             "HttpMethod": "PUT",
         }
     ]
+
+
+def test_step_manifest_writer_puts_s3_object_with_safe_json_body() -> None:
+    app_settings = Settings(
+        object_store_backend="minio",
+        s3_endpoint="http://minio:9000",
+        s3_bucket="logan",
+        s3_access_key="access",
+        s3_secret_key="secret",
+    )
+    fake_client = FakeS3Client()
+    event = JobEventRecord(
+        id="event-1",
+        case_id="case-1",
+        analysis_run_id="run-1",
+        step_name="copilot_annotation",
+        event_type="completed",
+        status="completed",
+        attempt=1,
+        idempotency_key="copilot_annotation:attempt:1",
+        metadata={
+            "annotations": 3,
+            "raw_text": "raw secret log line",
+            "prompt": "model prompt",
+            "token": "gho_secret_token",
+            "file_path": "/customer/acme/payment.log",
+            "export_types": ["html", "json"],
+        },
+    )
+
+    written = write_step_manifest(
+        event=event,
+        app_settings=app_settings,
+        s3_client_factory=lambda _: fake_client,
+    )
+
+    assert written.object_uri == (
+        "s3://logan/cases/case-1/analysis-runs/run-1/steps/copilot_annotation.json"
+    )
+    assert len(written.sha256) == 64
+    assert fake_client.put_object_calls
+    put_call = fake_client.put_object_calls[0]
+    assert put_call["Bucket"] == "logan"
+    assert put_call["Key"] == "cases/case-1/analysis-runs/run-1/steps/copilot_annotation.json"
+    assert put_call["ContentType"] == "application/json"
+    assert put_call["Metadata"] == {
+        "sha256": written.sha256,
+        "content-type": "application/json",
+    }
+    assert len(put_call["Body"]) == written.size_bytes
+    assert written.sha256 == hashlib.sha256(put_call["Body"]).hexdigest()
+    manifest = json.loads(put_call["Body"])
+    assert manifest["completed_event"]["metadata"] == {
+        "annotations": 3,
+        "export_types": ["html", "json"],
+    }
+    serialized = json.dumps(manifest, sort_keys=True).lower()
+    for forbidden in (
+        "raw secret log line",
+        "model prompt",
+        "gho_secret_token",
+        "/customer/acme/payment.log",
+        "raw_text",
+        "prompt",
+        "token",
+        "file_path",
+    ):
+        assert forbidden not in serialized
+
+
+def test_step_artifact_error_sanitizer_removes_paths_and_tokens() -> None:
+    app_settings = Settings(local_object_store_dir="/tmp/customer/acme/object-store")
+    message = analysis_artifacts._sanitize_artifact_error(
+        OSError(
+            "failed writing /tmp/customer/acme/object-store/cases/case-1/steps/x.json "
+            "token=gho_secret_token_1234567890"
+        ),
+        app_settings,
+    )
+
+    assert "/tmp/customer" not in message
+    assert "gho_secret_token_1234567890" not in message
+    assert "<PATH>" in message or "<LOCAL_OBJECT_STORE>" in message
 
 
 def test_multipart_upload_plan_calculates_part_count() -> None:

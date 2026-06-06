@@ -115,6 +115,25 @@ class JobEventListResponse(BaseModel):
     total: int
 
 
+class AnalysisStepArtifactResponse(BaseModel):
+    id: str
+    case_id: str
+    analysis_run_id: str
+    step_name: str
+    artifact_type: str
+    object_uri: str
+    sha256: str
+    size_bytes: int
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class AnalysisStepArtifactListResponse(BaseModel):
+    items: list[AnalysisStepArtifactResponse]
+    total: int
+
+
 class ExportRequest(BaseModel):
     export_type: str
     include_sections: list[str] = Field(default_factory=list)

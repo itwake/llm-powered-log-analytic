@@ -49,6 +49,7 @@ from app.services.object_store import (
 )
 from app.store import (
     AnalysisRunRecord,
+    AnalysisStepArtifactRecord,
     AnalyticsSinkWriteRecord,
     AuditLogRecord,
     CaseCollaboratorRecord,
@@ -69,6 +70,7 @@ from app.store import (
     _validate_case_role,
     _validate_global_role,
     sanitize_error_message,
+    sanitize_artifact_metadata,
     sanitize_job_metadata,
     sanitize_workflow_payload,
 )
@@ -953,6 +955,8 @@ class SQLAlchemyStore:
     ) -> JobEventRecord:
         metadata_json = sanitize_job_metadata(metadata)
         sanitized_error = sanitize_error_message(error_message) if error_message else None
+        event_record: JobEventRecord | None = None
+        integrity_error: IntegrityError | None = None
         try:
             with self._session() as session:
                 existing = session.scalar(
@@ -963,24 +967,26 @@ class SQLAlchemyStore:
                     )
                 )
                 if existing is not None:
-                    return self._job_event_record(existing)
-                event = tables.JobEvent(
-                    id=str(uuid.uuid4()),
-                    case_id=case_id,
-                    analysis_run_id=analysis_run_id,
-                    step_name=step_name,
-                    event_type=event_type,
-                    status=status,
-                    attempt=attempt,
-                    idempotency_key=idempotency_key,
-                    metadata_json=metadata_json,
-                    error_message=sanitized_error,
-                    created_at=_now(),
-                )
-                session.add(event)
-                session.flush()
-                return self._job_event_record(event)
-        except IntegrityError:
+                    event_record = self._job_event_record(existing)
+                else:
+                    event = tables.JobEvent(
+                        id=str(uuid.uuid4()),
+                        case_id=case_id,
+                        analysis_run_id=analysis_run_id,
+                        step_name=step_name,
+                        event_type=event_type,
+                        status=status,
+                        attempt=attempt,
+                        idempotency_key=idempotency_key,
+                        metadata_json=metadata_json,
+                        error_message=sanitized_error,
+                        created_at=_now(),
+                    )
+                    session.add(event)
+                    session.flush()
+                    event_record = self._job_event_record(event)
+        except IntegrityError as exc:
+            integrity_error = exc
             with self._session() as session:
                 existing = session.scalar(
                     select(tables.JobEvent).where(
@@ -990,8 +996,22 @@ class SQLAlchemyStore:
                     )
                 )
                 if existing is not None:
-                    return self._job_event_record(existing)
-            raise
+                    event_record = self._job_event_record(existing)
+        if event_record is None:
+            if integrity_error is not None:
+                raise integrity_error
+            raise RuntimeError("job event could not be recorded")
+        self._materialize_step_artifact_for_event(event_record)
+        return event_record
+
+    def _materialize_step_artifact_for_event(self, event: JobEventRecord) -> None:
+        from app.services.analysis_artifacts import materialize_step_artifact_for_event
+
+        materialize_step_artifact_for_event(
+            store=self,
+            event=event,
+            app_settings=self.settings,
+        )
 
     def apply_analysis_job_event(
         self, *, run_id: str, event: dict[str, Any]
@@ -1049,6 +1069,100 @@ class SQLAlchemyStore:
                 query = query.where(tables.JobEvent.step_name == step_name)
             query = query.order_by(tables.JobEvent.created_at, tables.JobEvent.id)
             return [self._job_event_record(row) for row in session.scalars(query).all()]
+
+    def upsert_analysis_step_artifact(
+        self,
+        *,
+        case_id: str,
+        analysis_run_id: str,
+        step_name: str,
+        artifact_type: str,
+        object_uri: str,
+        sha256: str,
+        size_bytes: int,
+        metadata: dict[str, Any] | None = None,
+    ) -> AnalysisStepArtifactRecord:
+        sanitized_metadata = sanitize_artifact_metadata(metadata)
+        now = _now()
+        try:
+            with self._session() as session:
+                row = session.scalar(
+                    select(tables.AnalysisStepArtifact).where(
+                        tables.AnalysisStepArtifact.analysis_run_id == analysis_run_id,
+                        tables.AnalysisStepArtifact.step_name == step_name,
+                        tables.AnalysisStepArtifact.artifact_type == artifact_type,
+                    )
+                )
+                if row is None:
+                    row = tables.AnalysisStepArtifact(
+                        id=str(uuid.uuid4()),
+                        case_id=case_id,
+                        analysis_run_id=analysis_run_id,
+                        step_name=step_name,
+                        artifact_type=artifact_type,
+                        object_uri=object_uri,
+                        sha256=sha256,
+                        size_bytes=size_bytes,
+                        metadata_json=sanitized_metadata,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(row)
+                else:
+                    row.case_id = case_id
+                    row.object_uri = object_uri
+                    row.sha256 = sha256
+                    row.size_bytes = size_bytes
+                    row.metadata_json = sanitized_metadata
+                    row.updated_at = now
+                session.flush()
+                return self._analysis_step_artifact_record(row)
+        except IntegrityError:
+            with self._session() as session:
+                row = session.scalar(
+                    select(tables.AnalysisStepArtifact).where(
+                        tables.AnalysisStepArtifact.analysis_run_id == analysis_run_id,
+                        tables.AnalysisStepArtifact.step_name == step_name,
+                        tables.AnalysisStepArtifact.artifact_type == artifact_type,
+                    )
+                )
+                if row is None:
+                    raise
+                row.case_id = case_id
+                row.object_uri = object_uri
+                row.sha256 = sha256
+                row.size_bytes = size_bytes
+                row.metadata_json = sanitized_metadata
+                row.updated_at = now
+                session.flush()
+                return self._analysis_step_artifact_record(row)
+
+    def list_analysis_step_artifacts(
+        self,
+        *,
+        case_id: str | None = None,
+        analysis_run_id: str | None = None,
+        step_name: str | None = None,
+    ) -> list[AnalysisStepArtifactRecord]:
+        with self._session() as session:
+            query = select(tables.AnalysisStepArtifact)
+            if case_id is not None:
+                query = query.where(tables.AnalysisStepArtifact.case_id == case_id)
+            if analysis_run_id is not None:
+                query = query.where(
+                    tables.AnalysisStepArtifact.analysis_run_id == analysis_run_id
+                )
+            if step_name is not None:
+                query = query.where(tables.AnalysisStepArtifact.step_name == step_name)
+            query = query.order_by(
+                tables.AnalysisStepArtifact.created_at,
+                tables.AnalysisStepArtifact.step_name,
+                tables.AnalysisStepArtifact.id,
+            )
+            return [
+                self._analysis_step_artifact_record(row)
+                for row in session.scalars(query).all()
+            ]
 
     def list_analytics_sink_writes(
         self,
@@ -1937,6 +2051,23 @@ class SQLAlchemyStore:
             )
             result.exports_deleted = int(export_delete.rowcount or 0)
 
+            from app.services.analysis_artifacts import (
+                best_effort_delete_step_artifact_object,
+            )
+
+            old_artifacts = session.scalars(
+                select(tables.AnalysisStepArtifact).where(
+                    tables.AnalysisStepArtifact.created_at < report_cutoff
+                )
+            ).all()
+            for artifact in old_artifacts:
+                best_effort_delete_step_artifact_object(
+                    artifact.object_uri,
+                    app_settings=self.settings,
+                )
+                session.delete(artifact)
+            result.step_artifacts_deleted = len(old_artifacts)
+
             old_runs = session.scalars(
                 select(tables.AnalysisRun).where(
                     tables.AnalysisRun.result_json.is_not(None),
@@ -2790,6 +2921,23 @@ class SQLAlchemyStore:
             last_error=row.last_error,
             last_attempt_at=_utc(row.last_attempt_at),
             next_retry_at=_utc(row.next_retry_at),
+            created_at=_utc(row.created_at) or _now(),
+            updated_at=_utc(row.updated_at) or _now(),
+        )
+
+    def _analysis_step_artifact_record(
+        self, row: tables.AnalysisStepArtifact
+    ) -> AnalysisStepArtifactRecord:
+        return AnalysisStepArtifactRecord(
+            id=row.id,
+            case_id=row.case_id,
+            analysis_run_id=row.analysis_run_id,
+            step_name=row.step_name,
+            artifact_type=row.artifact_type,
+            object_uri=row.object_uri,
+            sha256=row.sha256,
+            size_bytes=row.size_bytes,
+            metadata=row.metadata_json or {},
             created_at=_utc(row.created_at) or _now(),
             updated_at=_utc(row.updated_at) or _now(),
         )

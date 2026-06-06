@@ -120,6 +120,24 @@ CREATE TABLE job_events (
 CREATE INDEX idx_job_events_case_run ON job_events(case_id, analysis_run_id);
 CREATE INDEX idx_job_events_step ON job_events(step_name);
 
+CREATE TABLE analysis_step_artifacts (
+  id UUID PRIMARY KEY,
+  case_id UUID NOT NULL REFERENCES cases(id),
+  analysis_run_id UUID NOT NULL REFERENCES analysis_runs(id),
+  step_name TEXT NOT NULL,
+  artifact_type TEXT NOT NULL,
+  object_uri TEXT NOT NULL,
+  sha256 TEXT NOT NULL,
+  size_bytes BIGINT NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(analysis_run_id, step_name, artifact_type)
+);
+
+CREATE INDEX idx_analysis_step_artifacts_case_run ON analysis_step_artifacts(case_id, analysis_run_id);
+CREATE INDEX idx_analysis_step_artifacts_step ON analysis_step_artifacts(step_name);
+
 CREATE TABLE analytics_sink_writes (
   id UUID PRIMARY KEY,
   case_id UUID NOT NULL REFERENCES cases(id),

@@ -62,6 +62,10 @@ class Settings:
         os.getenv("LOGAN_S3_MULTIPART_PART_SIZE_BYTES", "67108864")
     )
     s3_multipart_max_parts: int = int(os.getenv("LOGAN_S3_MULTIPART_MAX_PARTS", "10000"))
+    step_artifacts_enabled: bool = _env_bool("LOGAN_STEP_ARTIFACTS_ENABLED", True)
+    step_artifact_failure_mode: str = os.getenv(
+        "LOGAN_STEP_ARTIFACT_FAILURE_MODE", "warn"
+    ).lower()
     secure_cookies: bool = os.getenv("LOGAN_ENV", "development") == "production"
     raw_log_retention_days: int = int(os.getenv("LOGAN_RAW_LOG_RETENTION_DAYS", "30"))
     report_retention_days: int = int(os.getenv("LOGAN_REPORT_RETENTION_DAYS", "365"))

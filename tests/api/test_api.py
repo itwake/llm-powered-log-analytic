@@ -474,6 +474,7 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
     owner = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
     collaborator = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
     admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    anonymous = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
 
     owner_id = await _register_and_login(
         owner,
@@ -511,6 +512,8 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
 
     assert (await collaborator.get("/api/cases")).json()["total"] == 0
     assert (await collaborator.get(f"/api/cases/{case_id}")).status_code == 404
+    assert (await anonymous.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")).status_code == 401
+    assert (await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")).status_code == 404
     forbidden_upload = await collaborator.post(
         f"/api/cases/{case_id}/uploads",
         json={"filename": "blocked.log", "content_type": "text/plain", "size_bytes": 10},
@@ -535,6 +538,7 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
     assert visible_cases.json()["total"] == 1
     assert (await collaborator.get(f"/api/cases/{case_id}")).status_code == 200
     assert (await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/events")).status_code == 200
+    assert (await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")).status_code == 200
     assert (await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")).status_code == 200
     viewer_start = await collaborator.post(
         f"/api/cases/{case_id}/analysis-runs",
@@ -593,6 +597,7 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
     await owner.aclose()
     await collaborator.aclose()
     await admin.aclose()
+    await anonymous.aclose()
 
 
 @pytest.mark.asyncio
@@ -682,6 +687,7 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
         "raw_log_lines_scrubbed",
         "exports_deleted",
         "analysis_results_cleared",
+        "step_artifacts_deleted",
     }
     assert "admin.retention.run" in {
         record.action for record in store.list_audit_logs(user_id=admin_id)
@@ -844,6 +850,30 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     assert "model_inputs" not in event_metadata
     assert "representative_lines" not in event_metadata
     assert "timeout calling auth-service" not in event_metadata
+    artifacts = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")
+    assert artifacts.status_code == 200, artifacts.text
+    artifacts_body = artifacts.json()
+    assert artifacts_body["total"] == len(PIPELINE_STEPS)
+    artifact_items = artifacts_body["items"]
+    assert [item["step_name"] for item in artifact_items] == PIPELINE_STEPS
+    assert {item["artifact_type"] for item in artifact_items} == {"step_manifest"}
+    assert all(item["object_uri"] for item in artifact_items)
+    assert all(len(item["sha256"]) == 64 for item in artifact_items)
+    artifact_metadata = json.dumps(
+        [item["metadata"] for item in artifact_items],
+        sort_keys=True,
+    ).lower()
+    for forbidden in (
+        "raw_text",
+        "raw_text_redacted",
+        "model_inputs",
+        "prompt",
+        "token",
+        "secret",
+        "cookie",
+        "representative_lines",
+    ):
+        assert forbidden not in artifact_metadata
     run_list = await client.get(f"/api/cases/{case_id}/analysis-runs")
     assert run_list.status_code == 200
     assert run_list.json()["total"] == 1

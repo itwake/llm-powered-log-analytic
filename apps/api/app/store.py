@@ -92,6 +92,45 @@ _SECRET_WORKFLOW_KEY_PARTS = {
     "source_token",
     "token",
 }
+_SENSITIVE_ARTIFACT_KEY_PARTS = {
+    "access_key",
+    "api_key",
+    "authorization",
+    "cookie",
+    "credential",
+    "database_url",
+    "db_url",
+    "file_path",
+    "filepath",
+    "full_path",
+    "input_path",
+    "input_paths",
+    "model_input",
+    "model_inputs",
+    "password",
+    "prompt",
+    "raw_log",
+    "raw_message",
+    "raw_text",
+    "representative_lines",
+    "secret",
+    "source_log",
+    "source_token",
+    "token",
+}
+_SAFE_ARTIFACT_STRING_KEYS = {
+    "artifact_error",
+    "artifact_type",
+    "content_type",
+    "error_code",
+    "event_type",
+    "manifest_version",
+    "sha256",
+    "status",
+    "storage_backend",
+}
+_SAFE_ARTIFACT_LIST_STRINGS = {"export_types"}
+_SAFE_ARTIFACT_LIST_VALUES = {"html", "json", "markdown"}
 
 
 def sanitize_error_message(error: object, *, max_length: int = 500) -> str:
@@ -134,6 +173,52 @@ def sanitize_job_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
         if _is_sensitive_metadata_key(key_text):
             continue
         sanitized_value = _sanitize_metadata_value(value, parent_key=key_text)
+        if sanitized_value is not None:
+            sanitized[key_text] = sanitized_value
+    return sanitized
+
+
+def _is_sensitive_artifact_key(key: str) -> bool:
+    lowered = key.lower()
+    return any(part in lowered for part in _SENSITIVE_ARTIFACT_KEY_PARTS)
+
+
+def _sanitize_artifact_metadata_value(value: Any, *, parent_key: str) -> Any:
+    if value is None or isinstance(value, bool | int | float):
+        return value
+    if isinstance(value, str):
+        if (
+            parent_key in _SAFE_ARTIFACT_STRING_KEYS
+            or parent_key.endswith("_hash")
+            or parent_key.endswith("_sha256")
+        ):
+            return sanitize_error_message(value, max_length=200)
+        if (
+            parent_key in _SAFE_ARTIFACT_LIST_STRINGS
+            and value in _SAFE_ARTIFACT_LIST_VALUES
+        ):
+            return value
+        return None
+    if isinstance(value, list):
+        sanitized_items = [
+            _sanitize_artifact_metadata_value(item, parent_key=parent_key)
+            for item in value[:50]
+        ]
+        return [item for item in sanitized_items if item is not None]
+    if isinstance(value, dict):
+        return sanitize_artifact_metadata(value)
+    return None
+
+
+def sanitize_artifact_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {}
+    sanitized: dict[str, Any] = {}
+    for key, value in metadata.items():
+        key_text = str(key)
+        if _is_sensitive_artifact_key(key_text):
+            continue
+        sanitized_value = _sanitize_artifact_metadata_value(value, parent_key=key_text)
         if sanitized_value is not None:
             sanitized[key_text] = sanitized_value
     return sanitized
@@ -308,6 +393,21 @@ class AnalyticsSinkWriteRecord:
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
+@dataclass
+class AnalysisStepArtifactRecord:
+    id: str
+    case_id: str
+    analysis_run_id: str
+    step_name: str
+    artifact_type: str
+    object_uri: str
+    sha256: str
+    size_bytes: int
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
 def apply_job_event_progress(
     progress: dict[str, Any] | None, event: JobEventRecord
 ) -> dict[str, Any]:
@@ -388,6 +488,7 @@ class RetentionResultRecord:
     raw_log_lines_scrubbed: int = 0
     exports_deleted: int = 0
     analysis_results_cleared: int = 0
+    step_artifacts_deleted: int = 0
 
 
 COPILOT_AUTH_CREDENTIAL_TYPES = frozenset(
@@ -584,6 +685,27 @@ class MetadataStore(Protocol):
         step_name: str | None = None,
     ) -> list[JobEventRecord]: ...
 
+    def upsert_analysis_step_artifact(
+        self,
+        *,
+        case_id: str,
+        analysis_run_id: str,
+        step_name: str,
+        artifact_type: str,
+        object_uri: str,
+        sha256: str,
+        size_bytes: int,
+        metadata: dict[str, Any] | None = None,
+    ) -> AnalysisStepArtifactRecord: ...
+
+    def list_analysis_step_artifacts(
+        self,
+        *,
+        case_id: str | None = None,
+        analysis_run_id: str | None = None,
+        step_name: str | None = None,
+    ) -> list[AnalysisStepArtifactRecord]: ...
+
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None: ...
 
     def create_export(
@@ -656,6 +778,8 @@ class InMemoryStore:
         self.runs: dict[str, AnalysisRunRecord] = {}
         self.job_events: dict[str, JobEventRecord] = {}
         self.job_event_keys: dict[tuple[str, str, str], str] = {}
+        self.analysis_step_artifacts: dict[str, AnalysisStepArtifactRecord] = {}
+        self.analysis_step_artifact_keys: dict[tuple[str, str, str], str] = {}
         self.feedback: dict[str, FeedbackRecord] = {}
         self.exports: dict[str, ExportRecord] = {}
         self.audit_logs: dict[str, AuditLogRecord] = {}
@@ -1235,7 +1359,9 @@ class InMemoryStore:
         key = (analysis_run_id, idempotency_key, event_type)
         existing_id = self.job_event_keys.get(key)
         if existing_id is not None:
-            return self.job_events[existing_id]
+            record = self.job_events[existing_id]
+            self._materialize_step_artifact_for_event(record)
+            return record
         record = JobEventRecord(
             id=str(uuid.uuid4()),
             case_id=case_id,
@@ -1250,7 +1376,17 @@ class InMemoryStore:
         )
         self.job_events[record.id] = record
         self.job_event_keys[key] = record.id
+        self._materialize_step_artifact_for_event(record)
         return record
+
+    def _materialize_step_artifact_for_event(self, event: JobEventRecord) -> None:
+        from app.services.analysis_artifacts import materialize_step_artifact_for_event
+
+        materialize_step_artifact_for_event(
+            store=self,
+            event=event,
+            app_settings=self.settings,
+        )
 
     def apply_analysis_job_event(
         self, *, run_id: str, event: dict[str, Any]
@@ -1339,6 +1475,62 @@ class InMemoryStore:
         if step_name is not None:
             items = [item for item in items if item.step_name == step_name]
         return sorted(items, key=lambda item: (item.created_at, item.id))
+
+    def upsert_analysis_step_artifact(
+        self,
+        *,
+        case_id: str,
+        analysis_run_id: str,
+        step_name: str,
+        artifact_type: str,
+        object_uri: str,
+        sha256: str,
+        size_bytes: int,
+        metadata: dict[str, Any] | None = None,
+    ) -> AnalysisStepArtifactRecord:
+        now = datetime.now(UTC)
+        key = (analysis_run_id, step_name, artifact_type)
+        existing_id = self.analysis_step_artifact_keys.get(key)
+        if existing_id is not None:
+            record = self.analysis_step_artifacts[existing_id]
+            record.object_uri = object_uri
+            record.sha256 = sha256
+            record.size_bytes = size_bytes
+            record.metadata = sanitize_artifact_metadata(metadata)
+            record.updated_at = now
+            return record
+        record = AnalysisStepArtifactRecord(
+            id=str(uuid.uuid4()),
+            case_id=case_id,
+            analysis_run_id=analysis_run_id,
+            step_name=step_name,
+            artifact_type=artifact_type,
+            object_uri=object_uri,
+            sha256=sha256,
+            size_bytes=size_bytes,
+            metadata=sanitize_artifact_metadata(metadata),
+            created_at=now,
+            updated_at=now,
+        )
+        self.analysis_step_artifacts[record.id] = record
+        self.analysis_step_artifact_keys[key] = record.id
+        return record
+
+    def list_analysis_step_artifacts(
+        self,
+        *,
+        case_id: str | None = None,
+        analysis_run_id: str | None = None,
+        step_name: str | None = None,
+    ) -> list[AnalysisStepArtifactRecord]:
+        items = list(self.analysis_step_artifacts.values())
+        if case_id is not None:
+            items = [item for item in items if item.case_id == case_id]
+        if analysis_run_id is not None:
+            items = [item for item in items if item.analysis_run_id == analysis_run_id]
+        if step_name is not None:
+            items = [item for item in items if item.step_name == step_name]
+        return sorted(items, key=lambda item: (item.created_at, item.step_name, item.id))
 
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
         run = self.runs.get(run_id)
@@ -1500,6 +1692,27 @@ class InMemoryStore:
         for export_id in old_export_ids:
             self.exports.pop(export_id, None)
         result.exports_deleted = len(old_export_ids)
+
+        from app.services.analysis_artifacts import best_effort_delete_step_artifact_object
+
+        old_artifact_ids = [
+            artifact_id
+            for artifact_id, artifact in self.analysis_step_artifacts.items()
+            if artifact.created_at.timestamp() < report_cutoff
+        ]
+        for artifact_id in old_artifact_ids:
+            artifact = self.analysis_step_artifacts.pop(artifact_id, None)
+            if artifact is None:
+                continue
+            self.analysis_step_artifact_keys.pop(
+                (artifact.analysis_run_id, artifact.step_name, artifact.artifact_type),
+                None,
+            )
+            best_effort_delete_step_artifact_object(
+                artifact.object_uri,
+                app_settings=self.settings,
+            )
+        result.step_artifacts_deleted = len(old_artifact_ids)
         return result
 
 

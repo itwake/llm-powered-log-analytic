@@ -160,6 +160,9 @@ missing local content return explicit `404` or `400` responses. For local tests,
 accepts `input_paths`. When no paths or file ids are provided, the local synchronous store path
 uses the checkout incident fixture files for deterministic development and tests.
 `GET /api/cases/{case_id}/analysis-runs` returns `items` with `analysis_run_id`, `run_number`, `status`, `current_step`, `progress`, `started_at`, `completed_at`, `error_message`, `model_provider`, and `model_name`.
+`GET /api/cases/{case_id}/analysis-runs/{run_id}/artifacts` requires case view permission and
+returns step artifact rows with `object_uri`, `sha256`, `size_bytes`, and safe metadata only. It
+does not return artifact JSON body content.
 
 Collaborator management requires case owner or global admin access. `POST /collaborators`
 accepts `user_id` and role (`owner`, `editor`, or `viewer`) and upserts the collaborator.

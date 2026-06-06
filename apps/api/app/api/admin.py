@@ -222,6 +222,7 @@ def run_retention(
         "raw_log_lines_scrubbed": result.raw_log_lines_scrubbed,
         "exports_deleted": result.exports_deleted,
         "analysis_results_cleared": result.analysis_results_cleared,
+        "step_artifacts_deleted": result.step_artifacts_deleted,
     }
     store.record_audit(
         action="admin.retention.run",

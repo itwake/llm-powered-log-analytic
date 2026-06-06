@@ -13,6 +13,8 @@ from app.schemas.case import (
     AnalysisRunListResponse,
     AnalysisRunRequest,
     AnalysisRunResponse,
+    AnalysisStepArtifactListResponse,
+    AnalysisStepArtifactResponse,
     CaseCollaboratorListResponse,
     CaseCollaboratorRequest,
     CaseCollaboratorResponse,
@@ -96,6 +98,22 @@ def _job_event_response(record: Any) -> JobEventResponse:
         metadata=record.metadata,
         error_message=record.error_message,
         created_at=record.created_at,
+    )
+
+
+def _analysis_step_artifact_response(record: Any) -> AnalysisStepArtifactResponse:
+    return AnalysisStepArtifactResponse(
+        id=record.id,
+        case_id=record.case_id,
+        analysis_run_id=record.analysis_run_id,
+        step_name=record.step_name,
+        artifact_type=record.artifact_type,
+        object_uri=record.object_uri,
+        sha256=record.sha256,
+        size_bytes=record.size_bytes,
+        metadata=record.metadata or {},
+        created_at=record.created_at,
+        updated_at=record.updated_at,
     )
 
 
@@ -856,6 +874,36 @@ def list_analysis_run_events(
     return JobEventListResponse(
         items=[_job_event_response(event) for event in events],
         total=len(events),
+    )
+
+
+@router.get(
+    "/{case_id}/analysis-runs/{run_id}/artifacts",
+    response_model=AnalysisStepArtifactListResponse,
+)
+def list_analysis_run_artifacts(
+    case_id: str,
+    run_id: str,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> AnalysisStepArtifactListResponse:
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="view",
+        hide_forbidden=True,
+    )
+    run = store.get_analysis_run(run_id)
+    if not run or run.case_id != case_id:
+        raise HTTPException(status_code=404, detail="analysis run not found")
+    artifacts = store.list_analysis_step_artifacts(
+        case_id=case_id,
+        analysis_run_id=run_id,
+    )
+    return AnalysisStepArtifactListResponse(
+        items=[_analysis_step_artifact_response(artifact) for artifact in artifacts],
+        total=len(artifacts),
     )
 
 
