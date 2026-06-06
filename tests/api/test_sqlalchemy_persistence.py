@@ -120,6 +120,18 @@ def _annotation_raw_responses(store: SQLAlchemyStore, run_id: str) -> list[dict[
         )
 
 
+def _redacted_raw_log_line_count(store: SQLAlchemyStore, run_id: str) -> int:
+    with store.session_factory() as session:
+        return (
+            session.scalar(
+                select(func.count(tables.RawLogLine.raw_text_redacted)).where(
+                    tables.RawLogLine.analysis_run_id == run_id
+                )
+            )
+            or 0
+        )
+
+
 def _raw_file_analysis_run_id(store: SQLAlchemyStore, file_id: str) -> str | None:
     with store.session_factory() as session:
         return session.scalar(
@@ -285,6 +297,7 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     analytics_counts = _analytics_counts(recreated_store, run_id)
     assert analytics_counts["raw_files"] > 0
     assert analytics_counts["raw_log_lines"] == progress["normalized_lines"]
+    assert _redacted_raw_log_line_count(recreated_store, run_id) > 0
     assert analytics_counts["normalized_log_lines"] == progress["normalized_lines"]
     assert analytics_counts["log_templates"] == progress["templates"]
     assert analytics_counts["representative_samples"] == progress["representative_samples"]

@@ -674,6 +674,9 @@ class SQLAlchemyStore:
             entry.log_id: _worker_uuid(entry.log_id, f"{run.id}:raw_log:{index}:{entry.log_id}")
             for index, entry in enumerate(result.raw_entries)
         }
+        raw_log_redacted_messages = {
+            line.raw_log_id: line.redacted_message for line in result.normalized_logs
+        }
         normalized_log_ids = {
             line.log_id: _worker_uuid(line.log_id, f"{run.id}:normalized_log:{index}:{line.log_id}")
             for index, line in enumerate(result.normalized_logs)
@@ -728,7 +731,7 @@ class SQLAlchemyStore:
                 file_id=required(file_ids, entry.file_id, "file_id"),
                 line_number=entry.line_number,
                 raw_text=entry.raw_message,
-                raw_text_redacted=None,
+                raw_text_redacted=raw_log_redacted_messages.get(entry.log_id),
                 sha256=entry.sha256,
                 created_at=created_at,
             )
