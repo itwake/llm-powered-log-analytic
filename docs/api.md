@@ -76,15 +76,29 @@ Streaming `/responses` and `/api/chat/stream` are deferred to the next runtime s
 - `GET /api/cases/{case_id}/analysis-runs`
 - `GET /api/cases/{case_id}/analysis-runs/{run_id}`
 
-`POST /api/cases/{case_id}/uploads` creates metadata and returns an API `upload_url`. With the
-default `LOGAN_OBJECT_STORE_BACKEND=local`, clients `PUT` raw file bytes to that URL. The API
-writes bytes under `LOGAN_LOCAL_OBJECT_STORE_DIR`, computes sha256 and size, marks the upload
-complete, and stores a local `file://` object URI. `POST /complete` is idempotent for matching
-sha256 values and returns `409` for conflicting sha256 values.
+`POST /api/cases/{case_id}/uploads` creates metadata and returns an `upload_url`,
+`upload_backend`, `upload_headers`, and `expires_in`. With the default
+`LOGAN_OBJECT_STORE_BACKEND=local`, the URL is the authenticated API
+`PUT /api/cases/{case_id}/uploads/{file_id}/content` route. The API writes bytes under
+`LOGAN_LOCAL_OBJECT_STORE_DIR`, computes sha256 and size, marks the upload complete, and stores
+a local `file://` object URI. Local responses still include `object_uri` for compatibility.
+
+With `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio`, the API records an internal
+`s3://bucket/cases/{case_id}/uploads/{file_id}/{safe_filename}` object URI and returns a
+presigned S3/MinIO `PUT` URL plus any headers that the browser must send. Browser clients upload
+directly to object storage, compute SHA-256 locally, then call `POST /complete` with the digest.
+The completion route verifies existence and size with `head_object`. If object metadata contains
+`sha256`, it must match the client digest; otherwise the verified client digest is stored. The API
+does not read full S3 objects during completion.
+
+`POST /complete` is idempotent for matching sha256 values and returns `409` for conflicting
+sha256 values.
 
 `POST /api/cases/{case_id}/analysis-runs` accepts `input_file_ids` for completed uploads and
 converts local `file://` object URIs to filesystem paths before invoking the synchronous worker
-pipeline. Missing uploads, wrong-case uploads, incomplete uploads, non-file-backed uploads, and
+pipeline. S3-backed completed uploads currently return `400` for `input_file_ids` because the
+local analysis path cannot read non-file-backed uploads until worker-side S3 streaming/download is
+implemented. Missing uploads, wrong-case uploads, incomplete uploads, non-file-backed uploads, and
 missing local content return explicit `404` or `400` responses. For local tests, the route also
 accepts `input_paths`. When no paths or file ids are provided, the local synchronous store path
 uses the checkout incident fixture files for deterministic development and tests.

@@ -44,14 +44,40 @@ class FailingAnnotationGateway(MockCopilotAnnotationGateway):
         )
 
 
+class FakeS3NotFound(Exception):
+    response = {"Error": {"Code": "NoSuchKey"}}
+
+
+class FakeS3Client:
+    def __init__(self) -> None:
+        self.objects: dict[tuple[str, str], dict[str, object]] = {}
+        self.presign_calls: list[dict[str, object]] = []
+        self.head_calls: list[dict[str, str]] = []
+
+    def generate_presigned_url(self, operation: str, **kwargs: object) -> str:
+        self.presign_calls.append({"operation": operation, **kwargs})
+        params = kwargs.get("Params")
+        assert isinstance(params, dict)
+        return f"https://minio.example/{params['Bucket']}/{params['Key']}?signature=fake"
+
+    def head_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+        self.head_calls.append({"Bucket": Bucket, "Key": Key})
+        try:
+            return self.objects[(Bucket, Key)]
+        except KeyError as exc:
+            raise FakeS3NotFound() from exc
+
+
 async def _authenticated_client(
     app_settings: Settings | None = None,
+    s3_client_factory=None,
 ) -> tuple[AsyncClient, InMemoryStore, str]:
     store = InMemoryStore(app_settings or Settings())
     app = create_app(
         store=store,
         copilot_auth_client=MockGitHubDeviceClient(),
         model_gateway=MockCopilotAnnotationGateway(),
+        s3_client_factory=s3_client_factory,
     )
     transport = ASGITransport(app=app)
     client = AsyncClient(transport=transport, base_url="http://testserver")
@@ -557,4 +583,159 @@ async def test_upload_complete_sha_mismatch_returns_conflict(tmp_path: Path) -> 
         json={"sha256": "0" * 64},
     )
     assert mismatch.status_code == 409
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_s3_upload_complete_uses_head_object_and_presigned_url() -> None:
+    fake_s3 = FakeS3Client()
+    client, store, _ = await _authenticated_client(
+        Settings(
+            object_store_backend="s3",
+            s3_bucket="logan",
+            s3_access_key="access",
+            s3_secret_key="secret",
+        ),
+        s3_client_factory=lambda _: fake_s3,
+    )
+    case_id = await _create_case(client)
+    content = b"2026-06-06T10:00:00Z ERROR gateway request failed\n"
+    expected_sha = hashlib.sha256(content).hexdigest()
+
+    upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "../incident.log", "content_type": "text/plain", "size_bytes": len(content)},
+    )
+    assert upload.status_code == 200, upload.text
+    payload = upload.json()
+    file_id = payload["file_id"]
+    assert payload["upload_backend"] == "s3"
+    assert payload["upload_url"].startswith("https://minio.example/logan/")
+    assert payload["upload_headers"] == {"content-type": "text/plain"}
+    assert payload["object_uri"] is None
+
+    upload_record = store.get_upload(file_id)
+    assert upload_record is not None
+    assert upload_record.object_uri == f"s3://logan/cases/{case_id}/uploads/{file_id}/incident.log"
+    key = f"cases/{case_id}/uploads/{file_id}/incident.log"
+    fake_s3.objects[("logan", key)] = {
+        "ContentLength": len(content),
+        "Metadata": {"sha256": expected_sha},
+    }
+
+    complete = await client.post(
+        f"/api/cases/{case_id}/uploads/{file_id}/complete",
+        json={"sha256": expected_sha},
+    )
+
+    assert complete.status_code == 200, complete.text
+    assert complete.json()["sha256"] == expected_sha
+    assert fake_s3.head_calls == [{"Bucket": "logan", "Key": key}]
+    completed = store.get_upload(file_id)
+    assert completed is not None
+    assert completed.completed is True
+    assert completed.sha256 == expected_sha
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_s3_upload_complete_rejects_missing_object_or_size_mismatch() -> None:
+    fake_s3 = FakeS3Client()
+    client, _, _ = await _authenticated_client(
+        Settings(
+            object_store_backend="minio",
+            s3_endpoint="http://minio:9000",
+            s3_bucket="logan",
+            s3_access_key="access",
+            s3_secret_key="secret",
+        ),
+        s3_client_factory=lambda _: fake_s3,
+    )
+    case_id = await _create_case(client)
+    content = b"gateway failed\n"
+    expected_sha = hashlib.sha256(content).hexdigest()
+
+    missing_upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "missing.log", "content_type": "text/plain", "size_bytes": len(content)},
+    )
+    missing_file_id = missing_upload.json()["file_id"]
+    missing = await client.post(
+        f"/api/cases/{case_id}/uploads/{missing_file_id}/complete",
+        json={"sha256": expected_sha},
+    )
+    assert missing.status_code == 400
+    assert missing.json()["detail"] == "upload content has not been uploaded"
+
+    mismatch_upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "mismatch.log", "content_type": "text/plain", "size_bytes": len(content)},
+    )
+    mismatch_file_id = mismatch_upload.json()["file_id"]
+    fake_s3.objects[("logan", f"cases/{case_id}/uploads/{mismatch_file_id}/mismatch.log")] = {
+        "ContentLength": len(content) + 1,
+        "Metadata": {},
+    }
+    mismatch = await client.post(
+        f"/api/cases/{case_id}/uploads/{mismatch_file_id}/complete",
+        json={"sha256": expected_sha},
+    )
+    assert mismatch.status_code == 400
+    assert "upload size mismatch" in mismatch.json()["detail"]
+
+    sha_upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "sha.log", "content_type": "text/plain", "size_bytes": len(content)},
+    )
+    sha_file_id = sha_upload.json()["file_id"]
+    fake_s3.objects[("logan", f"cases/{case_id}/uploads/{sha_file_id}/sha.log")] = {
+        "ContentLength": len(content),
+        "Metadata": {"sha256": "0" * 64},
+    }
+    sha_mismatch = await client.post(
+        f"/api/cases/{case_id}/uploads/{sha_file_id}/complete",
+        json={"sha256": expected_sha},
+    )
+    assert sha_mismatch.status_code == 409
+    assert sha_mismatch.json()["detail"] == "upload sha256 does not match stored content metadata"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_s3_input_file_ids_analysis_returns_clear_non_file_backed_error() -> None:
+    fake_s3 = FakeS3Client()
+    client, _, _ = await _authenticated_client(
+        Settings(
+            object_store_backend="s3",
+            s3_bucket="logan",
+            s3_access_key="access",
+            s3_secret_key="secret",
+        ),
+        s3_client_factory=lambda _: fake_s3,
+    )
+    case_id = await _create_case(client)
+    content = b"gateway failed\n"
+    expected_sha = hashlib.sha256(content).hexdigest()
+    upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "gateway.log", "content_type": "text/plain", "size_bytes": len(content)},
+    )
+    file_id = upload.json()["file_id"]
+    fake_s3.objects[("logan", f"cases/{case_id}/uploads/{file_id}/gateway.log")] = {
+        "ContentLength": len(content),
+        "Metadata": {},
+    }
+    complete = await client.post(
+        f"/api/cases/{case_id}/uploads/{file_id}/complete",
+        json={"sha256": expected_sha},
+    )
+    assert complete.status_code == 200, complete.text
+
+    run = await client.post(
+        f"/api/cases/{case_id}/analysis-runs",
+        json={"input_file_ids": [file_id], "config": {"default_window_size_seconds": 60}},
+    )
+
+    assert run.status_code == 400
+    assert run.json()["detail"] == f"upload {file_id} is not file-backed and cannot be analyzed locally"
     await client.aclose()

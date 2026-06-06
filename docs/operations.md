@@ -25,6 +25,15 @@ Uploads use `LOGAN_OBJECT_STORE_BACKEND=local` by default. The API returns an au
 `LOGAN_LOCAL_OBJECT_STORE_DIR` or `.logan/object-store`, records a `file://` object URI, and
 passes completed upload paths to the worker pipeline through `input_file_ids`.
 
+Set `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio` to use presigned object-store uploads for raw
+files. Required settings are `LOGAN_S3_BUCKET`, `LOGAN_S3_ACCESS_KEY`, and
+`LOGAN_S3_SECRET_KEY`; `LOGAN_S3_ENDPOINT` is also required for `minio` and optional for AWS S3.
+The defaults are `LOGAN_S3_REGION=us-east-1`, `LOGAN_S3_PRESIGN_EXPIRES_SECONDS=900`, and
+`LOGAN_S3_FORCE_PATH_STYLE=true`. The API records `s3://` object URIs and returns presigned
+`PUT` URLs with upload headers, then verifies completion with S3 `head_object` for existence and
+size. S3-backed `input_file_ids` are intentionally rejected by the current local analysis path
+until the worker supports streaming or downloading S3 inputs.
+
 The default API path uses real GitHub Copilot auth and model calls:
 
 - `POST /api/copilot/auth/start` starts GitHub device-code auth.
@@ -98,7 +107,6 @@ docker compose up --build
 - Add managed OpenSearch index lifecycle for `logan-logs-{case_id}-{analysis_run_id}`.
 - Add external sink retry/idempotency records for ClickHouse/OpenSearch writes.
 - Add report/query reads over external analytics stores.
-- Add an S3/MinIO presigned object-store adapter for production deployments.
 - Add resumable/multipart uploads for large files and interrupted browser sessions.
 - Implement Copilot `/responses` streaming plus `/api/chat/stream` SSE.
 - Replace the Temporal placeholder with real activities backed by durable retries and replay-safe

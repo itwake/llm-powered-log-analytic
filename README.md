@@ -92,6 +92,7 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy when `LOGAN_DATABASE_URL` is set and memory otherwise. Use `memory` or `sqlalchemy` to force a backend.
 - `LOGAN_OBJECT_STORE_BACKEND=local`; local uploads store real file bytes on disk and record `file://` object URIs.
 - `LOGAN_LOCAL_OBJECT_STORE_DIR=.logan/object-store` relative to the API process working directory by default.
+- `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio` enables presigned S3/MinIO `PUT` uploads; configure `LOGAN_S3_BUCKET`, `LOGAN_S3_ACCESS_KEY`, `LOGAN_S3_SECRET_KEY`, and `LOGAN_S3_ENDPOINT` for MinIO.
 - `LOGAN_COPILOT_MODEL=gpt-5.4`
 - `LOGAN_COPILOT_REASONING_EFFORT=high`
 - `LOGAN_COPILOT_OAUTH_CLIENT_ID=Iv1.b507a08c87ecfe98`
@@ -115,4 +116,4 @@ See `.env.example` for the full list. Key defaults:
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are `/api/chat/stream` SSE wiring, ClickHouse/OpenSearch table and index lifecycle, external sink retry/idempotency records, service-backed analytics query paths, S3/MinIO presigned object-store adapters, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are `/api/chat/stream` SSE wiring, ClickHouse/OpenSearch table and index lifecycle, external sink retry/idempotency records, service-backed analytics query paths, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.

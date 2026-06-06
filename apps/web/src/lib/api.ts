@@ -107,6 +107,25 @@ async function uploadRawFile(uploadUrl: string, file: File): Promise<UploadConte
   return (await parseResponse(response)) as UploadContentResponse;
 }
 
+async function sha256File(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function uploadPresignedFile(upload: UploadStartResponse, file: File): Promise<void> {
+  const headers = new Headers(upload.upload_headers || {});
+  const response = await fetch(upload.upload_url, {
+    method: "PUT",
+    body: file,
+    credentials: "omit",
+    headers,
+  });
+  if (!response.ok) {
+    const payload = await parseResponse(response);
+    throw new ApiError(response.status, errorMessage(response.status, payload), payload);
+  }
+}
+
 export interface UserOut {
   id: string;
   email: string;
@@ -172,6 +191,8 @@ export interface UploadStartResponse {
   file_id: string;
   upload_url: string;
   object_uri?: string | null;
+  upload_backend?: "local" | "s3" | "minio" | string;
+  upload_headers?: Record<string, string>;
   expires_in: number;
 }
 
@@ -179,7 +200,7 @@ export interface UploadCompleteResponse {
   file_id: string;
   status: string;
   sha256: string;
-  size_bytes?: number;
+  size_bytes: number;
 }
 
 export interface UploadContentResponse {
@@ -431,7 +452,14 @@ export const casesApi = {
       method: "POST",
       body: {sha256},
     }),
-  uploadContent: (uploadUrl: string, file: File) => uploadRawFile(uploadUrl, file),
+  uploadContent: async (caseId: string, upload: UploadStartResponse, file: File) => {
+    if (upload.upload_backend === "s3" || upload.upload_backend === "minio") {
+      const sha256 = await sha256File(file);
+      await uploadPresignedFile(upload, file);
+      return casesApi.completeUpload(caseId, upload.file_id, sha256);
+    }
+    return uploadRawFile(upload.upload_url, file);
+  },
   uploadFiles: async (caseId: string, files: File[]) => {
     const uploaded: UploadContentResponse[] = [];
     for (const file of files) {
@@ -440,7 +468,7 @@ export const casesApi = {
         content_type: file.type || null,
         size_bytes: file.size,
       });
-      uploaded.push(await casesApi.uploadContent(upload.upload_url, file));
+      uploaded.push(await casesApi.uploadContent(caseId, upload, file));
     }
     return uploaded;
   },

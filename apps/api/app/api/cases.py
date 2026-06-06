@@ -24,9 +24,13 @@ from app.schemas.case import (
 )
 from app.services.copilot_model_gateway import CopilotCredentialError, CopilotGatewayError
 from app.services.object_store import (
+    ObjectStoreConfigurationError,
+    create_presigned_upload,
     digest_bytes,
     file_uri_to_path,
     is_local_backend,
+    is_s3_backend,
+    object_store_backend,
     stat_object,
     write_bytes,
 )
@@ -175,22 +179,45 @@ def request_upload(
     del user
     if not store.get_case(case_id):
         raise HTTPException(status_code=404, detail="case not found")
-    upload = store.create_upload(
-        case_id=case_id,
-        filename=payload.filename,
-        content_type=payload.content_type,
-        size_bytes=payload.size_bytes,
-    )
-    upload_url = (
-        str(request.url_for("upload_content", case_id=case_id, file_id=upload.id))
-        if is_local_backend(store.settings)
-        else upload.object_uri
-    )
+    try:
+        upload = store.create_upload(
+            case_id=case_id,
+            filename=payload.filename,
+            content_type=payload.content_type,
+            size_bytes=payload.size_bytes,
+        )
+    except ObjectStoreConfigurationError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    backend = object_store_backend(store.settings)
+    upload_headers: dict[str, str] = {}
+    expires_in = 900
+    object_uri: str | None = upload.object_uri
+    if is_local_backend(store.settings):
+        upload_url = str(request.url_for("upload_content", case_id=case_id, file_id=upload.id))
+    elif is_s3_backend(store.settings):
+        try:
+            presigned = create_presigned_upload(
+                upload.object_uri,
+                content_type=payload.content_type,
+                app_settings=store.settings,
+                s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
+            )
+        except ObjectStoreConfigurationError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        upload_url = presigned.upload_url
+        upload_headers = presigned.upload_headers
+        backend = presigned.upload_backend
+        expires_in = presigned.expires_in
+        object_uri = None
+    else:
+        upload_url = upload.object_uri
     return {
         "file_id": upload.id,
         "upload_url": upload_url,
-        "object_uri": upload.object_uri,
-        "expires_in": 900,
+        "object_uri": object_uri,
+        "upload_backend": backend,
+        "upload_headers": upload_headers,
+        "expires_in": expires_in,
     }
 
 
@@ -232,6 +259,7 @@ async def upload_content(
 
 @router.post("/{case_id}/uploads/{file_id}/complete")
 def complete_upload(
+    request: Request,
     case_id: str,
     file_id: str,
     payload: UploadCompleteRequest,
@@ -264,6 +292,30 @@ def complete_upload(
             raise HTTPException(
                 status_code=409,
                 detail="upload sha256 does not match stored content",
+            )
+    elif upload_record.object_uri.startswith("s3://"):
+        try:
+            stored = stat_object(
+                upload_record.object_uri,
+                app_settings=store.settings,
+                s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail="upload content has not been uploaded") from exc
+        except ObjectStoreConfigurationError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        if upload_record.size_bytes != stored.size_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"upload size mismatch: expected {upload_record.size_bytes} bytes, "
+                    f"found {stored.size_bytes} bytes"
+                ),
+            )
+        if stored.sha256 and stored.sha256 != payload.sha256:
+            raise HTTPException(
+                status_code=409,
+                detail="upload sha256 does not match stored content metadata",
             )
     upload = store.complete_upload(upload_id=file_id, sha256=payload.sha256)
     return _completed_upload_response(upload)

@@ -30,7 +30,7 @@ run advances. Event metadata is count-only, such as files, raw lines, templates,
 annotations, windows, causal nodes/edges, and export types; raw log text, prompt payloads,
 model inputs, source tokens, and credential material are not stored in event metadata.
 
-Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services, and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy. Uploaded bytes use a local disk object store by default, so tests can still inject the deterministic in-memory store, fake device-code client, and mock model gateway with no Docker services or external model network required.
+Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services, and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy. Uploaded bytes use a local disk object store by default, so tests can still inject the deterministic in-memory store, fake device-code client, mock model gateway, and fake S3 client with no Docker services or external model network required. Production uploads can switch to S3/MinIO presigned `PUT` URLs with `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio`; completion verifies object existence and size with `head_object` without reading full object bytes.
 
 `LOGAN_ANALYSIS_ORCHESTRATOR=local` is the default and keeps the API path synchronous. The
 optional `temporal` setting starts `AnalyzeCaseWorkflow` through a lazy Temporal client facade
@@ -73,8 +73,8 @@ Causal edges are candidate relationships only. API and worker fields use `candid
 - Replace `StableDrainAdapter` with `drain3` behind the same `cluster()` interface.
 - Extend the ClickHouse/OpenSearch sink adapters with managed table/index lifecycle, retries,
   idempotency records, and service-backed query paths.
-- Add S3 object storage adapters for report artifacts and production upload storage.
-- Add S3/MinIO presigned uploads and resumable/multipart support behind the object-store seam.
+- Add S3 object storage adapters for report artifacts.
+- Add resumable/multipart S3 uploads for large files and interrupted browser sessions.
 - Replace the Temporal facade placeholder with replay-safe workflow activities and durable retry
   state.
 - Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.

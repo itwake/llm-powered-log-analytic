@@ -14,9 +14,11 @@ def create_app(
     *,
     copilot_auth_client: DeviceCodeClient | None = None,
     model_gateway: object | None = None,
+    s3_client_factory: object | None = None,
 ) -> FastAPI:
     app = FastAPI(title="LogAn Platform API", version="0.1.0")
     app.state.store = store or create_store()
+    app.state.s3_client_factory = s3_client_factory
     app.state.copilot_auth_client = copilot_auth_client or GitHubDeviceCodeClient(
         app_settings=app.state.store.settings
     )

@@ -26,7 +26,13 @@ from app.core.security import (
 from app.db import Base
 from app.models import tables
 from app.services.analytics_sinks import AnalyticsSinkError, AnalyticsSinkPublisher
-from app.services.object_store import is_local_backend, local_upload_object_uri, safe_filename
+from app.services.object_store import (
+    is_local_backend,
+    is_s3_backend,
+    local_upload_object_uri,
+    s3_upload_object_uri,
+    safe_filename,
+)
 from app.store import (
     AnalysisRunRecord,
     AuditLogRecord,
@@ -464,16 +470,22 @@ class SQLAlchemyStore:
     ) -> UploadRecord:
         upload_id = str(uuid.uuid4())
         stored_filename = safe_filename(filename)
-        object_uri = (
-            local_upload_object_uri(
+        if is_local_backend(self.settings):
+            object_uri = local_upload_object_uri(
                 case_id=case_id,
                 file_id=upload_id,
                 filename=stored_filename,
                 app_settings=self.settings,
             )
-            if is_local_backend(self.settings)
-            else f"memory://uploads/{case_id}/{upload_id}/{stored_filename}"
-        )
+        elif is_s3_backend(self.settings):
+            object_uri = s3_upload_object_uri(
+                case_id=case_id,
+                file_id=upload_id,
+                filename=stored_filename,
+                app_settings=self.settings,
+            )
+        else:
+            object_uri = f"memory://uploads/{case_id}/{upload_id}/{stored_filename}"
         with self._session() as session:
             upload = tables.RawFile(
                 id=upload_id,

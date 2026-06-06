@@ -229,6 +229,47 @@ def test_sqlalchemy_credentials_persist_expiration_and_revocation(tmp_path: Path
     assert store.has_credential(user.id) is False
 
 
+def test_sqlalchemy_store_records_s3_upload_object_uri(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(
+        database_url=database_url,
+        store_backend="sqlalchemy",
+        object_store_backend="s3",
+        s3_bucket="logan",
+        s3_access_key="access",
+        s3_secret_key="secret",
+    )
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    user = store.register_user(
+        email="s3-persistence@example.com",
+        username="s3-persistence",
+        full_name=None,
+        password="password123",
+    )
+    case = store.create_case(
+        user_id=user.id,
+        data={
+            "title": "S3 upload persistence",
+            "issue_description": None,
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "test",
+            "incident_start": None,
+            "incident_end": None,
+            "timezone": "UTC",
+        },
+    )
+
+    upload = store.create_upload(
+        case_id=case.id,
+        filename="../incident.log",
+        content_type="text/plain",
+        size_bytes=10,
+    )
+
+    assert upload.object_uri == f"s3://logan/cases/{case.id}/uploads/{upload.id}/incident.log"
+
+
 @pytest.mark.asyncio
 async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"

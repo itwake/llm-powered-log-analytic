@@ -42,6 +42,13 @@ class Settings:
     local_object_store_dir: str = os.getenv(
         "LOGAN_LOCAL_OBJECT_STORE_DIR", str(Path.cwd() / ".logan" / "object-store")
     )
+    s3_endpoint: str | None = os.getenv("LOGAN_S3_ENDPOINT") or None
+    s3_bucket: str | None = os.getenv("LOGAN_S3_BUCKET") or None
+    s3_access_key: str | None = os.getenv("LOGAN_S3_ACCESS_KEY") or None
+    s3_secret_key: str | None = os.getenv("LOGAN_S3_SECRET_KEY") or None
+    s3_region: str = os.getenv("LOGAN_S3_REGION", "us-east-1")
+    s3_presign_expires_seconds: int = int(os.getenv("LOGAN_S3_PRESIGN_EXPIRES_SECONDS", "900"))
+    s3_force_path_style: bool = _env_bool("LOGAN_S3_FORCE_PATH_STYLE", True)
     secure_cookies: bool = os.getenv("LOGAN_ENV", "development") == "production"
     raw_log_retention_days: int = int(os.getenv("LOGAN_RAW_LOG_RETENTION_DAYS", "30"))
     report_retention_days: int = int(os.getenv("LOGAN_REPORT_RETENTION_DAYS", "365"))
