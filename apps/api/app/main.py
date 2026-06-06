@@ -11,6 +11,18 @@ from app.services.copilot_model_gateway import CopilotModelGateway
 from app.store import MetadataStore, create_store
 
 
+def _default_model_gateway(store: MetadataStore) -> object:
+    provider = (store.settings.llm_provider or "github_copilot").lower()
+    if provider in {"mock", "local_mock"}:
+        from logan_workers.activities.inference import MockCopilotAnnotationGateway
+
+        return MockCopilotAnnotationGateway()
+    return CopilotModelGateway(
+        store=store,
+        app_settings=store.settings,
+    )
+
+
 def create_app(
     store: MetadataStore | None = None,
     *,
@@ -24,10 +36,7 @@ def create_app(
     app.state.copilot_auth_client = copilot_auth_client or GitHubDeviceCodeClient(
         app_settings=app.state.store.settings
     )
-    app.state.model_gateway = model_gateway or CopilotModelGateway(
-        store=app.state.store,
-        app_settings=app.state.store.settings,
-    )
+    app.state.model_gateway = model_gateway or _default_model_gateway(app.state.store)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:3000"],

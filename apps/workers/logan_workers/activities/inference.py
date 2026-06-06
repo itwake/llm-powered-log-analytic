@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 import uuid
 from typing import Any
 
@@ -20,8 +21,10 @@ class MockCopilotAnnotationGateway:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
 
-    async def responses(self, **kwargs: Any) -> dict[str, Any]:
+    async def responses(self, **kwargs: Any) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
         self.calls.append(kwargs)
+        if kwargs.get("stream"):
+            return self._stream_response()
         text = " ".join(
             part.get("text", "")
             for item in kwargs.get("input", [])
@@ -29,6 +32,11 @@ class MockCopilotAnnotationGateway:
             if isinstance(part, dict)
         ).lower()
         return {"output_json": self._classify(text)}
+
+    async def _stream_response(self) -> AsyncIterator[dict[str, Any]]:
+        message = "Mock analysis context response."
+        yield {"type": "message.delta", "delta": message}
+        yield {"type": "message.completed", "output_text": message}
 
     def _classify(self, text: str) -> dict[str, Any]:
         if "connection pool exhausted" in text or "pool usage high" in text:

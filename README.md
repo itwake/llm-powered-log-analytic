@@ -38,6 +38,27 @@ pnpm --filter @logan/web test
 pnpm --filter @logan/web lint
 ```
 
+Install the Chromium browser and system packages for Playwright once on a VM:
+
+```bash
+corepack pnpm exec playwright install --with-deps chromium
+```
+
+Run the browser E2E suite from the repository root:
+
+```bash
+corepack pnpm e2e
+```
+
+The Playwright config starts FastAPI on `127.0.0.1:8000` and the Next.js workbench on
+`127.0.0.1:3000`. Browser navigation uses `http://localhost:3000`, and the web app uses
+`NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` so API cookies and CORS match local browser
+behavior. E2E uses `LOGAN_STORE_BACKEND=memory`, `LOGAN_OBJECT_STORE_BACKEND=local`, and
+`.logan/e2e-object-store`; the in-memory store is reset when the API process exits. It also sets
+`LOGAN_LLM_PROVIDER=mock` so the sample/local analysis path is deterministic and does not require
+Docker, GitHub Copilot credentials, MinIO, ClickHouse, OpenSearch, Temporal, or an external
+database.
+
 ## Run API and Web Together
 
 Start the FastAPI backend from the repository root:
@@ -106,6 +127,8 @@ Tests assert that model inputs are redacted, representative samples are used, an
 See `.env.example` for the full list. Key defaults:
 
 - `LOGAN_LLM_PROVIDER=github_copilot`
+- `LOGAN_LLM_PROVIDER=mock` is supported for deterministic local/CI E2E analysis only; production
+  paths should keep `github_copilot`.
 - `LOGAN_DATABASE_URL=` unset by default for lightweight local memory mode; set to `sqlite:///...` for local durable tests or `postgresql+psycopg://user:pass@host:5432/db` for PostgreSQL.
 - `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy when `LOGAN_DATABASE_URL` is set and memory otherwise. Use `memory` or `sqlalchemy` to force a backend.
 - `LOGAN_ANALYSIS_ORCHESTRATOR=local`; set to `temporal` to have the API create the SQLAlchemy run and start `AnalyzeCaseWorkflow`.
@@ -147,4 +170,4 @@ See `.env.example` for the full list. Key defaults:
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are step-level external artifact materialization for very large Temporal histories, advanced policy groups/SCIM integration, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are step-level external artifact materialization for very large Temporal histories, advanced policy groups/SCIM integration, richer chart/graph libraries, and production observability wiring.

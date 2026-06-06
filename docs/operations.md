@@ -8,6 +8,36 @@ Run Python tests without external services:
 python3 -m pytest tests
 ```
 
+Run Playwright browser E2E after installing browser dependencies:
+
+```bash
+corepack pnpm exec playwright install --with-deps chromium
+corepack pnpm e2e
+```
+
+The E2E config starts the API with:
+
+- `python -m uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port 8000`
+- `LOGAN_STORE_BACKEND=memory`
+- `LOGAN_OBJECT_STORE_BACKEND=local`
+- `LOGAN_LOCAL_OBJECT_STORE_DIR=.logan/e2e-object-store`
+- `LOGAN_RATE_LIMIT_ENABLED=false`
+- `LOGAN_METRICS_ENABLED=true`
+- `LOGAN_LLM_PROVIDER=mock`
+
+It starts the web app with:
+
+- `corepack pnpm --filter @logan/web dev --hostname 127.0.0.1 --port 3000`
+- `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`
+
+Tests navigate with `http://localhost:3000`, matching the API CORS allow-list. Existing local
+servers are reused outside CI for debugging convenience; make sure they use the same local/mock
+settings when relying on reuse. The suite registers unique users, creates a case, starts the
+deterministic sample/local analysis fixture, and exercises Data Summary, Temporal View, Tabular
+Logs, Causal Graph, and Causal Summary without external databases, MinIO, ClickHouse,
+OpenSearch, Temporal, or real Copilot credentials. The memory store is process-local and clears
+when the API server exits.
+
 Run the API locally:
 
 ```bash
@@ -275,7 +305,7 @@ docker compose up --build
   intermediates grow beyond comfortable activity payload sizes.
 - Add advanced policy groups, SCIM/user-directory sync, and richer approval workflows if enterprise
   deployments need them.
-- Add Playwright e2e tests once the web app is connected to a running API.
+- Extend Playwright e2e coverage as richer workflows and visualizations are added.
 - Consider ECharts/Cytoscape or similar libraries for richer temporal and graph visualization.
 
 These gaps are explicitly deferred from this first foundation commit; they are not hidden behind static stubs in the tested local path.
