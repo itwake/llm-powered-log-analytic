@@ -326,6 +326,48 @@ th {
   min-height: 420px;
 }
 
+.chart-state,
+.graph-state {
+  align-items: center;
+  display: grid;
+  min-height: 420px;
+  place-items: center;
+}
+
+.temporal-chart {
+  height: clamp(420px, 58vh, 640px);
+  min-height: 420px;
+  width: 100%;
+}
+
+.selection-summary,
+.filter-summary {
+  align-items: center;
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 14px;
+  min-height: 76px;
+  padding: 12px;
+}
+
+.selection-summary h2,
+.selection-summary p {
+  margin: 0;
+}
+
+.selection-summary h2 {
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.filter-summary {
+  margin: 12px 0;
+}
+
 .bar-row {
   display: grid;
   gap: 6px;
@@ -395,29 +437,56 @@ th {
 }
 
 .graph-board {
-  min-height: 420px;
+  min-height: 520px;
 }
 
-.graph-node-list {
+.cytoscape-container {
+  height: clamp(440px, 62vh, 720px);
+  min-height: 440px;
+  width: 100%;
+}
+
+.graph-side-panel {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  grid-auto-rows: max-content;
 }
 
-.node {
-  background: #fff;
-  border: 2px solid var(--blue);
-  border-radius: 8px;
-  padding: 10px;
+.graph-detail {
+  border-top: 1px solid var(--line);
+  min-height: 250px;
+  padding-top: 14px;
 }
 
-.node.root {
-  border-color: var(--red);
+.graph-detail h3 {
+  font-size: 15px;
+  margin: 12px 0 8px;
+  overflow-wrap: anywhere;
 }
 
-.edge {
+.detail-list {
+  display: grid;
+  gap: 6px 10px;
+  grid-template-columns: 112px minmax(0, 1fr);
+  margin: 0;
+}
+
+.detail-list dt {
   color: var(--muted);
-  margin: 12px 0;
+}
+
+.detail-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.evidence-ref {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.code-block.compact {
+  max-height: 220px;
 }
 
 .markdown-view {
@@ -505,5 +574,11 @@ th {
 
   .sidebar a {
     white-space: nowrap;
+  }
+
+  .selection-summary,
+  .filter-summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

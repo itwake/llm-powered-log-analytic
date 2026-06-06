@@ -107,35 +107,51 @@ test("sample case analysis can be explored through report views", async ({page},
   await expectFirstTableRow(page);
   await expect(page.locator("tbody tr").filter({hasText: "error"}).first()).toBeVisible();
 
-  await page.getByRole("link", {name: "Temporal View"}).click();
-  await expect(page.getByRole("heading", {name: "Temporal View"})).toBeVisible();
-  await expect(page.locator(".legend-item").first()).toBeVisible();
-  await expect(page.locator(".stacked-row").first()).toBeVisible();
+  await Promise.all([
+    page.waitForURL(/\/temporal$/, {timeout: 60_000}),
+    page.getByRole("link", {name: "Temporal View"}).click(),
+  ]);
+  await expect(page.getByRole("heading", {name: "Temporal View"})).toBeVisible({timeout: 30_000});
+  await expect(page.getByTestId("temporal-echarts")).toBeVisible();
   await page.getByLabel("Window").selectOption("300");
   await page.getByLabel("Group").selectOption("service");
   await clickApply(page);
-  await expect(page.locator(".legend-item").first()).toBeVisible();
-  await expect(page.locator(".stacked-row").first()).toBeVisible();
+  const temporalChart = page.getByTestId("temporal-echarts");
+  await expect(temporalChart).toBeVisible();
+  await temporalChart.click();
+  await expect(page.getByTestId("temporal-selection-summary")).toContainText("logs");
+  await Promise.all([
+    page.waitForURL(/\/logs\?window_start=.*window_end=/, {timeout: 30_000}),
+    page.getByRole("link", {name: "Open in Tabular Logs"}).click(),
+  ]);
 
-  await page.getByRole("link", {name: "Tabular Logs"}).click();
   await expect(page.getByRole("heading", {name: "Tabular Logs"})).toBeVisible();
+  await expect(page.getByTestId("logs-window-filter")).toBeVisible();
   await expectFirstTableRow(page);
   await page.getByLabel("Keyword").fill("checkout");
   await clickApply(page);
   await expectFirstTableRow(page);
   await expect(page.getByText("/checkout").first()).toBeVisible();
 
-  await page.getByRole("link", {name: "Causal Graph"}).click();
-  await expect(page.getByRole("heading", {name: "Causal Graph"})).toBeVisible();
-  await expect(page.locator(".node").first()).toBeVisible();
+  await Promise.all([
+    page.waitForURL(/\/causal-graph$/, {timeout: 60_000}),
+    page.getByRole("link", {name: "Causal Graph"}).click(),
+  ]);
+  await expect(page.getByRole("heading", {name: "Causal Graph"})).toBeVisible({timeout: 30_000});
+  await expect(page.getByTestId("cytoscape-graph")).toBeVisible();
+  await page.getByTestId("cytoscape-graph").click();
+  await expect(page.getByTestId("causal-detail-panel")).toBeVisible();
   await expect(page.getByRole("heading", {name: "Root Cause Candidates"})).toBeVisible();
   await page.getByLabel(/Min confidence/).fill("0.05");
   await clickApply(page);
-  await expect(page.locator(".node").first()).toBeVisible();
+  await expect(page.getByTestId("cytoscape-graph")).toBeVisible();
   await expect(page.getByRole("heading", {name: "Candidate Edges"})).toBeVisible();
 
-  await page.getByRole("link", {name: "Causal Summary"}).click();
-  await expect(page.getByRole("heading", {name: "Causal Summary"})).toBeVisible();
+  await Promise.all([
+    page.waitForURL(/\/causal-summary$/, {timeout: 60_000}),
+    page.getByRole("link", {name: "Causal Summary"}).click(),
+  ]);
+  await expect(page.getByRole("heading", {name: "Causal Summary"})).toBeVisible({timeout: 30_000});
   await expect(page.getByText("Incident Diagnosis Summary")).toBeVisible();
   await expect(page.getByText("Confidence", {exact: true})).toBeVisible();
   await expect(page.getByText("Evidence refs", {exact: true})).toBeVisible();

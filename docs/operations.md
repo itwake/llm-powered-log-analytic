@@ -290,8 +290,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web
 browser requests with `credentials: "include"` for the `logan_session` cookie. The current
 workbench creates cases, uploads selected log/archive files, starts analysis by
 `input_file_ids`, preserves a sample/local fixture run action, lists real runs, loads report
-views from API endpoints, streams case-workspace Copilot answers with fetch-based SSE parsing,
-submits feedback/exports, and drives Copilot device auth start/check through the backend.
+views from API endpoints, renders Temporal View with Apache ECharts, renders Causal Graph with
+Cytoscape.js, streams case-workspace Copilot answers with fetch-based SSE parsing, submits
+feedback/exports, and drives Copilot device auth start/check through the backend.
 
 Run the full service skeleton:
 
@@ -306,6 +307,5 @@ docker compose up --build
 - Add advanced policy groups, SCIM/user-directory sync, and richer approval workflows if enterprise
   deployments need them.
 - Extend Playwright e2e coverage as richer workflows and visualizations are added.
-- Consider ECharts/Cytoscape or similar libraries for richer temporal and graph visualization.
 
 These gaps are explicitly deferred from this first foundation commit; they are not hidden behind static stubs in the tested local path.

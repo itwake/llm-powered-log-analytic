@@ -9,6 +9,8 @@
     "test": "tsc --noEmit"
   },
   "dependencies": {
+    "cytoscape": "^3.34.0",
+    "echarts": "^6.1.0",
     "next": "15.3.3",
     "react": "19.1.0",
     "react-dom": "19.1.0"

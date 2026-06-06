@@ -70,6 +70,12 @@ record exists for that case/run. Typed external query failures are audited and f
 SQL fan-out path. Summary, causal graph, and causal summary views intentionally stay on SQL
 fan-out.
 
+The web workbench renders Temporal View with Apache ECharts stacked bar time windows, including
+legend, tooltip, and dataZoom browsing. Selecting a time window links to Tabular Logs with
+`window_start` and `window_end` query parameters. Causal Graph renders the directed candidate
+relationship graph with Cytoscape.js, preserving candidate confidence, validation state, golden
+signal, and root-cause candidate cues in the graph and detail panel.
+
 The API owns runtime injection points on app state:
 
 - `copilot_auth_client` defaults to the real GitHub device-code client.

@@ -21,16 +21,25 @@ export default function LogsPage() {
   const [data, setData] = useState<LogsResponse | null>(null);
   const [keyword, setKeyword] = useState("");
   const [service, setService] = useState("");
+  const [windowStart, setWindowStart] = useState("");
+  const [windowEnd, setWindowEnd] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(nextKeyword = keyword, nextService = service) {
+  async function load(
+    nextKeyword = keyword,
+    nextService = service,
+    nextWindowStart = windowStart,
+    nextWindowEnd = windowEnd,
+  ) {
     setLoading(true);
     setError(null);
     try {
       const response = await reportsApi.logs(caseId, runId, {
         q: nextKeyword || undefined,
         service: nextService || undefined,
+        window_start: nextWindowStart || undefined,
+        window_end: nextWindowEnd || undefined,
         limit: 200,
       });
       setData(response);
@@ -42,12 +51,23 @@ export default function LogsPage() {
   }
 
   useEffect(() => {
-    void load("", "");
+    const params = new URLSearchParams(window.location.search);
+    const nextWindowStart = params.get("window_start") || "";
+    const nextWindowEnd = params.get("window_end") || "";
+    setWindowStart(nextWindowStart);
+    setWindowEnd(nextWindowEnd);
+    void load("", "", nextWindowStart, nextWindowEnd);
   }, [caseId, runId]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void load();
+  }
+
+  function clearWindowFilter() {
+    setWindowStart("");
+    setWindowEnd("");
+    void load(keyword, service, "", "");
   }
 
   const serviceOptions = useMemo(() => {
@@ -86,6 +106,17 @@ export default function LogsPage() {
       </form>
 
       {error && <div className="alert error">{error}</div>}
+      {(windowStart || windowEnd) && (
+        <div className="filter-summary" data-testid="logs-window-filter">
+          <span>
+            Window filter: {windowStart ? formatDateTime(windowStart) : "start"} to{" "}
+            {windowEnd ? formatDateTime(windowEnd) : "end"}
+          </span>
+          <button className="button secondary" onClick={clearWindowFilter} type="button">
+            Clear window
+          </button>
+        </div>
+      )}
       <section className="panel">
         {loading && <div className="empty">Loading logs</div>}
         {!loading && data && data.items.length === 0 && <div className="empty">No logs found</div>}
