@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,11 @@ async def _client(store: SQLAlchemyStore) -> AsyncClient:
 @pytest.mark.asyncio
 async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    app_settings = Settings(
+        database_url=database_url,
+        store_backend="sqlalchemy",
+        local_object_store_dir=str(tmp_path / "object-store"),
+    )
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     client = await _client(store)
 
@@ -76,20 +81,30 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     assert case.status_code == 200, case.text
     case_id = case.json()["case_id"]
 
+    content = b"2026-06-06T10:00:00Z ERROR gateway request failed status=500 path=/checkout\n"
     upload = await client.post(
         f"/api/cases/{case_id}/uploads",
-        json={"filename": "logs.zip", "content_type": "application/zip", "size_bytes": 123},
+        json={"filename": "gateway.log", "content_type": "text/plain", "size_bytes": len(content)},
     )
     assert upload.status_code == 200, upload.text
     file_id = upload.json()["file_id"]
+    expected_sha = hashlib.sha256(content).hexdigest()
     upload_before_sha = store.get_upload(file_id)
     assert upload_before_sha is not None
     assert upload_before_sha.sha256 is None
     assert upload_before_sha.completed is False
 
+    uploaded = await client.put(
+        upload.json()["upload_url"],
+        content=content,
+        headers={"content-type": "text/plain"},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["sha256"] == expected_sha
+
     complete = await client.post(
         f"/api/cases/{case_id}/uploads/{file_id}/complete",
-        json={"sha256": "abc123"},
+        json={"sha256": expected_sha},
     )
     assert complete.status_code == 200, complete.text
 
@@ -154,7 +169,7 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
 
     persisted_upload = recreated_store.get_upload(file_id)
     assert persisted_upload is not None
-    assert persisted_upload.sha256 == "abc123"
+    assert persisted_upload.sha256 == expected_sha
     assert persisted_upload.completed is True
 
     status = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")

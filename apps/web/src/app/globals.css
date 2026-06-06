@@ -142,6 +142,24 @@ select {
   gap: 10px;
 }
 
+.file-list {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  display: grid;
+  font-size: 13px;
+  gap: 4px;
+  margin: -2px 0 12px;
+  max-height: 130px;
+  overflow: auto;
+  padding: 8px 10px;
+}
+
+.file-list div {
+  overflow-wrap: anywhere;
+}
+
 .button {
   align-items: center;
   background: var(--green);

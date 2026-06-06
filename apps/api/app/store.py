@@ -19,6 +19,7 @@ from app.core.security import (
     token_hint,
     verify_password,
 )
+from app.services.object_store import is_local_backend, local_upload_object_uri, safe_filename
 
 
 @dataclass
@@ -419,13 +420,24 @@ class InMemoryStore:
         self, *, case_id: str, filename: str, content_type: str | None, size_bytes: int
     ) -> UploadRecord:
         upload_id = str(uuid.uuid4())
+        stored_filename = safe_filename(filename)
+        object_uri = (
+            local_upload_object_uri(
+                case_id=case_id,
+                file_id=upload_id,
+                filename=stored_filename,
+                app_settings=self.settings,
+            )
+            if is_local_backend(self.settings)
+            else f"memory://uploads/{case_id}/{upload_id}/{stored_filename}"
+        )
         record = UploadRecord(
             id=upload_id,
             case_id=case_id,
             filename=filename,
             content_type=content_type,
             size_bytes=size_bytes,
-            object_uri=f"memory://uploads/{case_id}/{upload_id}/{filename}",
+            object_uri=object_uri,
         )
         self.uploads[upload_id] = record
         if case_id in self.cases:

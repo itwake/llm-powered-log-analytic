@@ -62,13 +62,24 @@ Streaming `/responses` and `/api/chat/stream` are deferred to the next runtime s
 - `GET /api/cases`
 - `GET /api/cases/{case_id}`
 - `POST /api/cases/{case_id}/uploads`
+- `PUT /api/cases/{case_id}/uploads/{file_id}/content`
 - `POST /api/cases/{case_id}/uploads/{file_id}/complete`
 - `POST /api/cases/{case_id}/analysis-runs`
 - `GET /api/cases/{case_id}/analysis-runs`
 - `GET /api/cases/{case_id}/analysis-runs/{run_id}`
 
-For local tests, `POST /api/cases/{case_id}/analysis-runs` accepts `input_paths` in addition to `input_file_ids`, allowing the synchronous pipeline to run against fixture files.
-When `input_paths` is empty, the local synchronous store path uses the checkout incident fixture files for deterministic development and tests.
+`POST /api/cases/{case_id}/uploads` creates metadata and returns an API `upload_url`. With the
+default `LOGAN_OBJECT_STORE_BACKEND=local`, clients `PUT` raw file bytes to that URL. The API
+writes bytes under `LOGAN_LOCAL_OBJECT_STORE_DIR`, computes sha256 and size, marks the upload
+complete, and stores a local `file://` object URI. `POST /complete` is idempotent for matching
+sha256 values and returns `409` for conflicting sha256 values.
+
+`POST /api/cases/{case_id}/analysis-runs` accepts `input_file_ids` for completed uploads and
+converts local `file://` object URIs to filesystem paths before invoking the synchronous worker
+pipeline. Missing uploads, wrong-case uploads, incomplete uploads, non-file-backed uploads, and
+missing local content return explicit `404` or `400` responses. For local tests, the route also
+accepts `input_paths`. When no paths or file ids are provided, the local synchronous store path
+uses the checkout incident fixture files for deterministic development and tests.
 `GET /api/cases/{case_id}/analysis-runs` returns `items` with `analysis_run_id`, `run_number`, `status`, `current_step`, `progress`, `started_at`, `completed_at`, `error_message`, `model_provider`, and `model_name`.
 
 ## Reports

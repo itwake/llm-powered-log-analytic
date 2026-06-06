@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import hashlib
+import io
 from pathlib import Path
+import zipfile
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from logan_workers.activities.inference import MockCopilotAnnotationGateway
 
+from app.config import Settings
 from app.main import create_app
 from app.services.copilot_auth_service import DeviceCodePollResult, MockGitHubDeviceClient
 from app.store import InMemoryStore
@@ -15,8 +19,10 @@ from app.store import InMemoryStore
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 
 
-async def _authenticated_client() -> tuple[AsyncClient, str]:
-    store = InMemoryStore()
+async def _authenticated_client(
+    app_settings: Settings | None = None,
+) -> tuple[AsyncClient, InMemoryStore, str]:
+    store = InMemoryStore(app_settings or Settings())
     app = create_app(
         store=store,
         copilot_auth_client=MockGitHubDeviceClient(),
@@ -39,12 +45,53 @@ async def _authenticated_client() -> tuple[AsyncClient, str]:
         json={"email_or_username": "engineer", "password": "password123"},
     )
     assert login.status_code == 200
-    return client, store.users_by_username["engineer"]
+    return client, store, store.users_by_username["engineer"]
+
+
+async def _create_case(client: AsyncClient) -> str:
+    case = await client.post(
+        "/api/cases",
+        json={
+            "title": "Checkout API intermittent 500 errors",
+            "issue_description": "Customers report intermittent 500 during checkout.",
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "production",
+            "incident_start": "2026-06-06T10:00:00Z",
+            "incident_end": "2026-06-06T11:00:00Z",
+            "timezone": "UTC",
+        },
+    )
+    assert case.status_code == 200, case.text
+    return str(case.json()["case_id"])
+
+
+async def _upload_content(
+    client: AsyncClient,
+    *,
+    case_id: str,
+    filename: str,
+    content_type: str,
+    content: bytes,
+) -> dict[str, object]:
+    upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": filename, "content_type": content_type, "size_bytes": len(content)},
+    )
+    assert upload.status_code == 200, upload.text
+    assert upload.json()["upload_url"].startswith("http://testserver/api/cases/")
+    put = await client.put(
+        upload.json()["upload_url"],
+        content=content,
+        headers={"content-type": content_type},
+    )
+    assert put.status_code == 200, put.text
+    return put.json()
 
 
 @pytest.mark.asyncio
 async def test_auth_and_copilot_auth_api() -> None:
-    client, _ = await _authenticated_client()
+    client, _, _ = await _authenticated_client()
     me = await client.get("/api/auth/me")
     assert me.status_code == 200
     assert me.json()["user"]["has_copilot_credential"] is False
@@ -104,33 +151,23 @@ async def test_copilot_auth_api_responses_never_include_token_material() -> None
 
 
 @pytest.mark.asyncio
-async def test_case_analysis_report_and_feedback_apis() -> None:
-    client, _ = await _authenticated_client()
-    case = await client.post(
-        "/api/cases",
-        json={
-            "title": "Checkout API intermittent 500 errors",
-            "issue_description": "Customers report intermittent 500 during checkout.",
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "production",
-            "incident_start": "2026-06-06T10:00:00Z",
-            "incident_end": "2026-06-06T11:00:00Z",
-            "timezone": "UTC",
-        },
+async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
+    client, _, _ = await _authenticated_client(
+        Settings(local_object_store_dir=str(tmp_path / "object-store"))
     )
-    assert case.status_code == 200
-    case_id = case.json()["case_id"]
+    case_id = await _create_case(client)
 
-    upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "logs.zip", "content_type": "application/zip", "size_bytes": 123},
+    content = b"2026-06-06T10:00:00Z ERROR gateway request failed status=500 path=/checkout\n"
+    uploaded = await _upload_content(
+        client,
+        case_id=case_id,
+        filename="gateway.log",
+        content_type="text/plain",
+        content=content,
     )
-    assert upload.status_code == 200
-    file_id = upload.json()["file_id"]
     complete = await client.post(
-        f"/api/cases/{case_id}/uploads/{file_id}/complete",
-        json={"sha256": "abc123"},
+        f"/api/cases/{case_id}/uploads/{uploaded['file_id']}/complete",
+        json={"sha256": uploaded["sha256"]},
     )
     assert complete.status_code == 200
 
@@ -220,4 +257,127 @@ async def test_case_analysis_report_and_feedback_apis() -> None:
     assert "candidate" in chat.json()["message"].lower()
     tasks = await client.post("/api/tasks/execute", json={"task_name": "noop", "arguments": {}})
     assert tasks.json()["runtime_type"] == "github_copilot"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_raw_byte_upload_complete_idempotent_and_analysis_by_input_file_ids(
+    tmp_path: Path,
+) -> None:
+    client, store, _ = await _authenticated_client(
+        Settings(local_object_store_dir=str(tmp_path / "object-store"))
+    )
+    case_id = await _create_case(client)
+    content = (
+        b"2026-06-06T10:00:00Z ERROR payment-service timeout calling auth-service "
+        b"duration_ms=30000\n"
+        b"2026-06-06T10:00:01Z ERROR gateway request failed status=500 path=/checkout\n"
+    )
+
+    uploaded = await _upload_content(
+        client,
+        case_id=case_id,
+        filename="../incident.log",
+        content_type="text/plain",
+        content=content,
+    )
+    file_id = str(uploaded["file_id"])
+    assert uploaded["sha256"] == hashlib.sha256(content).hexdigest()
+    assert uploaded["size_bytes"] == len(content)
+    upload_record = store.get_upload(file_id)
+    assert upload_record is not None
+    assert upload_record.object_uri.startswith("file://")
+    assert upload_record.object_uri.endswith("/incident.log")
+
+    complete = await client.post(
+        f"/api/cases/{case_id}/uploads/{file_id}/complete",
+        json={"sha256": uploaded["sha256"]},
+    )
+    assert complete.status_code == 200, complete.text
+    second_complete = await client.post(
+        f"/api/cases/{case_id}/uploads/{file_id}/complete",
+        json={"sha256": uploaded["sha256"]},
+    )
+    assert second_complete.status_code == 200, second_complete.text
+
+    run = await client.post(
+        f"/api/cases/{case_id}/analysis-runs",
+        json={
+            "input_file_ids": [file_id],
+            "config": {"default_window_size_seconds": 60},
+        },
+    )
+    assert run.status_code == 200, run.text
+    run_id = run.json()["analysis_run_id"]
+    status = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")
+    assert status.status_code == 200, status.text
+    assert status.json()["status"] == "completed"
+    assert status.json()["progress"]["files_processed"] == 1
+    assert status.json()["progress"]["raw_lines"] == 2
+    logs = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/logs")
+    assert {item["file_path"] for item in logs.json()["items"]} == {"incident.log"}
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_zip_upload_analysis_by_input_file_ids_ingests_archive(tmp_path: Path) -> None:
+    client, _, _ = await _authenticated_client(
+        Settings(local_object_store_dir=str(tmp_path / "object-store"))
+    )
+    case_id = await _create_case(client)
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as zip_file:
+        zip_file.writestr(
+            "gateway.log",
+            "2026-06-06T10:00:00Z ERROR gateway request failed status=500 path=/checkout\n",
+        )
+        zip_file.writestr(
+            "auth/auth.log",
+            "2026-06-06T10:00:01Z ERROR auth-service failed to acquire db connection\n",
+        )
+    content = archive.getvalue()
+
+    uploaded = await _upload_content(
+        client,
+        case_id=case_id,
+        filename="logs.zip",
+        content_type="application/zip",
+        content=content,
+    )
+    run = await client.post(
+        f"/api/cases/{case_id}/analysis-runs",
+        json={
+            "input_file_ids": [uploaded["file_id"]],
+            "config": {"default_window_size_seconds": 60},
+        },
+    )
+    assert run.status_code == 200, run.text
+    run_id = run.json()["analysis_run_id"]
+    status = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")
+    assert status.status_code == 200, status.text
+    assert status.json()["progress"]["files_processed"] == 2
+    assert status.json()["progress"]["raw_lines"] == 2
+    logs = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/logs")
+    assert {item["file_path"] for item in logs.json()["items"]} == {"auth/auth.log", "gateway.log"}
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_upload_complete_sha_mismatch_returns_conflict(tmp_path: Path) -> None:
+    client, _, _ = await _authenticated_client(
+        Settings(local_object_store_dir=str(tmp_path / "object-store"))
+    )
+    case_id = await _create_case(client)
+    uploaded = await _upload_content(
+        client,
+        case_id=case_id,
+        filename="payment.log",
+        content_type="text/plain",
+        content=b"2026-06-06T10:00:00Z ERROR payment-service timeout calling auth-service\n",
+    )
+    mismatch = await client.post(
+        f"/api/cases/{case_id}/uploads/{uploaded['file_id']}/complete",
+        json={"sha256": "0" * 64},
+    )
+    assert mismatch.status_code == 409
     await client.aclose()

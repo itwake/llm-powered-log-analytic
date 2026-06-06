@@ -20,6 +20,11 @@ PostgreSQL URL such as `postgresql+psycopg://logan:logan@postgres:5432/logan`.
 `LOGAN_STORE_BACKEND=auto` selects SQLAlchemy when `LOGAN_DATABASE_URL` is set; `memory`
 and `sqlalchemy` force a backend explicitly.
 
+Uploads use `LOGAN_OBJECT_STORE_BACKEND=local` by default. The API returns an authenticated
+`PUT /api/cases/{case_id}/uploads/{file_id}/content` URL, writes raw bytes to
+`LOGAN_LOCAL_OBJECT_STORE_DIR` or `.logan/object-store`, records a `file://` object URI, and
+passes completed upload paths to the worker pipeline through `input_file_ids`.
+
 The default API path uses real GitHub Copilot auth and model calls:
 
 - `POST /api/copilot/auth/start` starts GitHub device-code auth.
@@ -36,9 +41,10 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web
 
 `NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. The web client sends
 browser requests with `credentials: "include"` for the `logan_session` cookie. The current
-workbench creates cases, starts sample/local analysis with no `input_paths`, lists real runs,
-loads report views from API endpoints, submits feedback/exports, and drives Copilot device
-auth start/check through the backend.
+workbench creates cases, uploads selected log/archive files, starts analysis by
+`input_file_ids`, preserves a sample/local fixture run action, lists real runs, loads report
+views from API endpoints, submits feedback/exports, and drives Copilot device auth start/check
+through the backend.
 
 Run the full service skeleton:
 
@@ -51,8 +57,8 @@ docker compose up --build
 - Fan out serialized `AnalysisResult` artifacts into normalized PostgreSQL tables, ClickHouse, and OpenSearch.
 - Persist enriched logs and window aggregates into ClickHouse.
 - Index redacted/normalized logs into OpenSearch.
-- Implement real S3/MinIO object bytes and presigned uploads instead of durable metadata placeholders.
-- Add real object-byte upload UX in the web app; current web flow only starts sample/local analysis.
+- Add an S3/MinIO presigned object-store adapter for production deployments.
+- Add resumable/multipart uploads for large files and interrupted browser sessions.
 - Cache Copilot plugin tokens until their `expires_at` instead of exchanging the source token per model call.
 - Add credential revocation/disconnect endpoints and UI.
 - Implement Copilot `/responses` streaming plus `/api/chat/stream` SSE.

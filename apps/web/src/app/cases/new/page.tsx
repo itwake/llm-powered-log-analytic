@@ -27,6 +27,7 @@ export default function NewCasePage() {
   const [environment, setEnvironment] = useState("");
   const [incidentStart, setIncidentStart] = useState("");
   const [incidentEnd, setIncidentEnd] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [submitMode, setSubmitMode] = useState<"create" | "start">("create");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -51,7 +52,11 @@ export default function NewCasePage() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
       if (mode === "start") {
+        const uploaded = selectedFiles.length
+          ? await casesApi.uploadFiles(created.case_id, selectedFiles)
+          : [];
         const run = await runsApi.start(created.case_id, {
+          input_file_ids: uploaded.map((file) => file.file_id),
           input_paths: [],
           config: {default_window_size_seconds: 60},
         });
@@ -65,6 +70,10 @@ export default function NewCasePage() {
       setSubmitting(false);
     }
   }
+
+  const startButtonLabel = selectedFiles.length
+    ? "Create, upload, and analyze files"
+    : "Create and start sample/local analysis";
 
   return (
     <Shell>
@@ -111,6 +120,22 @@ export default function NewCasePage() {
               onChange={(event) => setIncidentEnd(event.target.value)}
             />
           </label>
+          <label className="field">
+            Log/archive files
+            <input
+              accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
+              multiple
+              type="file"
+              onChange={(event) => setSelectedFiles(Array.from(event.target.files || []))}
+            />
+          </label>
+          {selectedFiles.length > 0 && (
+            <div className="file-list">
+              {selectedFiles.map((file) => (
+                <div key={`${file.name}-${file.size}`}>{file.name}</div>
+              ))}
+            </div>
+          )}
           <div className="form-actions">
             <button
               className="button"
@@ -128,13 +153,18 @@ export default function NewCasePage() {
               type="submit"
               value="start"
             >
-              {submitting && submitMode === "start" ? "Starting" : "Create and start sample/local analysis"}
+              {submitting && submitMode === "start" ? "Starting" : startButtonLabel}
             </button>
           </div>
         </form>
         <div className="panel">
           <h2>Evidence</h2>
-          <div className="empty">Object-byte upload not connected in this stage</div>
+          <p className="muted">
+            Selected log and archive files are uploaded to the local object store before analysis.
+          </p>
+          <p className="muted">
+            With no files selected, the sample/local action runs the deterministic fixture set.
+          </p>
         </div>
       </section>
     </Shell>

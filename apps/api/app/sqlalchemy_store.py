@@ -25,6 +25,7 @@ from app.core.security import (
 )
 from app.db import Base
 from app.models import tables
+from app.services.object_store import is_local_backend, local_upload_object_uri, safe_filename
 from app.store import (
     AnalysisRunRecord,
     AuditLogRecord,
@@ -345,7 +346,17 @@ class SQLAlchemyStore:
         self, *, case_id: str, filename: str, content_type: str | None, size_bytes: int
     ) -> UploadRecord:
         upload_id = str(uuid.uuid4())
-        object_uri = f"memory://uploads/{case_id}/{upload_id}/{filename}"
+        stored_filename = safe_filename(filename)
+        object_uri = (
+            local_upload_object_uri(
+                case_id=case_id,
+                file_id=upload_id,
+                filename=stored_filename,
+                app_settings=self.settings,
+            )
+            if is_local_backend(self.settings)
+            else f"memory://uploads/{case_id}/{upload_id}/{stored_filename}"
+        )
         with self._session() as session:
             upload = tables.RawFile(
                 id=upload_id,

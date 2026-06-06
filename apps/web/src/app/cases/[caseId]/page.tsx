@@ -30,8 +30,9 @@ export default function CaseWorkspacePage() {
   const router = useRouter();
   const [caseRecord, setCaseRecord] = useState<CaseResponse | null>(null);
   const [runs, setRuns] = useState<AnalysisRunResponse[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(true);
-  const [starting, setStarting] = useState(false);
+  const [starting, setStarting] = useState<"files" | "sample" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -55,8 +56,29 @@ export default function CaseWorkspacePage() {
     void load();
   }, [caseId]);
 
-  async function startAnalysis() {
-    setStarting(true);
+  async function startUploadedAnalysis() {
+    if (selectedFiles.length === 0) {
+      setError("Select at least one log or archive file to upload.");
+      return;
+    }
+    setStarting("files");
+    setError(null);
+    try {
+      const uploaded = await casesApi.uploadFiles(caseId, selectedFiles);
+      const run = await runsApi.start(caseId, {
+        input_file_ids: uploaded.map((file) => file.file_id),
+        config: {default_window_size_seconds: 60},
+      });
+      router.push(`/cases/${caseId}/runs/${run.analysis_run_id}/summary`);
+    } catch (caught) {
+      setError(apiErrorMessage(caught));
+    } finally {
+      setStarting(null);
+    }
+  }
+
+  async function startSampleAnalysis() {
+    setStarting("sample");
     setError(null);
     try {
       const run = await runsApi.start(caseId, {
@@ -67,7 +89,7 @@ export default function CaseWorkspacePage() {
     } catch (caught) {
       setError(apiErrorMessage(caught));
     } finally {
-      setStarting(false);
+      setStarting(null);
     }
   }
 
@@ -77,11 +99,11 @@ export default function CaseWorkspacePage() {
     <Shell caseId={caseId} runId={latestRun?.analysis_run_id} caseTitle={caseRecord?.title}>
       <div className="toolbar">
         <h1>Case Workspace</h1>
-        <button className="button" disabled={starting} type="button" onClick={startAnalysis}>
-          {starting ? "Starting" : "Start sample/local analysis"}
-        </button>
         {latestRun && (
-          <Link className="button secondary" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}>
+          <Link
+            className="button secondary"
+            href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}
+          >
             Open latest report
           </Link>
         )}
@@ -96,6 +118,48 @@ export default function CaseWorkspacePage() {
             <Metric label="Case status" value={caseRecord.status} />
             <Metric label="Runs" value={String(runs.length)} />
             <Metric label="Latest templates" value={progressValue(latestRun, "templates")} />
+          </section>
+
+          <section className="panel" style={{marginTop: 14}}>
+            <h2>Run Analysis</h2>
+            <label className="field">
+              Log/archive files
+              <input
+                accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
+                multiple
+                type="file"
+                onChange={(event) => setSelectedFiles(Array.from(event.target.files || []))}
+              />
+            </label>
+            {selectedFiles.length > 0 && (
+              <div className="file-list">
+                {selectedFiles.map((file) => (
+                  <div key={`${file.name}-${file.size}`}>{file.name}</div>
+                ))}
+              </div>
+            )}
+            <div className="form-actions">
+              <button
+                className="button"
+                disabled={starting !== null || selectedFiles.length === 0}
+                type="button"
+                onClick={startUploadedAnalysis}
+              >
+                {starting === "files" ? "Uploading" : "Upload and analyze files"}
+              </button>
+              <button
+                className="button secondary"
+                disabled={starting !== null}
+                type="button"
+                onClick={startSampleAnalysis}
+              >
+                {starting === "sample" ? "Starting" : "Start sample/local analysis"}
+              </button>
+            </div>
+            <p className="muted">
+              Uploaded files run through the local object store. The sample/local action uses the
+              deterministic fixture set.
+            </p>
           </section>
 
           <section className="grid two" style={{marginTop: 14}}>
@@ -135,7 +199,7 @@ export default function CaseWorkspacePage() {
 
           <section className="panel" style={{marginTop: 14}}>
             <h2>Analysis Runs</h2>
-            {runs.length === 0 && <div className="empty">Start a sample/local analysis to create a run</div>}
+            {runs.length === 0 && <div className="empty">No analysis runs</div>}
             {runs.length > 0 && (
               <div className="table-wrap">
                 <table>

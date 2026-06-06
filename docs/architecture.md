@@ -23,7 +23,7 @@ case files
   -> Markdown, HTML, JSON exports
 ```
 
-Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services, and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy; tests can still inject the deterministic in-memory store, fake device-code client, and mock model gateway so no Docker services or external model network are required.
+Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services, and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy. Uploaded bytes use a local disk object store by default, so tests can still inject the deterministic in-memory store, fake device-code client, and mock model gateway with no Docker services or external model network required.
 
 The API owns runtime injection points on app state:
 
@@ -51,6 +51,7 @@ Causal edges are candidate relationships only. API and worker fields use `candid
 
 - Replace `StableDrainAdapter` with `drain3` behind the same `cluster()` interface.
 - Fan out metadata-backed analysis results into ClickHouse, OpenSearch, and S3 object storage adapters.
+- Add S3/MinIO presigned uploads and resumable/multipart support behind the object-store seam.
 - Replace synchronous orchestration with Temporal workflow activities.
 - Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.
 - Add Copilot plugin-token expiry caching and revocation flows.

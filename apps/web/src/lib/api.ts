@@ -36,6 +36,16 @@ function withQuery(path: string, query?: QueryParams): string {
   return search ? `${path}?${search}` : path;
 }
 
+function apiUrl(pathOrUrl: string): string {
+  if (/^https?:\/\//i.test(pathOrUrl)) {
+    return pathOrUrl;
+  }
+  if (pathOrUrl.startsWith("/")) {
+    return `${API_BASE_URL}${pathOrUrl}`;
+  }
+  return `${API_BASE_URL}/${pathOrUrl}`;
+}
+
 async function parseResponse(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
@@ -77,6 +87,24 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
     return undefined as T;
   }
   return (await parseResponse(response)) as T;
+}
+
+async function uploadRawFile(uploadUrl: string, file: File): Promise<UploadContentResponse> {
+  const headers = new Headers();
+  if (file.type) {
+    headers.set("content-type", file.type);
+  }
+  const response = await fetch(apiUrl(uploadUrl), {
+    method: "PUT",
+    body: file,
+    credentials: "include",
+    headers,
+  });
+  if (!response.ok) {
+    const payload = await parseResponse(response);
+    throw new ApiError(response.status, errorMessage(response.status, payload), payload);
+  }
+  return (await parseResponse(response)) as UploadContentResponse;
 }
 
 export interface UserOut {
@@ -143,7 +171,7 @@ export interface UploadRequest {
 export interface UploadStartResponse {
   file_id: string;
   upload_url: string;
-  object_uri: string;
+  object_uri?: string | null;
   expires_in: number;
 }
 
@@ -151,6 +179,14 @@ export interface UploadCompleteResponse {
   file_id: string;
   status: string;
   sha256: string;
+  size_bytes?: number;
+}
+
+export interface UploadContentResponse {
+  file_id: string;
+  status: string;
+  sha256: string;
+  size_bytes: number;
 }
 
 export interface AnalysisRunRequest {
@@ -390,6 +426,19 @@ export const casesApi = {
       method: "POST",
       body: {sha256},
     }),
+  uploadContent: (uploadUrl: string, file: File) => uploadRawFile(uploadUrl, file),
+  uploadFiles: async (caseId: string, files: File[]) => {
+    const uploaded: UploadContentResponse[] = [];
+    for (const file of files) {
+      const upload = await casesApi.requestUpload(caseId, {
+        filename: file.name || "upload.bin",
+        content_type: file.type || null,
+        size_bytes: file.size,
+      });
+      uploaded.push(await casesApi.uploadContent(upload.upload_url, file));
+    }
+    return uploaded;
+  },
 };
 
 export const runsApi = {

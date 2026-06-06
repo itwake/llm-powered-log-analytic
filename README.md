@@ -2,7 +2,7 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with an in-memory test option, synchronous worker pipeline, synthetic checkout incident fixtures, tests, a Next.js workbench shell, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with an in-memory test option, local object-byte uploads, synchronous worker pipeline, synthetic checkout incident fixtures, tests, a Next.js workbench shell, and deployment scaffolding.
 
 ## Architecture
 
@@ -55,6 +55,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web
 `NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. Browser API calls use
 `credentials: "include"` so the FastAPI `logan_session` cookie is sent to the backend.
 The default local API uses in-memory metadata unless `LOGAN_DATABASE_URL` is set.
+Uploaded bytes use the local object store by default and are written under
+`.logan/object-store` unless `LOGAN_LOCAL_OBJECT_STORE_DIR` is set.
 
 ## Representative Lines Only
 
@@ -86,6 +88,8 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_LLM_PROVIDER=github_copilot`
 - `LOGAN_DATABASE_URL=` unset by default for lightweight local memory mode; set to `sqlite:///...` for local durable tests or `postgresql+psycopg://user:pass@host:5432/db` for PostgreSQL.
 - `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy when `LOGAN_DATABASE_URL` is set and memory otherwise. Use `memory` or `sqlalchemy` to force a backend.
+- `LOGAN_OBJECT_STORE_BACKEND=local`; local uploads store real file bytes on disk and record `file://` object URIs.
+- `LOGAN_LOCAL_OBJECT_STORE_DIR=.logan/object-store` relative to the API process working directory by default.
 - `LOGAN_COPILOT_MODEL=gpt-5.4`
 - `LOGAN_COPILOT_REASONING_EFFORT=high`
 - `LOGAN_COPILOT_OAUTH_CLIENT_ID=Iv1.b507a08c87ecfe98`
@@ -101,4 +105,4 @@ See `.env.example` for the full list. Key defaults:
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are Copilot plugin-token expiry caching/revocation, `/api/chat/stream` SSE wiring, ClickHouse/OpenSearch fan-out for analysis artifacts, real S3/MinIO object bytes and presigned uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are Copilot plugin-token expiry caching/revocation, `/api/chat/stream` SSE wiring, ClickHouse/OpenSearch fan-out for analysis artifacts, S3/MinIO presigned object-store adapters, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.

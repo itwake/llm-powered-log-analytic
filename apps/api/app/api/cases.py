@@ -21,6 +21,13 @@ from app.schemas.case import (
     UploadRequest,
 )
 from app.services.copilot_model_gateway import CopilotCredentialError, CopilotGatewayError
+from app.services.object_store import (
+    digest_bytes,
+    file_uri_to_path,
+    is_local_backend,
+    stat_object,
+    write_bytes,
+)
 from app.store import MetadataStore, UserRecord
 
 
@@ -63,6 +70,37 @@ def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _require_upload_for_case(store: MetadataStore, case_id: str, file_id: str):
+    upload = store.get_upload(file_id)
+    if not upload or upload.case_id != case_id:
+        raise HTTPException(status_code=404, detail="upload not found for case")
+    return upload
+
+
+def _completed_upload_response(upload: Any, *, size_bytes: int | None = None) -> dict[str, object]:
+    return {
+        "file_id": upload.id,
+        "status": "completed",
+        "sha256": upload.sha256,
+        "size_bytes": upload.size_bytes if size_bytes is None else size_bytes,
+    }
+
+
+def _upload_path_for_analysis(upload: Any) -> str:
+    if not upload.completed:
+        raise HTTPException(status_code=400, detail=f"upload {upload.id} is not completed")
+    try:
+        path = file_uri_to_path(upload.object_uri)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"upload {upload.id} is not file-backed and cannot be analyzed locally",
+        ) from exc
+    if not path.is_file():
+        raise HTTPException(status_code=400, detail=f"upload {upload.id} content is missing")
+    return str(path)
 
 
 @router.post("", response_model=CaseResponse)
@@ -110,6 +148,7 @@ def get_case(
 
 @router.post("/{case_id}/uploads")
 def request_upload(
+    request: Request,
     case_id: str,
     payload: UploadRequest,
     user: UserRecord = Depends(current_user),
@@ -124,12 +163,53 @@ def request_upload(
         content_type=payload.content_type,
         size_bytes=payload.size_bytes,
     )
+    upload_url = (
+        str(request.url_for("upload_content", case_id=case_id, file_id=upload.id))
+        if is_local_backend(store.settings)
+        else upload.object_uri
+    )
     return {
         "file_id": upload.id,
-        "upload_url": upload.object_uri,
+        "upload_url": upload_url,
         "object_uri": upload.object_uri,
         "expires_in": 900,
     }
+
+
+@router.put("/{case_id}/uploads/{file_id}/content", name="upload_content")
+async def upload_content(
+    request: Request,
+    case_id: str,
+    file_id: str,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> dict[str, object]:
+    del user
+    upload_record = _require_upload_for_case(store, case_id, file_id)
+    content = await request.body()
+    sha256, size_bytes = digest_bytes(content)
+    if upload_record.size_bytes != size_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"upload size mismatch: expected {upload_record.size_bytes} bytes, "
+                f"received {size_bytes} bytes"
+            ),
+        )
+    if upload_record.completed and upload_record.sha256 != sha256:
+        raise HTTPException(
+            status_code=409,
+            detail="upload already completed with different sha256",
+        )
+    try:
+        stored = write_bytes(upload_record.object_uri, content)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="raw upload content is only supported for local file-backed uploads",
+        ) from exc
+    upload = store.complete_upload(upload_id=file_id, sha256=stored.sha256)
+    return _completed_upload_response(upload, size_bytes=stored.size_bytes)
 
 
 @router.post("/{case_id}/uploads/{file_id}/complete")
@@ -141,11 +221,34 @@ def complete_upload(
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
     del user
-    upload_record = store.get_upload(file_id)
-    if not upload_record or upload_record.case_id != case_id:
-        raise HTTPException(status_code=404, detail="upload not found")
+    upload_record = _require_upload_for_case(store, case_id, file_id)
+    if upload_record.completed:
+        if upload_record.sha256 != payload.sha256:
+            raise HTTPException(
+                status_code=409,
+                detail="upload already completed with different sha256",
+            )
+        return _completed_upload_response(upload_record)
+    if upload_record.object_uri.startswith("file://"):
+        try:
+            stored = stat_object(upload_record.object_uri)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail="upload content has not been uploaded") from exc
+        if upload_record.size_bytes != stored.size_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"upload size mismatch: expected {upload_record.size_bytes} bytes, "
+                    f"found {stored.size_bytes} bytes"
+                ),
+            )
+        if stored.sha256 != payload.sha256:
+            raise HTTPException(
+                status_code=409,
+                detail="upload sha256 does not match stored content",
+            )
     upload = store.complete_upload(upload_id=file_id, sha256=payload.sha256)
-    return {"file_id": upload.id, "status": "completed", "sha256": upload.sha256}
+    return _completed_upload_response(upload)
 
 
 @router.post("/{case_id}/analysis-runs")
@@ -160,9 +263,8 @@ async def start_analysis(
         raise HTTPException(status_code=404, detail="case not found")
     input_paths = list(payload.input_paths)
     for file_id in payload.input_file_ids:
-        upload = store.get_upload(file_id)
-        if upload and upload.object_uri.startswith("file://"):
-            input_paths.append(upload.object_uri.removeprefix("file://"))
+        upload = _require_upload_for_case(store, case_id, file_id)
+        input_paths.append(_upload_path_for_analysis(upload))
     try:
         run = await store.start_analysis(
             case_id=case_id,
