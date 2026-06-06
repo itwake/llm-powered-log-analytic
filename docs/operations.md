@@ -28,6 +28,18 @@ The default API path uses real GitHub Copilot auth and model calls:
 
 The test suite injects fake auth/model clients and does not require GitHub network access.
 
+Run the web workspace against the local API:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web dev
+```
+
+`NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. The web client sends
+browser requests with `credentials: "include"` for the `logan_session` cookie. The current
+workbench creates cases, starts sample/local analysis with no `input_paths`, lists real runs,
+loads report views from API endpoints, submits feedback/exports, and drives Copilot device
+auth start/check through the backend.
+
 Run the full service skeleton:
 
 ```bash
@@ -40,6 +52,7 @@ docker compose up --build
 - Persist enriched logs and window aggregates into ClickHouse.
 - Index redacted/normalized logs into OpenSearch.
 - Implement real S3/MinIO object bytes and presigned uploads instead of durable metadata placeholders.
+- Add real object-byte upload UX in the web app; current web flow only starts sample/local analysis.
 - Cache Copilot plugin tokens until their `expires_at` instead of exchanging the source token per model call.
 - Add credential revocation/disconnect endpoints and UI.
 - Implement Copilot `/responses` streaming plus `/api/chat/stream` SSE.
@@ -47,6 +60,7 @@ docker compose up --build
 - Add PGEM and Granger methods behind the current causal method seams.
 - Expand RBAC, collaborators, admin settings, audit log UI/API, retention jobs, and rate limits.
 - Add Playwright e2e tests once the web app is connected to a running API.
+- Consider ECharts/Cytoscape or similar libraries for richer temporal and graph visualization.
 - Add Prometheus/OpenTelemetry instrumentation.
 
 These gaps are explicitly deferred from this first foundation commit; they are not hidden behind static stubs in the tested local path.

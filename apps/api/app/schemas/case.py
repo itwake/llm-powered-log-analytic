@@ -46,6 +46,24 @@ class AnalysisRunRequest(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
+class AnalysisRunResponse(BaseModel):
+    analysis_run_id: str
+    run_number: int
+    status: str
+    current_step: str
+    progress: dict[str, Any] = Field(default_factory=dict)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    error_message: str | None = None
+    model_provider: str
+    model_name: str
+
+
+class AnalysisRunListResponse(BaseModel):
+    items: list[AnalysisRunResponse]
+    total: int
+
+
 class ExportRequest(BaseModel):
     export_type: str
     include_sections: list[str] = Field(default_factory=list)

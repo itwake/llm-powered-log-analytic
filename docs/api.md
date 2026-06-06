@@ -64,9 +64,12 @@ Streaming `/responses` and `/api/chat/stream` are deferred to the next runtime s
 - `POST /api/cases/{case_id}/uploads`
 - `POST /api/cases/{case_id}/uploads/{file_id}/complete`
 - `POST /api/cases/{case_id}/analysis-runs`
+- `GET /api/cases/{case_id}/analysis-runs`
 - `GET /api/cases/{case_id}/analysis-runs/{run_id}`
 
 For local tests, `POST /api/cases/{case_id}/analysis-runs` accepts `input_paths` in addition to `input_file_ids`, allowing the synchronous pipeline to run against fixture files.
+When `input_paths` is empty, the local synchronous store path uses the checkout incident fixture files for deterministic development and tests.
+`GET /api/cases/{case_id}/analysis-runs` returns `items` with `analysis_run_id`, `run_number`, `status`, `current_step`, `progress`, `started_at`, `completed_at`, `error_message`, `model_provider`, and `model_name`.
 
 ## Reports
 

@@ -146,6 +146,20 @@ async def test_case_analysis_report_and_feedback_apis() -> None:
     status = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")
     assert status.json()["status"] == "completed"
     assert status.json()["progress"]["templates"] > 0
+    run_list = await client.get(f"/api/cases/{case_id}/analysis-runs")
+    assert run_list.status_code == 200
+    assert run_list.json()["total"] == 1
+    listed_run = run_list.json()["items"][0]
+    assert listed_run["analysis_run_id"] == run_id
+    assert listed_run["run_number"] == 1
+    assert listed_run["status"] == "completed"
+    assert listed_run["current_step"] == "completed"
+    assert listed_run["progress"]["templates"] > 0
+    assert listed_run["started_at"]
+    assert listed_run["completed_at"]
+    assert listed_run["error_message"] is None
+    assert listed_run["model_provider"] == "github_copilot"
+    assert listed_run["model_name"]
 
     summary = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
     body = summary.json()

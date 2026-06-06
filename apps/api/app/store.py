@@ -224,6 +224,8 @@ class MetadataStore(Protocol):
 
     def get_analysis_run(self, run_id: str) -> AnalysisRunRecord | None: ...
 
+    def list_analysis_runs(self, case_id: str) -> list[AnalysisRunRecord]: ...
+
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None: ...
 
     def create_export(
@@ -520,6 +522,13 @@ class InMemoryStore:
 
     def get_analysis_run(self, run_id: str) -> AnalysisRunRecord | None:
         return self.runs.get(run_id)
+
+    def list_analysis_runs(self, case_id: str) -> list[AnalysisRunRecord]:
+        return sorted(
+            [run for run in self.runs.values() if run.case_id == case_id],
+            key=lambda run: run.run_number,
+            reverse=True,
+        )
 
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
         run = self.runs.get(run_id)

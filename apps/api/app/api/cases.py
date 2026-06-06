@@ -10,7 +10,9 @@ from logan_workers.models import OFFENDING_SIGNALS
 
 from app.dependencies import current_user, get_model_gateway, get_store
 from app.schemas.case import (
+    AnalysisRunListResponse,
     AnalysisRunRequest,
+    AnalysisRunResponse,
     CaseCreateRequest,
     CaseResponse,
     ExportRequest,
@@ -37,6 +39,23 @@ def _case_response(record: Any) -> CaseResponse:
         incident_start=record.incident_start,
         incident_end=record.incident_end,
         timezone=record.timezone,
+    )
+
+
+def _analysis_run_response(record: Any) -> AnalysisRunResponse:
+    progress = record.progress or (record.result.progress if record.result else {})
+    current_step = progress.get("current_step") if isinstance(progress, dict) else None
+    return AnalysisRunResponse(
+        analysis_run_id=record.id,
+        run_number=record.run_number,
+        status=record.status,
+        current_step=str(current_step or ("completed" if record.status == "completed" else record.status)),
+        progress=progress,
+        started_at=record.started_at,
+        completed_at=record.completed_at,
+        error_message=record.error_message,
+        model_provider=record.model_provider,
+        model_name=record.model_name,
     )
 
 
@@ -159,6 +178,22 @@ async def start_analysis(
     return {"analysis_run_id": run.id, "status": run.status}
 
 
+@router.get("/{case_id}/analysis-runs", response_model=AnalysisRunListResponse)
+def list_analysis_runs(
+    case_id: str,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> AnalysisRunListResponse:
+    del user
+    if not store.get_case(case_id):
+        raise HTTPException(status_code=404, detail="case not found")
+    runs = store.list_analysis_runs(case_id)
+    return AnalysisRunListResponse(
+        items=[_analysis_run_response(run) for run in runs],
+        total=len(runs),
+    )
+
+
 @router.get("/{case_id}/analysis-runs/{run_id}")
 def get_analysis_run(
     case_id: str,
@@ -170,15 +205,7 @@ def get_analysis_run(
     run = store.get_analysis_run(run_id)
     if not run or run.case_id != case_id:
         raise HTTPException(status_code=404, detail="analysis run not found")
-    return {
-        "analysis_run_id": run.id,
-        "status": run.status,
-        "current_step": "completed" if run.status == "completed" else run.status,
-        "progress": run.progress or (run.result.progress if run.result else {}),
-        "started_at": run.started_at.isoformat() if run.started_at else None,
-        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
-        "error_message": run.error_message,
-    }
+    return _analysis_run_response(run).model_dump(mode="json")
 
 
 def _require_result(store: MetadataStore, case_id: str, run_id: str):

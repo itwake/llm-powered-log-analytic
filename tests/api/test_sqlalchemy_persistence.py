@@ -161,6 +161,11 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     assert status.status_code == 200, status.text
     assert status.json()["status"] == "completed"
     assert status.json()["progress"]["templates"] > 0
+    run_list = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs")
+    assert run_list.status_code == 200, run_list.text
+    assert run_list.json()["total"] == 1
+    assert run_list.json()["items"][0]["analysis_run_id"] == run_id
+    assert run_list.json()["items"][0]["model_provider"] == "github_copilot"
 
     summary = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
     assert summary.status_code == 200, summary.text

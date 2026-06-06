@@ -38,6 +38,24 @@ pnpm --filter @logan/web test
 pnpm --filter @logan/web lint
 ```
 
+## Run API and Web Together
+
+Start the FastAPI backend from the repository root:
+
+```bash
+uvicorn app.main:app --reload --app-dir apps/api
+```
+
+Start the Next.js workbench in another shell:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web dev
+```
+
+`NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. Browser API calls use
+`credentials: "include"` so the FastAPI `logan_session` cookie is sent to the backend.
+The default local API uses in-memory metadata unless `LOGAN_DATABASE_URL` is set.
+
 ## Representative Lines Only
 
 The pipeline never sends every raw log line to a model. It runs this sequence:
@@ -79,7 +97,8 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_RAW_LOG_RETENTION_DAYS=30`
 - `LOGAN_REPORT_RETENTION_DAYS=365`
 - `LOGAN_AUDIT_RETENTION_DAYS=730`
+- `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` for the web workspace API base URL.
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are Copilot plugin-token expiry caching/revocation, `/api/chat/stream` SSE wiring, ClickHouse/OpenSearch fan-out for analysis artifacts, real S3/MinIO object bytes and presigned uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are Copilot plugin-token expiry caching/revocation, `/api/chat/stream` SSE wiring, ClickHouse/OpenSearch fan-out for analysis artifacts, real S3/MinIO object bytes and presigned uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.

@@ -421,6 +421,15 @@ class SQLAlchemyStore:
             run = session.get(tables.AnalysisRun, run_id)
             return self._analysis_run_record(run) if run else None
 
+    def list_analysis_runs(self, case_id: str) -> list[AnalysisRunRecord]:
+        with self._session() as session:
+            query = (
+                select(tables.AnalysisRun)
+                .where(tables.AnalysisRun.case_id == case_id)
+                .order_by(tables.AnalysisRun.run_number.desc(), tables.AnalysisRun.created_at.desc())
+            )
+            return [self._analysis_run_record(row) for row in session.scalars(query).all()]
+
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
         with self._session() as session:
             run = session.get(tables.AnalysisRun, run_id)
