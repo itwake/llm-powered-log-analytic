@@ -67,6 +67,8 @@ class CopilotAuthRecord:
     interval: int
     poll_count: int = 0
     github_base_url: str = "https://github.com"
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -177,6 +179,10 @@ class MetadataStore(Protocol):
         self, *, user_id: str, credential_type: str, token: str, github_base_url: str
     ) -> CredentialRecord: ...
 
+    def get_credential(
+        self, *, user_id: str, credential_type: str
+    ) -> CredentialRecord | None: ...
+
     def has_credential(self, user_id: str) -> bool: ...
 
     def create_copilot_auth(self, record: CopilotAuthRecord) -> CopilotAuthRecord: ...
@@ -207,7 +213,13 @@ class MetadataStore(Protocol):
     def complete_upload(self, *, upload_id: str, sha256: str) -> UploadRecord: ...
 
     async def start_analysis(
-        self, *, case_id: str, user_id: str, input_paths: list[str], config: dict[str, Any]
+        self,
+        *,
+        case_id: str,
+        user_id: str,
+        input_paths: list[str],
+        config: dict[str, Any],
+        gateway: Any | None = None,
     ) -> AnalysisRunRecord: ...
 
     def get_analysis_run(self, run_id: str) -> AnalysisRunRecord | None: ...
@@ -268,7 +280,7 @@ class InMemoryStore:
         self.users_by_email: dict[str, str] = {}
         self.users_by_username: dict[str, str] = {}
         self.sessions_by_hash: dict[str, SessionRecord] = {}
-        self.credentials_by_user: dict[str, CredentialRecord] = {}
+        self.credentials_by_user: dict[tuple[str, str], CredentialRecord] = {}
         self.copilot_auth: dict[str, CopilotAuthRecord] = {}
         self.cases: dict[str, CaseRecord] = {}
         self.uploads: dict[str, UploadRecord] = {}
@@ -347,11 +359,14 @@ class InMemoryStore:
             token_hint=token_hint(token),
             github_base_url=github_base_url,
         )
-        self.credentials_by_user[user_id] = record
+        self.credentials_by_user[(user_id, credential_type)] = record
         return record
 
+    def get_credential(self, *, user_id: str, credential_type: str) -> CredentialRecord | None:
+        return self.credentials_by_user.get((user_id, credential_type))
+
     def has_credential(self, user_id: str) -> bool:
-        return user_id in self.credentials_by_user
+        return any(key_user_id == user_id for key_user_id, _ in self.credentials_by_user)
 
     def create_copilot_auth(self, record: CopilotAuthRecord) -> CopilotAuthRecord:
         self.copilot_auth[record.auth_id] = record
@@ -361,6 +376,7 @@ class InMemoryStore:
         return self.copilot_auth.get(auth_id)
 
     def update_copilot_auth(self, record: CopilotAuthRecord) -> CopilotAuthRecord:
+        record.updated_at = record.updated_at or datetime.now(UTC)
         self.copilot_auth[record.auth_id] = record
         return record
 
@@ -430,6 +446,7 @@ class InMemoryStore:
         user_id: str,
         input_paths: list[str],
         config: dict[str, Any],
+        gateway: Any | None = None,
     ) -> AnalysisRunRecord:
         case = self.cases[case_id]
         run_number = 1 + len([run for run in self.runs.values() if run.case_id == case_id])
@@ -472,6 +489,7 @@ class InMemoryStore:
                     "user_id": user_id,
                 },
                 config=config,
+                gateway=gateway,
             )
             run.progress = run.result.progress
             run.status = "completed"

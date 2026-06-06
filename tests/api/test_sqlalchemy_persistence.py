@@ -5,8 +5,11 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from logan_workers.activities.inference import MockCopilotAnnotationGateway
+
 from app.config import Settings
 from app.main import create_app
+from app.services.copilot_auth_service import MockGitHubDeviceClient
 from app.sqlalchemy_store import SQLAlchemyStore
 from app.store import create_store
 
@@ -15,7 +18,11 @@ FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 
 
 async def _client(store: SQLAlchemyStore) -> AsyncClient:
-    app = create_app(store=store)
+    app = create_app(
+        store=store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
 
 

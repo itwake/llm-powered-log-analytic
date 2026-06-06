@@ -5,7 +5,10 @@ from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from logan_workers.activities.inference import MockCopilotAnnotationGateway
+
 from app.main import create_app
+from app.services.copilot_auth_service import DeviceCodePollResult, MockGitHubDeviceClient
 from app.store import InMemoryStore
 
 
@@ -14,7 +17,11 @@ FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 
 async def _authenticated_client() -> tuple[AsyncClient, str]:
     store = InMemoryStore()
-    app = create_app(store=store)
+    app = create_app(
+        store=store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
     transport = ASGITransport(app=app)
     client = AsyncClient(transport=transport, base_url="http://testserver")
     register = await client.post(
@@ -56,6 +63,43 @@ async def test_auth_and_copilot_auth_api() -> None:
     logout = await client.post("/api/auth/logout")
     assert logout.status_code == 200
     assert (await client.get("/api/auth/me")).status_code == 401
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_copilot_auth_api_responses_never_include_token_material() -> None:
+    source_token = "gho_api_response_secret_token"
+    store = InMemoryStore()
+    app = create_app(
+        store=store,
+        copilot_auth_client=MockGitHubDeviceClient(
+            [DeviceCodePollResult(status="authorized", message="authorized", access_token=source_token)]
+        ),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    client = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    await client.post(
+        "/api/auth/register",
+        json={
+            "email": "no-token@example.com",
+            "username": "no-token",
+            "full_name": "No Token",
+            "password": "password123",
+        },
+    )
+    await client.post(
+        "/api/auth/login",
+        json={"email_or_username": "no-token", "password": "password123"},
+    )
+
+    started = await client.post("/api/copilot/auth/start", json={"github_base_url": "https://github.com"})
+    checked = await client.post("/api/copilot/auth/check", json={"auth_id": started.json()["auth_id"]})
+    me = await client.get("/api/auth/me")
+
+    assert checked.json()["status"] == "authorized"
+    for response in (started, checked, me):
+        assert source_token not in response.text
+        assert "encrypted_token" not in response.text
     await client.aclose()
 
 

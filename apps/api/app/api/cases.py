@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from logan_workers.models import OFFENDING_SIGNALS
 
-from app.dependencies import current_user, get_store
+from app.dependencies import current_user, get_model_gateway, get_store
 from app.schemas.case import (
     AnalysisRunRequest,
     CaseCreateRequest,
@@ -18,6 +18,7 @@ from app.schemas.case import (
     UploadCompleteRequest,
     UploadRequest,
 )
+from app.services.copilot_model_gateway import CopilotCredentialError, CopilotGatewayError
 from app.store import MetadataStore, UserRecord
 
 
@@ -134,6 +135,7 @@ async def start_analysis(
     payload: AnalysisRunRequest,
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
+    gateway: Any = Depends(get_model_gateway),
 ) -> dict[str, object]:
     if not store.get_case(case_id):
         raise HTTPException(status_code=404, detail="case not found")
@@ -142,12 +144,18 @@ async def start_analysis(
         upload = store.get_upload(file_id)
         if upload and upload.object_uri.startswith("file://"):
             input_paths.append(upload.object_uri.removeprefix("file://"))
-    run = await store.start_analysis(
-        case_id=case_id,
-        user_id=user.id,
-        input_paths=input_paths,
-        config=payload.config,
-    )
+    try:
+        run = await store.start_analysis(
+            case_id=case_id,
+            user_id=user.id,
+            input_paths=input_paths,
+            config=payload.config,
+            gateway=gateway,
+        )
+    except CopilotCredentialError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except CopilotGatewayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"analysis_run_id": run.id, "status": run.status}
 
 

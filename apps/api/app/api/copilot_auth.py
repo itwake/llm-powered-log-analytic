@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.dependencies import current_user, get_store
+from app.dependencies import current_user, get_copilot_auth_client, get_store
 from app.schemas.auth import CopilotCheckRequest, CopilotStartRequest
-from app.services.copilot_auth_service import CopilotAuthService
+from app.services.copilot_auth_service import CopilotAuthService, DeviceCodeClient
 from app.store import MetadataStore, UserRecord
 
 
@@ -16,8 +16,11 @@ def start(
     payload: CopilotStartRequest,
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
+    client: DeviceCodeClient = Depends(get_copilot_auth_client),
 ) -> dict[str, object]:
-    record = CopilotAuthService(store).start(user=user, github_base_url=payload.github_base_url)
+    record = CopilotAuthService(store, client=client).start(
+        user=user, github_base_url=payload.github_base_url
+    )
     return {
         "auth_id": record.auth_id,
         "device_code": record.device_code,
@@ -34,5 +37,6 @@ def check(
     payload: CopilotCheckRequest,
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
+    client: DeviceCodeClient = Depends(get_copilot_auth_client),
 ) -> dict[str, object]:
-    return CopilotAuthService(store).check(user=user, auth_id=payload.auth_id)
+    return CopilotAuthService(store, client=client).check(user=user, auth_id=payload.auth_id)

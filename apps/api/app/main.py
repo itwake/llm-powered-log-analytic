@@ -4,12 +4,26 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth, capabilities, cases, chat, copilot_auth
+from app.services.copilot_auth_service import DeviceCodeClient, GitHubDeviceCodeClient
+from app.services.copilot_model_gateway import CopilotModelGateway
 from app.store import MetadataStore, create_store
 
 
-def create_app(store: MetadataStore | None = None) -> FastAPI:
+def create_app(
+    store: MetadataStore | None = None,
+    *,
+    copilot_auth_client: DeviceCodeClient | None = None,
+    model_gateway: object | None = None,
+) -> FastAPI:
     app = FastAPI(title="LogAn Platform API", version="0.1.0")
     app.state.store = store or create_store()
+    app.state.copilot_auth_client = copilot_auth_client or GitHubDeviceCodeClient(
+        app_settings=app.state.store.settings
+    )
+    app.state.model_gateway = model_gateway or CopilotModelGateway(
+        store=app.state.store,
+        app_settings=app.state.store.settings,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:3000"],

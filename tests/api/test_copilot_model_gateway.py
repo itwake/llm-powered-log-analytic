@@ -1,0 +1,219 @@
+from __future__ import annotations
+
+import json
+
+import httpx
+import pytest
+
+from app.config import Settings
+from app.services.copilot_model_gateway import (
+    COPILOT_TOKEN_EXCHANGE_URL,
+    CopilotModelGateway,
+    CopilotTransportError,
+)
+from app.store import InMemoryStore
+
+
+def _store_and_user() -> tuple[InMemoryStore, str]:
+    store = InMemoryStore()
+    user = store.register_user(
+        email="gateway.engineer@example.com",
+        username="gateway-engineer",
+        full_name="Gateway Engineer",
+        password="password123",
+    )
+    return store, user.id
+
+
+@pytest.mark.asyncio
+async def test_source_token_exchange_proxy_base_responses_payload_and_output_parsing() -> None:
+    store, user_id = _store_and_user()
+    source_token = "gho_source_token_for_exchange"
+    copilot_token = "copilot-session;proxy-ep=https://proxy.individual.githubcopilot.com;exp=1"
+    output_json = {
+        "golden_signal": "error",
+        "fault_categories": ["application"],
+        "entities": {"service": ["gateway"]},
+        "severity_score": 0.8,
+        "confidence": 0.9,
+        "rationale": "Gateway returned 500 errors.",
+    }
+    seen: list[httpx.Request] = []
+    store.save_credential(
+        user_id=user_id,
+        credential_type="github_source_oauth",
+        token=source_token,
+        github_base_url="https://github.com",
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "GET":
+            assert str(request.url) == COPILOT_TOKEN_EXCHANGE_URL
+            assert request.headers["authorization"] == f"Bearer {source_token}"
+            assert request.headers["accept"] == "application/json"
+            assert request.headers["user-agent"] == "GitHubCopilotChat/0.35.0"
+            assert request.headers["editor-version"] == "vscode/1.107.0"
+            assert request.headers["editor-plugin-version"] == "copilot-chat/0.35.0"
+            assert request.headers["copilot-integration-id"] == "vscode-chat"
+            return httpx.Response(200, json={"token": copilot_token, "expires_at": 9999999999})
+
+        assert request.method == "POST"
+        assert str(request.url) == "https://api.individual.githubcopilot.com/responses"
+        assert request.headers["authorization"] == f"Bearer {copilot_token}"
+        assert request.headers["accept"] == "application/vnd.github.copilot-chat-preview+json"
+        assert request.headers["content-type"] == "application/json"
+        assert request.headers["openai-intent"] == "conversation-edits"
+        assert request.headers["x-initiator"] == "agent"
+        payload = json.loads(request.content)
+        assert payload["model"] == "gpt-5.4"
+        assert payload["instructions"] == "template_annotation"
+        assert payload["stream"] is False
+        assert payload["reasoning"] == {"effort": "high"}
+        assert payload["response_format"] == {"type": "json_object"}
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp_1",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": json.dumps(output_json)}],
+                    }
+                ],
+            },
+        )
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = CopilotModelGateway(store=store, http_client=http_client)
+
+    response = await gateway.responses(
+        user_id=user_id,
+        model="gpt-5.4",
+        instructions="template_annotation",
+        input=[{"role": "user", "content": [{"type": "input_text", "text": "gateway 500"}]}],
+        stream=False,
+        metadata={"case_id": "case-1"},
+        reasoning_effort="high",
+        response_format={"type": "json_object"},
+    )
+
+    assert [request.method for request in seen] == ["GET", "POST"]
+    assert response["provider"] == "github_copilot"
+    assert response["token_source"] == "stored_github_source_oauth"
+    assert response["output_text"] == json.dumps(output_json)
+    assert response["output_json"] == output_json
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stored_plugin_token_path_does_not_exchange_and_takes_precedence() -> None:
+    store, user_id = _store_and_user()
+    plugin_token = "copilot-direct-token"
+    store.save_credential(
+        user_id=user_id,
+        credential_type="github_source_oauth",
+        token="gho_source_token_that_should_not_be_used",
+        github_base_url="https://github.com",
+    )
+    store.save_credential(
+        user_id=user_id,
+        credential_type="copilot_plugin_token",
+        token=plugin_token,
+        github_base_url="https://github.com",
+    )
+    seen_methods: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen_methods.append(request.method)
+        assert request.method == "POST"
+        assert str(request.url) == "https://api.githubcopilot.com/responses"
+        assert request.headers["authorization"] == f"Bearer {plugin_token}"
+        return httpx.Response(200, json={"output_text": "direct plugin response"})
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = CopilotModelGateway(store=store, http_client=http_client)
+
+    response = await gateway.responses(
+        user_id=user_id,
+        model="gpt-5.4",
+        instructions=None,
+        input=[],
+    )
+
+    assert seen_methods == ["POST"]
+    assert response["token_source"] == "stored_copilot_plugin_token"
+    assert response["output_text"] == "direct plugin response"
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_environment_copilot_token_fallback() -> None:
+    plugin_token = "env-copilot-plugin-token"
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.headers["authorization"] == f"Bearer {plugin_token}"
+        return httpx.Response(200, json={"choices": [{"message": {"content": "env response"}}]})
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = CopilotModelGateway(
+        app_settings=Settings(github_copilot_token=plugin_token),
+        http_client=http_client,
+    )
+
+    response = await gateway.responses(user_id="user-id", model="gpt-5.4", instructions=None, input=[])
+
+    assert response["token_source"] == "env_github_copilot_token"
+    assert response["output_text"] == "env response"
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_response_transport_errors_redact_plugin_token() -> None:
+    store, user_id = _store_and_user()
+    plugin_token = "copilot-secret-token"
+    store.save_credential(
+        user_id=user_id,
+        credential_type="copilot_plugin_token",
+        token=plugin_token,
+        github_base_url="https://github.com",
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(f"could not connect with {plugin_token}", request=request)
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = CopilotModelGateway(store=store, http_client=http_client)
+
+    with pytest.raises(CopilotTransportError) as error:
+        await gateway.responses(user_id=user_id, model="gpt-5.4", instructions=None, input=[])
+
+    assert plugin_token not in str(error.value)
+    assert "<redacted-token>" in str(error.value)
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_exchange_transport_errors_redact_source_token() -> None:
+    store, user_id = _store_and_user()
+    source_token = "gho_secret_source_token"
+    store.save_credential(
+        user_id=user_id,
+        credential_type="github_source_oauth",
+        token=source_token,
+        github_base_url="https://github.com",
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(f"failed with {source_token}", request=request)
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = CopilotModelGateway(store=store, http_client=http_client)
+
+    with pytest.raises(CopilotTransportError) as error:
+        await gateway.responses(user_id=user_id, model="gpt-5.4", instructions=None, input=[])
+
+    assert source_token not in str(error.value)
+    assert "<redacted-token>" in str(error.value)
+    await http_client.aclose()

@@ -20,6 +20,14 @@ PostgreSQL URL such as `postgresql+psycopg://logan:logan@postgres:5432/logan`.
 `LOGAN_STORE_BACKEND=auto` selects SQLAlchemy when `LOGAN_DATABASE_URL` is set; `memory`
 and `sqlalchemy` force a backend explicitly.
 
+The default API path uses real GitHub Copilot auth and model calls:
+
+- `POST /api/copilot/auth/start` starts GitHub device-code auth.
+- `POST /api/copilot/auth/check` stores only an encrypted `github_source_oauth` credential when authorized.
+- analysis runs use `CopilotModelGateway` and require a stored credential or one of `LOGAN_GITHUB_COPILOT_TOKEN` / `LOGAN_GITHUB_SOURCE_TOKEN`.
+
+The test suite injects fake auth/model clients and does not require GitHub network access.
+
 Run the full service skeleton:
 
 ```bash
@@ -32,8 +40,9 @@ docker compose up --build
 - Persist enriched logs and window aggregates into ClickHouse.
 - Index redacted/normalized logs into OpenSearch.
 - Implement real S3/MinIO object bytes and presigned uploads instead of durable metadata placeholders.
-- Implement real GitHub source OAuth polling and Copilot plugin token exchange.
-- Implement real `CopilotModelGateway.responses` network calls to the Copilot plugin `/responses` runtime.
+- Cache Copilot plugin tokens until their `expires_at` instead of exchanging the source token per model call.
+- Add credential revocation/disconnect endpoints and UI.
+- Implement Copilot `/responses` streaming plus `/api/chat/stream` SSE.
 - Back Temporal activities with durable idempotency records and retry state.
 - Add PGEM and Granger methods behind the current causal method seams.
 - Expand RBAC, collaborators, admin settings, audit log UI/API, retention jobs, and rate limits.

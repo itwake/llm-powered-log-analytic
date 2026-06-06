@@ -15,6 +15,12 @@ class Settings:
     copilot_model: str = os.getenv("LOGAN_COPILOT_MODEL", "gpt-5.4")
     copilot_reasoning_effort: str = os.getenv("LOGAN_COPILOT_REASONING_EFFORT", "high")
     copilot_base_url: str | None = os.getenv("LOGAN_COPILOT_BASE_URL") or None
+    copilot_oauth_client_id: str = os.getenv(
+        "LOGAN_COPILOT_OAUTH_CLIENT_ID", "Iv1.b507a08c87ecfe98"
+    )
+    github_copilot_token: str | None = os.getenv("LOGAN_GITHUB_COPILOT_TOKEN") or None
+    github_source_token: str | None = os.getenv("LOGAN_GITHUB_SOURCE_TOKEN") or None
+    copilot_timeout_seconds: float = float(os.getenv("LOGAN_COPILOT_TIMEOUT_SECONDS", "30"))
     database_url: str | None = os.getenv("LOGAN_DATABASE_URL") or None
     store_backend: str = os.getenv("LOGAN_STORE_BACKEND", "auto")
     secure_cookies: bool = os.getenv("LOGAN_ENV", "development") == "production"

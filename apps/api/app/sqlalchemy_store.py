@@ -190,6 +190,7 @@ class SQLAlchemyStore:
                 select(tables.CopilotCredential)
                 .where(
                     tables.CopilotCredential.user_id == user_id,
+                    tables.CopilotCredential.credential_type == credential_type,
                     tables.CopilotCredential.revoked_at.is_(None),
                 )
                 .order_by(tables.CopilotCredential.created_at.desc())
@@ -215,6 +216,19 @@ class SQLAlchemyStore:
                 credential.runtime_type = "github_copilot"
                 credential.updated_at = _now()
         return self._credential_record(credential)
+
+    def get_credential(self, *, user_id: str, credential_type: str) -> CredentialRecord | None:
+        with self._session() as session:
+            credential = session.scalar(
+                select(tables.CopilotCredential)
+                .where(
+                    tables.CopilotCredential.user_id == user_id,
+                    tables.CopilotCredential.credential_type == credential_type,
+                    tables.CopilotCredential.revoked_at.is_(None),
+                )
+                .order_by(tables.CopilotCredential.created_at.desc())
+            )
+            return self._credential_record(credential) if credential else None
 
     def has_credential(self, user_id: str) -> bool:
         with self._session() as session:
@@ -262,7 +276,7 @@ class SQLAlchemyStore:
                 raise KeyError(record.auth_id)
             row.poll_count = record.poll_count
             row.github_base_url = record.github_base_url
-            row.updated_at = _now()
+            row.updated_at = record.updated_at
         return record
 
     def create_case(self, *, user_id: str, data: dict[str, Any]) -> CaseRecord:
@@ -373,6 +387,7 @@ class SQLAlchemyStore:
         user_id: str,
         input_paths: list[str],
         config: dict[str, Any],
+        gateway: Any | None = None,
     ) -> AnalysisRunRecord:
         run = self._create_analysis_run(case_id=case_id, user_id=user_id, config=config)
         case = self.get_case(case_id)
@@ -394,6 +409,7 @@ class SQLAlchemyStore:
                     "user_id": user_id,
                 },
                 config=config,
+                gateway=gateway,
             )
             return self._complete_analysis_run(run_id=run.id, result=result, user_id=user_id)
         except Exception as exc:
@@ -707,6 +723,8 @@ class SQLAlchemyStore:
             interval=row.interval,
             poll_count=row.poll_count,
             github_base_url=row.github_base_url,
+            created_at=_utc(row.created_at) or _now(),
+            updated_at=_utc(row.updated_at) or _now(),
         )
 
     def _case_record(self, row: tables.Case) -> CaseRecord:

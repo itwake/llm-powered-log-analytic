@@ -2,9 +2,11 @@
 
 ## Credentials
 
-GitHub source OAuth and Copilot plugin tokens are never returned to frontend responses. The metadata store saves encrypted or mock-encrypted token material and only exposes status fields such as `authorized` and `has_copilot_credential`.
+GitHub source OAuth and Copilot plugin tokens are never returned to frontend responses. The metadata store saves encrypted token material and only exposes status fields such as `authorized`, `token_type`, `runtime_type`, and `has_copilot_credential`.
 
-Production must replace local encryption key handling with KMS-backed keys and add credential revocation endpoints.
+Credential retrieval is backend-only. Store implementations expose encrypted credential records by type, and only the Copilot model gateway decrypts them immediately before resolving a plugin token. Source OAuth tokens are exchanged against GitHub Copilot's internal token endpoint per model call in this stage; plugin-token expiry caching is not yet implemented.
+
+Production must replace local encryption key handling with KMS-backed keys and add credential revocation endpoints. Transport and gateway errors redact known GitHub source-token prefixes and exact plugin/source tokens before surfacing messages.
 
 ## Log Redaction
 
