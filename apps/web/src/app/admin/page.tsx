@@ -155,11 +155,12 @@ export default function AdminPage() {
                 {runningRetention ? "Running" : "Run retention"}
               </button>
             </div>
-            <section className="grid four">
+            <section className="grid five">
               <Metric label="Audits deleted" value={retentionValue(retention, "audit_logs_deleted")} />
               <Metric label="Raw lines scrubbed" value={retentionValue(retention, "raw_log_lines_scrubbed")} />
               <Metric label="Exports deleted" value={retentionValue(retention, "exports_deleted")} />
               <Metric label="Results cleared" value={retentionValue(retention, "analysis_results_cleared")} />
+              <Metric label="Step artifacts deleted" value={retentionValue(retention, "step_artifacts_deleted")} />
             </section>
           </section>
 

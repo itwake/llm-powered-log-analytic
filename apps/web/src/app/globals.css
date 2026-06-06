@@ -108,6 +108,10 @@ select {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.grid.five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -577,6 +581,7 @@ th {
   .grid.two,
   .grid.three,
   .grid.four,
+  .grid.five,
   .report-grid {
     grid-template-columns: 1fr;
   }

@@ -210,6 +210,7 @@ Retention run responses return:
 - `raw_log_lines_scrubbed`
 - `exports_deleted`
 - `analysis_results_cleared`
+- `step_artifacts_deleted`
 
 ## Rate Limiting
 
