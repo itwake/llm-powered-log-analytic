@@ -65,6 +65,28 @@ async def test_pipeline_checkout_incident_end_to_end() -> None:
     assert all(edge.edge_type == "candidate_cause" for edge in edges)
     assert all(edge.needs_validation for edge in edges)
     assert all(edge.evidence.get("source_template_id") for edge in edges)
+    method_evidence = [edge.evidence.get("methods", {}) for edge in edges]
+    assert all("extension_seam" not in methods.get("pgem", {}) for methods in method_evidence)
+    assert all(
+        "extension_seam" not in methods.get("granger_linear", {})
+        for methods in method_evidence
+    )
+    assert all("supported" in methods.get("pgem", {}) for methods in method_evidence)
+    assert all("supported" in methods.get("granger_linear", {}) for methods in method_evidence)
+    assert any(
+        methods["pgem"]["supported"] or methods["granger_linear"]["supported"]
+        for methods in method_evidence
+    )
+    assert all(
+        "pgem" in edge.method
+        for edge in edges
+        if edge.evidence["methods"]["pgem"]["supported"]
+    )
+    assert all(
+        "granger_linear" in edge.method
+        for edge in edges
+        if edge.evidence["methods"]["granger_linear"]["supported"]
+    )
     assert any(
         "auth-service" in edge.evidence.get("source_template_id", "")
         or "service_entity" in edge.method

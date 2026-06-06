@@ -18,7 +18,7 @@ case files
   -> GitHub Copilot Plugin annotation on redacted representatives only
   -> label broadcasting
   -> temporal aggregation
-  -> candidate causal graph with evidence and PageRank-style ranking
+  -> candidate causal graph with temporal, PGEM-style, Granger-style, and PageRank-style evidence
   -> cautious causal summary
   -> Markdown, HTML, JSON exports
 ```
@@ -92,7 +92,15 @@ Every pipeline object carries evidence references with:
 - `line_number`
 - `timestamp`
 
-Causal edges are candidate relationships only. API and worker fields use `candidate_cause`, `confidence`, `evidence`, and `needs_validation`.
+Causal edges are candidate relationships only. API and worker fields use `candidate_cause`,
+`confidence`, `evidence`, and `needs_validation`. The worker keeps the original temporal
+precedence, lagged-correlation, service-entity, and lift signals, and now fills the PGEM and
+Granger method slots with deterministic evidence instead of static extension placeholders.
+PGEM-style evidence scores directed source-to-target transitions using source support, target
+coverage, baseline target-rate lift, and median lag. Granger-style evidence bins offending log
+templates into count series and checks whether lagged source counts improve target-count
+prediction over a target-history baseline, then applies Benjamini-Hochberg adjustment across
+tested directions. These scores are ranking and validation aids, not definitive root cause truth.
 
 ## Extension Seams
 
@@ -100,4 +108,4 @@ Causal edges are candidate relationships only. API and worker fields use `candid
 - Add S3 object storage adapters for report artifacts.
 - Add step-level external artifact materialization for very large Temporal histories if needed.
 - Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.
-- Extend causal methods with PGEM and Granger implementations while retaining bin-size sensitivity checks.
+- Add bin-size sensitivity reporting for causal methods if operators need multi-bin comparisons.

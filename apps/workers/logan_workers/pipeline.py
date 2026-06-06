@@ -199,6 +199,9 @@ class AnalyzeCasePipeline:
                 templates=templates,
                 logs=enriched,
                 max_lag_seconds=config.get("causal", {}).get("max_lag_seconds", 600),
+                time_bin_seconds=config.get("causal", {}).get("time_bin_seconds", 60),
+                methods=config.get("causal", {}).get("methods"),
+                granger_max_lag_bins=config.get("causal", {}).get("granger_max_lag_bins"),
             ),
             lambda value: {"nodes": len(value.nodes), "edges": len(value.edges)},
         )

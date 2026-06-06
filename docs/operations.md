@@ -75,6 +75,34 @@ rows still falling back to the legacy `analysis_runs.result_json` path. Temporal
 reports can optionally try service-backed external analytics queries first when explicitly
 enabled and backed by succeeded sink write records.
 
+The worker causal graph emits candidate edges only. Each edge keeps `edge_type=candidate_cause`
+and `needs_validation=true`, and evidence is intended to guide validation with metrics, traces,
+deployments, and operator context rather than prove a definitive root cause. The default causal
+methods are `temporal_precedence`, `lagged_correlation`, `lift`, `pgem`, and `granger_linear`.
+`pgem` scores directed event transitions by source support, target coverage, baseline target-rate
+lift, and median lag. `granger_linear` builds per-template count series and uses a deterministic
+pure-Python lagged OLS fallback to estimate whether source-history counts improve target-count
+prediction over target history alone; p-values are approximate and adjusted with
+Benjamini-Hochberg FDR across tested directions.
+
+Optional analysis config can tune these seams without changing API shape:
+
+```json
+{
+  "causal": {
+    "max_lag_seconds": 600,
+    "time_bin_seconds": 60,
+    "methods": ["temporal_precedence", "lagged_correlation", "lift", "pgem", "granger_linear"],
+    "granger_max_lag_bins": 10
+  }
+}
+```
+
+If `causal.granger_max_lag_bins` is omitted, the worker derives it from
+`max_lag_seconds / time_bin_seconds` with a bounded cap. Sparse or constant series return
+unsupported method evidence with a reason, while temporal precedence and lift can still produce
+candidate edges for small incidents.
+
 Analysis orchestration defaults to the current synchronous local path:
 
 - `LOGAN_ANALYSIS_ORCHESTRATOR=local` runs `AnalyzeCasePipeline` in the API process and keeps tests deterministic.
@@ -168,7 +196,6 @@ docker compose up --build
 
 - Add step-level external artifact materialization for very large Temporal histories if pipeline
   intermediates grow beyond comfortable activity payload sizes.
-- Add PGEM and Granger methods behind the current causal method seams.
 - Expand RBAC, collaborators, admin settings, audit log UI/API, retention jobs, and rate limits.
 - Add Playwright e2e tests once the web app is connected to a running API.
 - Consider ECharts/Cytoscape or similar libraries for richer temporal and graph visualization.

@@ -2,12 +2,12 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell, and deployment scaffolding.
 
 ## Architecture
 
 - `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, real GitHub Copilot device-code auth, Copilot `/responses` gateway with streaming support, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters with lifecycle/idempotency tracking, opt-in external temporal/log report query paths, and a lightweight in-memory store for explicit tests/local experimentation.
-- `apps/workers`: Python log-analysis pipeline plus Temporal workflow/activity worker for ingestion, multi-line merge, timestamp parsing, redaction, templating, representative sampling, model annotation, label broadcasting, temporal aggregation, candidate causal graph generation, causal summary rendering, and export generation.
+- `apps/workers`: Python log-analysis pipeline plus Temporal workflow/activity worker for ingestion, multi-line merge, timestamp parsing, redaction, templating, representative sampling, model annotation, label broadcasting, temporal aggregation, candidate causal graph generation with PGEM-style and Granger-style evidence, causal summary rendering, and export generation.
 - `apps/web`: Next.js/React/TypeScript operational workbench shell aligned to final API shapes.
 - `infra/docker`: first-pass Dockerfiles for web, API, and worker.
 - `infra/k8s`: coherent Kubernetes manifests for namespace, config, secrets examples, deployments, services, ingress, PVCs, migration job, and network policy.
@@ -83,6 +83,7 @@ Tests assert that model inputs are redacted, representative samples are used, an
 - GitHub source OAuth and Copilot plugin tokens are encrypted at rest, decrypted only in backend services, and never returned to frontend responses.
 - Sensitive data redaction covers email, IP, bearer tokens, passwords, secrets, API keys, JWTs, UUIDs, card-like values, URL query secrets, and tenant/customer IDs before model calls.
 - Causal graph fields use `candidate_cause`, `confidence`, `evidence`, and `needs_validation`; summaries use cautious language.
+- PGEM-style transition scores and Granger-style lagged-linear scores are candidate causal evidence only. They help rank directions for validation; they do not prove root cause truth.
 
 ## Environment Variables
 

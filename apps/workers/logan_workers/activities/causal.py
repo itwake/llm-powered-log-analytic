@@ -7,6 +7,12 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
+from logan_workers.algorithms.causal_granger import score_granger_pairs
+from logan_workers.algorithms.causal_pgem import score_pgem_transition
+from logan_workers.algorithms.causal_series import (
+    build_count_series,
+    derive_granger_max_lag_bins,
+)
 from logan_workers.algorithms.pagerank import pagerank
 from logan_workers.models import (
     CausalEdge,
@@ -17,6 +23,15 @@ from logan_workers.models import (
     OFFENDING_SIGNALS,
     RootCauseCandidate,
 )
+
+
+DEFAULT_CAUSAL_METHODS = {
+    "temporal_precedence",
+    "lagged_correlation",
+    "lift",
+    "pgem",
+    "granger_linear",
+}
 
 
 def _clamp(value: float) -> float:
@@ -80,6 +95,16 @@ def _support(source_times: list[datetime], target_times: list[datetime], max_lag
     return len(lags), int(statistics.median(lags))
 
 
+def _disabled_method(reason: str = "method_disabled") -> dict[str, Any]:
+    return {"supported": False, "score": 0.0, "reason": reason}
+
+
+def _enabled_methods(methods: list[str] | set[str] | tuple[str, ...] | None) -> set[str]:
+    if methods is None:
+        return set(DEFAULT_CAUSAL_METHODS)
+    return {str(method) for method in methods}
+
+
 def infer_causal_graph(
     *,
     case_id: str,
@@ -87,7 +112,21 @@ def infer_causal_graph(
     templates: list[LogTemplate],
     logs: list[NormalizedLogLine],
     max_lag_seconds: int = 600,
+    time_bin_seconds: int = 60,
+    methods: list[str] | set[str] | tuple[str, ...] | None = None,
+    granger_max_lag_bins: int | None = None,
 ) -> CausalGraph:
+    if time_bin_seconds <= 0:
+        time_bin_seconds = 60
+    enabled_methods = _enabled_methods(methods)
+    if granger_max_lag_bins is None:
+        granger_max_lag_bins = derive_granger_max_lag_bins(
+            max_lag_seconds=max_lag_seconds,
+            time_bin_seconds=time_bin_seconds,
+        )
+    else:
+        granger_max_lag_bins = max(1, granger_max_lag_bins)
+
     templates_by_id = {template.template_id: template for template in templates}
     lines_by_template: dict[str, list[NormalizedLogLine]] = defaultdict(list)
     for line in logs:
@@ -123,6 +162,28 @@ def infer_causal_graph(
 
     edges: list[CausalEdge] = []
     node_ids = [node.template_id for node in nodes]
+    observation_start = min(
+        (timestamp for timestamps in times_by_template.values() for timestamp in timestamps),
+        default=None,
+    )
+    observation_end = max(
+        (timestamp for timestamps in times_by_template.values() for timestamp in timestamps),
+        default=None,
+    )
+    granger_by_pair: dict[tuple[str, str], dict[str, Any]] = {}
+    if "granger_linear" in enabled_methods and node_ids:
+        count_series = build_count_series(
+            times_by_template,
+            template_ids=node_ids,
+            time_bin_seconds=time_bin_seconds,
+        )
+        granger_by_pair = score_granger_pairs(
+            count_series.series_by_template,
+            node_ids,
+            time_bin_seconds=time_bin_seconds,
+            max_lag_bins=granger_max_lag_bins,
+        )
+
     for source_id in node_ids:
         for target_id in node_ids:
             if source_id == target_id:
@@ -140,6 +201,30 @@ def infer_causal_graph(
             relation = _service_relation(source_lines, target_lines)
             precedence_score = support_windows / max(1, len(target_times))
             lift_score = min(1.0, support_windows / max(1, len(source_times)))
+            pgem_evidence = (
+                score_pgem_transition(
+                    source_times,
+                    target_times,
+                    max_lag_seconds=max_lag_seconds,
+                    observation_start=observation_start,
+                    observation_end=observation_end,
+                )
+                if "pgem" in enabled_methods
+                else _disabled_method()
+            )
+            granger_evidence = (
+                granger_by_pair.get((source_id, target_id), _disabled_method("not_tested"))
+                if "granger_linear" in enabled_methods
+                else _disabled_method()
+            )
+            pgem_score = (
+                float(pgem_evidence.get("score", 0.0)) if pgem_evidence.get("supported") else 0.0
+            )
+            granger_score = (
+                float(granger_evidence.get("score", 0.0))
+                if granger_evidence.get("supported")
+                else 0.0
+            )
             correlation_score = _corr(
                 [1 if t in source_times else 0 for t in sorted(set(source_times + target_times))],
                 [1 if t in target_times else 0 for t in sorted(set(source_times + target_times))],
@@ -149,28 +234,59 @@ def infer_causal_graph(
                 + (1 if relation else 0)
                 + (1 if correlation_score > 0 else 0)
                 + (1 if lift_score >= 0.5 else 0)
-            ) / 4
+                + (1 if pgem_evidence.get("supported") else 0)
+                + (1 if granger_evidence.get("supported") else 0)
+            ) / 6
             severity_weight = max((line.severity_score for line in source_lines), default=0)
             confidence = _clamp(
-                0.25 * precedence_score
-                + 0.20 * method_agreement
-                + 0.20 * (0.55 if relation else 0.25)
-                + 0.15 * lift_score
-                + 0.10 * 0.67
-                + 0.10 * severity_weight
+                0.22 * precedence_score
+                + 0.16 * method_agreement
+                + 0.16 * (0.55 if relation else 0.25)
+                + 0.14 * lift_score
+                + 0.08 * correlation_score
+                + 0.10 * pgem_score
+                + 0.08 * granger_score
+                + 0.06 * severity_weight
             )
             if confidence < 0.35:
                 continue
 
             source_peak = max(source_times, key=lambda t: source_times.count(t))
             target_peak = max(target_times, key=lambda t: target_times.count(t))
-            method = "temporal_precedence+lagged_correlation+lift"
+            method_parts = []
+            if "temporal_precedence" in enabled_methods:
+                method_parts.append("temporal_precedence")
+            if "lagged_correlation" in enabled_methods:
+                method_parts.append("lagged_correlation")
+            if "lift" in enabled_methods:
+                method_parts.append("lift")
             if relation:
-                method += "+service_entity"
+                method_parts.append("service_entity")
+            if pgem_evidence.get("supported"):
+                method_parts.append("pgem")
+            if granger_evidence.get("supported"):
+                method_parts.append("granger_linear")
+            method = "+".join(method_parts or ["temporal_precedence"])
+            temporal_evidence = (
+                {"supported": True, "score": precedence_score}
+                if "temporal_precedence" in enabled_methods
+                else _disabled_method()
+            )
+            correlation_evidence = (
+                {"supported": correlation_score > 0, "score": correlation_score}
+                if "lagged_correlation" in enabled_methods
+                else _disabled_method()
+            )
+            lift_evidence = (
+                {"supported": lift_score >= 0.5, "score": lift_score}
+                if "lift" in enabled_methods
+                else _disabled_method()
+            )
             evidence: dict[str, Any] = {
                 "source_template_id": source_id,
                 "target_template_id": target_id,
-                "time_bin_seconds": 60,
+                "time_bin_seconds": time_bin_seconds,
+                "granger_max_lag_bins": granger_max_lag_bins,
                 "lag_seconds": lag_seconds,
                 "support_windows": support_windows,
                 "source_first_seen": min(source_times).isoformat(),
@@ -178,11 +294,11 @@ def infer_causal_graph(
                 "source_peak": source_peak.isoformat(),
                 "target_peak": target_peak.isoformat(),
                 "methods": {
-                    "pgem": {"supported": False, "extension_seam": True},
-                    "granger_linear": {"supported": False, "extension_seam": True},
-                    "temporal_precedence": {"supported": True, "score": precedence_score},
-                    "lagged_correlation": {"supported": correlation_score > 0, "score": correlation_score},
-                    "lift": {"supported": lift_score >= 0.5, "score": lift_score},
+                    "pgem": pgem_evidence,
+                    "granger_linear": granger_evidence,
+                    "temporal_precedence": temporal_evidence,
+                    "lagged_correlation": correlation_evidence,
+                    "lift": lift_evidence,
                 },
                 "sample_windows": [
                     {
@@ -199,7 +315,12 @@ def infer_causal_graph(
             }
             edges.append(
                 CausalEdge(
-                    id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{analysis_run_id}:{source_id}:{target_id}")),
+                    id=str(
+                        uuid.uuid5(
+                            uuid.NAMESPACE_URL,
+                            f"{analysis_run_id}:{source_id}:{target_id}",
+                        )
+                    ),
                     source=source_id,
                     target=target_id,
                     source_template_id=source_id,
@@ -208,6 +329,11 @@ def infer_causal_graph(
                     lag_seconds=lag_seconds,
                     support_windows=support_windows,
                     confidence=round(confidence, 4),
+                    p_value_adj=(
+                        round(float(granger_evidence["p_value_adj"]), 6)
+                        if granger_evidence.get("p_value_adj") is not None
+                        else None
+                    ),
                     lift=round(lift_score, 4),
                     temporal_precedence_score=round(precedence_score, 4),
                     correlation_score=round(correlation_score, 4),
