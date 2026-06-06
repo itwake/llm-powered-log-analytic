@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 from pathlib import Path
 import zipfile
 
@@ -17,6 +18,27 @@ from app.store import InMemoryStore
 
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
+PIPELINE_STEPS = [
+    "ingest_paths",
+    "merge_entries",
+    "preprocess_redact",
+    "drain_templating",
+    "representative_sampling",
+    "copilot_annotation",
+    "broadcast_annotations",
+    "temporal_aggregation",
+    "causal_graph",
+    "causal_summary",
+    "export_artifacts",
+]
+
+
+class FailingAnnotationGateway(MockCopilotAnnotationGateway):
+    async def responses(self, **kwargs):
+        raise RuntimeError(
+            "annotation failed source_token=gho_secret_token_1234567890 "
+            "password=hunter2"
+        )
 
 
 async def _authenticated_client(
@@ -183,6 +205,24 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     status = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")
     assert status.json()["status"] == "completed"
     assert status.json()["progress"]["templates"] > 0
+    events = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/events")
+    assert events.status_code == 200, events.text
+    events_body = events.json()
+    assert events_body["total"] >= len(PIPELINE_STEPS) * 2
+    event_items = events_body["items"]
+    assert [item["created_at"] for item in event_items] == sorted(
+        item["created_at"] for item in event_items
+    )
+    assert {item["case_id"] for item in event_items} == {case_id}
+    assert {item["analysis_run_id"] for item in event_items} == {run_id}
+    completed_steps = [
+        item["step_name"] for item in event_items if item["event_type"] == "completed"
+    ]
+    assert completed_steps == PIPELINE_STEPS
+    event_metadata = json.dumps([item["metadata"] for item in event_items], sort_keys=True)
+    assert "model_inputs" not in event_metadata
+    assert "representative_lines" not in event_metadata
+    assert "timeout calling auth-service" not in event_metadata
     run_list = await client.get(f"/api/cases/{case_id}/analysis-runs")
     assert run_list.status_code == 200
     assert run_list.json()["total"] == 1
@@ -318,6 +358,58 @@ async def test_raw_byte_upload_complete_idempotent_and_analysis_by_input_file_id
     logs = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/logs")
     assert {item["file_path"] for item in logs.json()["items"]} == {"incident.log"}
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_analysis_failure_records_sanitized_job_event() -> None:
+    store = InMemoryStore()
+    user = store.register_user(
+        email="failure@example.com",
+        username="failure",
+        full_name=None,
+        password="password123",
+    )
+    case = store.create_case(
+        user_id=user.id,
+        data={
+            "title": "Failing annotation",
+            "issue_description": "Gateway raises during annotation.",
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "test",
+            "incident_start": None,
+            "incident_end": None,
+            "timezone": "UTC",
+        },
+    )
+
+    with pytest.raises(RuntimeError):
+        await store.start_analysis(
+            case_id=case.id,
+            user_id=user.id,
+            input_paths=[str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
+            config={"default_window_size_seconds": 60},
+            gateway=FailingAnnotationGateway(),
+        )
+
+    run = next(run for run in store.runs.values() if run.case_id == case.id)
+    assert run.status == "failed"
+    assert run.error_message
+    assert "gho_secret_token_1234567890" not in run.error_message
+    assert "hunter2" not in run.error_message
+    events = store.list_job_events(
+        case_id=case.id,
+        analysis_run_id=run.id,
+        step_name="copilot_annotation",
+    )
+    failed_events = [event for event in events if event.event_type == "failed"]
+    assert len(failed_events) == 1
+    failed_event = failed_events[0]
+    assert failed_event.error_message
+    assert "gho_secret_token_1234567890" not in failed_event.error_message
+    assert "hunter2" not in failed_event.error_message
+    assert failed_event.metadata == {}
+    assert run.progress["steps"]["copilot_annotation"]["status"] == "failed"
 
 
 @pytest.mark.asyncio

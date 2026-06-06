@@ -40,6 +40,19 @@ SQLAlchemy-backed report endpoints read summary, temporal, log table, causal gra
 summary views from the normalized fan-out tables, with the in-memory backend and missing fan-out
 rows still falling back to the legacy `analysis_runs.result_json` path.
 
+Analysis orchestration defaults to the current synchronous local path:
+
+- `LOGAN_ANALYSIS_ORCHESTRATOR=local` runs `AnalyzeCasePipeline` in the API process and keeps tests deterministic.
+- `LOGAN_ANALYSIS_ORCHESTRATOR=temporal` uses the lazy Temporal client facade to start `AnalyzeCaseWorkflow`.
+- `LOGAN_TEMPORAL_ADDRESS=temporal:7233`
+- `LOGAN_TEMPORAL_NAMESPACE=default`
+- `LOGAN_TEMPORAL_TASK_QUEUE=logan-analysis`
+
+The Temporal facade imports the SDK only when temporal orchestration is selected and raises a
+typed configuration/connectivity error if the SDK or server is unavailable. The real durable
+worker/activity implementation is still staged work; the tested local path remains the source
+of completed analysis results.
+
 External analytics sinks can be enabled for SQLAlchemy-backed runs with:
 
 - `LOGAN_ANALYTICS_SINKS_ENABLED=true`
@@ -83,7 +96,8 @@ docker compose up --build
 - Cache Copilot plugin tokens until their `expires_at` instead of exchanging the source token per model call.
 - Add credential revocation/disconnect endpoints and UI.
 - Implement Copilot `/responses` streaming plus `/api/chat/stream` SSE.
-- Back Temporal activities with durable idempotency records and retry state.
+- Replace the Temporal placeholder with real activities backed by durable retries and replay-safe
+  idempotency; job event rows already provide the run-scoped progress/event stream.
 - Add PGEM and Granger methods behind the current causal method seams.
 - Expand RBAC, collaborators, admin settings, audit log UI/API, retention jobs, and rate limits.
 - Add Playwright e2e tests once the web app is connected to a running API.

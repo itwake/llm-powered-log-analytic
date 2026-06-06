@@ -17,6 +17,8 @@ from app.schemas.case import (
     CaseResponse,
     ExportRequest,
     FeedbackRequest,
+    JobEventListResponse,
+    JobEventResponse,
     UploadCompleteRequest,
     UploadRequest,
 )
@@ -28,7 +30,7 @@ from app.services.object_store import (
     stat_object,
     write_bytes,
 )
-from app.store import MetadataStore, UserRecord
+from app.store import MetadataStore, UserRecord, sanitize_error_message
 
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
@@ -63,6 +65,22 @@ def _analysis_run_response(record: Any) -> AnalysisRunResponse:
         error_message=record.error_message,
         model_provider=record.model_provider,
         model_name=record.model_name,
+    )
+
+
+def _job_event_response(record: Any) -> JobEventResponse:
+    return JobEventResponse(
+        id=record.id,
+        case_id=record.case_id,
+        analysis_run_id=record.analysis_run_id,
+        step_name=record.step_name,
+        event_type=record.event_type,
+        status=record.status,
+        attempt=record.attempt,
+        idempotency_key=record.idempotency_key,
+        metadata=record.metadata,
+        error_message=record.error_message,
+        created_at=record.created_at,
     )
 
 
@@ -274,9 +292,9 @@ async def start_analysis(
             gateway=gateway,
         )
     except CopilotCredentialError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        raise HTTPException(status_code=401, detail=sanitize_error_message(exc)) from exc
     except CopilotGatewayError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=sanitize_error_message(exc)) from exc
     return {"analysis_run_id": run.id, "status": run.status}
 
 
@@ -308,6 +326,27 @@ def get_analysis_run(
     if not run or run.case_id != case_id:
         raise HTTPException(status_code=404, detail="analysis run not found")
     return _analysis_run_response(run).model_dump(mode="json")
+
+
+@router.get(
+    "/{case_id}/analysis-runs/{run_id}/events",
+    response_model=JobEventListResponse,
+)
+def list_analysis_run_events(
+    case_id: str,
+    run_id: str,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> JobEventListResponse:
+    del user
+    run = store.get_analysis_run(run_id)
+    if not run or run.case_id != case_id:
+        raise HTTPException(status_code=404, detail="analysis run not found")
+    events = store.list_job_events(case_id=case_id, analysis_run_id=run_id)
+    return JobEventListResponse(
+        items=[_job_event_response(event) for event in events],
+        total=len(events),
+    )
 
 
 def _require_result(store: MetadataStore, case_id: str, run_id: str):

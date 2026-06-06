@@ -23,7 +23,21 @@ case files
   -> Markdown, HTML, JSON exports
 ```
 
+Each step emits `started`, `completed`, and `failed` progress events through an optional
+pipeline callback. The API stores these as durable `job_events` in SQLAlchemy or in memory for
+tests, and updates `analysis_runs.progress_json.current_step` plus a per-step status map as the
+run advances. Event metadata is count-only, such as files, raw lines, templates, samples,
+annotations, windows, causal nodes/edges, and export types; raw log text, prompt payloads,
+model inputs, source tokens, and credential material are not stored in event metadata.
+
 Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services, and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy. Uploaded bytes use a local disk object store by default, so tests can still inject the deterministic in-memory store, fake device-code client, and mock model gateway with no Docker services or external model network required.
+
+`LOGAN_ANALYSIS_ORCHESTRATOR=local` is the default and keeps the API path synchronous. The
+optional `temporal` setting starts `AnalyzeCaseWorkflow` through a lazy Temporal client facade
+using `LOGAN_TEMPORAL_ADDRESS`, `LOGAN_TEMPORAL_NAMESPACE`, and
+`LOGAN_TEMPORAL_TASK_QUEUE`. The workflow class remains locally runnable and accepts
+`case_context` and `config`, but real Temporal activities with durable retries are still an
+extension seam.
 
 The SQLAlchemy completion path is also the optional external analytics sink seam. When
 `LOGAN_ANALYTICS_SINKS_ENABLED=true` and sink URLs are configured, it publishes whitelisted
@@ -61,7 +75,8 @@ Causal edges are candidate relationships only. API and worker fields use `candid
   idempotency records, and service-backed query paths.
 - Add S3 object storage adapters for report artifacts and production upload storage.
 - Add S3/MinIO presigned uploads and resumable/multipart support behind the object-store seam.
-- Replace synchronous orchestration with Temporal workflow activities.
+- Replace the Temporal facade placeholder with replay-safe workflow activities and durable retry
+  state.
 - Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.
 - Add Copilot plugin-token expiry caching and revocation flows.
 - Extend causal methods with PGEM and Granger implementations while retaining bin-size sensitivity checks.

@@ -105,6 +105,39 @@ def test_multiline_merge_keeps_original_line_refs(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_pipeline_emits_step_progress_events() -> None:
+    events: list[dict[str, object]] = []
+
+    async def collect(event: dict[str, object]) -> None:
+        events.append(dict(event))
+
+    result = await AnalyzeCasePipeline().run(
+        case_id="case-events",
+        analysis_run_id="run-events",
+        paths=[str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
+        progress_callback=collect,
+    )
+
+    expected_steps = [
+        "ingest_paths",
+        "merge_entries",
+        "preprocess_redact",
+        "drain_templating",
+        "representative_sampling",
+        "copilot_annotation",
+        "broadcast_annotations",
+        "temporal_aggregation",
+        "causal_graph",
+        "causal_summary",
+        "export_artifacts",
+    ]
+    assert [event["step_name"] for event in events if event["event_type"] == "completed"] == expected_steps
+    assert all(event["analysis_run_id"] == "run-events" for event in events)
+    assert result.progress["current_step"] == "completed"
+    assert result.progress["steps"]["copilot_annotation"]["metadata"]["annotations"] > 0
+
+
+@pytest.mark.asyncio
 async def test_redaction_happens_before_model_input(tmp_path: Path) -> None:
     log_file = tmp_path / "sensitive.log"
     log_file.write_text(

@@ -31,6 +31,10 @@ class Settings:
     copilot_timeout_seconds: float = float(os.getenv("LOGAN_COPILOT_TIMEOUT_SECONDS", "30"))
     database_url: str | None = os.getenv("LOGAN_DATABASE_URL") or None
     store_backend: str = os.getenv("LOGAN_STORE_BACKEND", "auto")
+    analysis_orchestrator: str = os.getenv("LOGAN_ANALYSIS_ORCHESTRATOR", "local")
+    temporal_address: str = os.getenv("LOGAN_TEMPORAL_ADDRESS", "temporal:7233")
+    temporal_namespace: str = os.getenv("LOGAN_TEMPORAL_NAMESPACE", "default")
+    temporal_task_queue: str = os.getenv("LOGAN_TEMPORAL_TASK_QUEUE", "logan-analysis")
     object_store_backend: str = os.getenv("LOGAN_OBJECT_STORE_BACKEND", "local")
     local_object_store_dir: str = os.getenv(
         "LOGAN_LOCAL_OBJECT_STORE_DIR", str(Path.cwd() / ".logan" / "object-store")

@@ -35,9 +35,13 @@ from app.store import (
     CredentialRecord,
     ExportRecord,
     FeedbackRecord,
+    JobEventRecord,
     SessionRecord,
     UploadRecord,
     UserRecord,
+    apply_job_event_progress,
+    sanitize_error_message,
+    sanitize_job_metadata,
 )
 
 
@@ -483,6 +487,55 @@ class SQLAlchemyStore:
             if not input_paths:
                 fixture_dir = Path("tests/fixtures/logs/checkout_incident")
                 input_paths = [str(path) for path in sorted(fixture_dir.glob("*.log"))]
+            orchestrator = (self.settings.analysis_orchestrator or "local").lower()
+            if orchestrator not in {"local", "temporal"}:
+                raise ValueError(
+                    "LOGAN_ANALYSIS_ORCHESTRATOR must be one of: local, temporal"
+                )
+            if orchestrator == "temporal":
+                from logan_workers.temporal_client import (
+                    TemporalClientConfig,
+                    start_analyze_case_workflow,
+                )
+
+                self._set_analysis_progress(
+                    run_id=run.id,
+                    progress={"current_step": "workflow_start", "orchestrator": "temporal"},
+                )
+                await start_analyze_case_workflow(
+                    case_id=case_id,
+                    analysis_run_id=run.id,
+                    paths=input_paths,
+                    case_context={
+                        "title": case.title,
+                        "issue_description": case.issue_description,
+                        "product": case.product,
+                        "environment": case.environment,
+                        "user_id": user_id,
+                    },
+                    config=config,
+                    temporal_config=TemporalClientConfig(
+                        address=self.settings.temporal_address,
+                        namespace=self.settings.temporal_namespace,
+                        task_queue=self.settings.temporal_task_queue,
+                    ),
+                )
+                return self.get_analysis_run(run.id) or run
+
+            def record_progress(event: dict[str, Any]) -> None:
+                job_event = self.record_job_event(
+                    case_id=case_id,
+                    analysis_run_id=run.id,
+                    step_name=str(event["step_name"]),
+                    event_type=str(event["event_type"]),
+                    status=str(event["status"]),
+                    attempt=int(event.get("attempt", 1)),
+                    idempotency_key=str(event["idempotency_key"]),
+                    metadata=event.get("metadata") if isinstance(event.get("metadata"), dict) else {},
+                    error_message=event.get("error_message"),
+                )
+                self._update_analysis_progress(run_id=run.id, event=job_event)
+
             result = await AnalyzeCasePipeline().run(
                 case_id=case_id,
                 analysis_run_id=run.id,
@@ -496,10 +549,15 @@ class SQLAlchemyStore:
                 },
                 config=config,
                 gateway=gateway,
+                progress_callback=record_progress,
             )
             return self._complete_analysis_run(run_id=run.id, result=result, user_id=user_id)
         except Exception as exc:
-            self._fail_analysis_run(run_id=run.id, error_message=str(exc), user_id=user_id)
+            self._fail_analysis_run(
+                run_id=run.id,
+                error_message=sanitize_error_message(exc),
+                user_id=user_id,
+            )
             raise
 
     def get_analysis_run(self, run_id: str) -> AnalysisRunRecord | None:
@@ -515,6 +573,79 @@ class SQLAlchemyStore:
                 .order_by(tables.AnalysisRun.run_number.desc(), tables.AnalysisRun.created_at.desc())
             )
             return [self._analysis_run_record(row) for row in session.scalars(query).all()]
+
+    def record_job_event(
+        self,
+        *,
+        case_id: str,
+        analysis_run_id: str,
+        step_name: str,
+        event_type: str,
+        status: str,
+        attempt: int = 1,
+        idempotency_key: str,
+        metadata: dict[str, Any] | None = None,
+        error_message: str | None = None,
+    ) -> JobEventRecord:
+        metadata_json = sanitize_job_metadata(metadata)
+        sanitized_error = sanitize_error_message(error_message) if error_message else None
+        try:
+            with self._session() as session:
+                existing = session.scalar(
+                    select(tables.JobEvent).where(
+                        tables.JobEvent.analysis_run_id == analysis_run_id,
+                        tables.JobEvent.idempotency_key == idempotency_key,
+                        tables.JobEvent.event_type == event_type,
+                    )
+                )
+                if existing is not None:
+                    return self._job_event_record(existing)
+                event = tables.JobEvent(
+                    id=str(uuid.uuid4()),
+                    case_id=case_id,
+                    analysis_run_id=analysis_run_id,
+                    step_name=step_name,
+                    event_type=event_type,
+                    status=status,
+                    attempt=attempt,
+                    idempotency_key=idempotency_key,
+                    metadata_json=metadata_json,
+                    error_message=sanitized_error,
+                    created_at=_now(),
+                )
+                session.add(event)
+                session.flush()
+                return self._job_event_record(event)
+        except IntegrityError:
+            with self._session() as session:
+                existing = session.scalar(
+                    select(tables.JobEvent).where(
+                        tables.JobEvent.analysis_run_id == analysis_run_id,
+                        tables.JobEvent.idempotency_key == idempotency_key,
+                        tables.JobEvent.event_type == event_type,
+                    )
+                )
+                if existing is not None:
+                    return self._job_event_record(existing)
+            raise
+
+    def list_job_events(
+        self,
+        *,
+        case_id: str | None = None,
+        analysis_run_id: str | None = None,
+        step_name: str | None = None,
+    ) -> list[JobEventRecord]:
+        with self._session() as session:
+            query = select(tables.JobEvent)
+            if case_id is not None:
+                query = query.where(tables.JobEvent.case_id == case_id)
+            if analysis_run_id is not None:
+                query = query.where(tables.JobEvent.analysis_run_id == analysis_run_id)
+            if step_name is not None:
+                query = query.where(tables.JobEvent.step_name == step_name)
+            query = query.order_by(tables.JobEvent.created_at, tables.JobEvent.id)
+            return [self._job_event_record(row) for row in session.scalars(query).all()]
 
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
         with self._session() as session:
@@ -1231,6 +1362,20 @@ class SQLAlchemyStore:
             )
         return self._analysis_run_record(run)
 
+    def _update_analysis_progress(self, *, run_id: str, event: JobEventRecord) -> None:
+        with self._session() as session:
+            run = session.get(tables.AnalysisRun, run_id)
+            if run is None:
+                raise KeyError(run_id)
+            run.progress_json = apply_job_event_progress(run.progress_json, event)
+
+    def _set_analysis_progress(self, *, run_id: str, progress: dict[str, Any]) -> None:
+        with self._session() as session:
+            run = session.get(tables.AnalysisRun, run_id)
+            if run is None:
+                raise KeyError(run_id)
+            run.progress_json = progress
+
     def _complete_analysis_run(
         self, *, run_id: str, result: AnalysisResult, user_id: str
     ) -> AnalysisRunRecord:
@@ -1613,6 +1758,7 @@ class SQLAlchemyStore:
     def _fail_analysis_run(
         self, *, run_id: str, error_message: str, user_id: str
     ) -> AnalysisRunRecord:
+        error_message = sanitize_error_message(error_message)
         with self._session() as session:
             run = session.get(tables.AnalysisRun, run_id)
             if run is None:
@@ -1621,6 +1767,10 @@ class SQLAlchemyStore:
             run.status = "failed"
             run.failed_at = _now()
             run.error_message = error_message
+            progress = dict(run.progress_json or {})
+            progress["error_message"] = error_message
+            progress.setdefault("current_step", "failed")
+            run.progress_json = progress
             if case:
                 case.status = "failed"
                 case.updated_at = _now()
@@ -1761,6 +1911,21 @@ class SQLAlchemyStore:
             error_message=row.error_message,
             result=result,
             progress=row.progress_json or (result.progress if result else {}),
+        )
+
+    def _job_event_record(self, row: tables.JobEvent) -> JobEventRecord:
+        return JobEventRecord(
+            id=row.id,
+            case_id=row.case_id,
+            analysis_run_id=row.analysis_run_id,
+            step_name=row.step_name,
+            event_type=row.event_type,
+            status=row.status,
+            attempt=row.attempt,
+            idempotency_key=row.idempotency_key,
+            metadata=row.metadata_json or {},
+            error_message=row.error_message,
+            created_at=_utc(row.created_at) or _now(),
         )
 
     def _export_record(self, row: tables.Export) -> ExportRecord:

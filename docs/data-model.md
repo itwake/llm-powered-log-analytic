@@ -9,7 +9,7 @@ Core tables:
 
 - `users`, `sessions`, `copilot_credentials`, `copilot_device_auth`
 - `cases`, `case_collaborators`
-- `analysis_runs`
+- `analysis_runs`, `job_events`
 - `raw_files`, `raw_log_lines`, `normalized_log_lines`
 - `log_templates`, `representative_samples`, `template_annotations`
 - `time_window_signals`
@@ -29,6 +29,14 @@ inserted. If `LOGAN_ANALYTICS_SINKS_ENABLED=true` and a ClickHouse or OpenSearch
 configured, SQLAlchemy completion can also publish redacted external analytics payloads after
 the SQL fan-out. Existing report API endpoints continue to read from `result_json` for this
 stage.
+
+`job_events` stores the append-only workflow progress stream for each analysis run. Events are
+run-scoped by `analysis_run_id` and deduplicated by `(analysis_run_id, idempotency_key,
+event_type)`, so repeated activity attempts can safely re-record the same lifecycle event.
+Fields include `step_name`, `event_type`, `status`, `attempt`, sanitized count-only
+`metadata`, sanitized `error_message`, and `created_at`. The API exposes these rows at
+`GET /api/cases/{case_id}/analysis-runs/{run_id}/events` after enforcing that the run belongs
+to the case.
 
 ## Analytics Shape
 

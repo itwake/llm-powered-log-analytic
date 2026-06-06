@@ -230,4 +230,4 @@ class AnalysisResult(BaseModel):
     causal_summary: CausalSummary
     exports: dict[str, ExportArtifact]
     model_inputs: list[dict[str, Any]] = Field(default_factory=list)
-    progress: dict[str, int] = Field(default_factory=dict)
+    progress: dict[str, Any] = Field(default_factory=dict)

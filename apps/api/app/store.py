@@ -4,6 +4,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+import re
 from typing import Any, Protocol
 
 from logan_workers.models import AnalysisResult
@@ -20,6 +21,90 @@ from app.core.security import (
     verify_password,
 )
 from app.services.object_store import is_local_backend, local_upload_object_uri, safe_filename
+
+
+_SENSITIVE_ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s,;]+"),
+        r"\1<REDACTED>",
+    ),
+    (re.compile(r"(?i)(bearer\s+)[^\s,;]+"), r"\1<REDACTED>"),
+    (
+        re.compile(
+            r"(?i)\b(token|api[_-]?key|password|secret|credential|source[_-]?token)"
+            r"\s*[:=]\s*[^,\s;]+"
+        ),
+        r"\1=<REDACTED>",
+    ),
+    (
+        re.compile(r"\b(?:gh[opsru]_[A-Za-z0-9_]{8,}|github_pat_[A-Za-z0-9_]+)\b"),
+        "<REDACTED>",
+    ),
+    (re.compile(r"\bsk-[A-Za-z0-9_-]{10,}\b"), "<REDACTED>"),
+    (re.compile(r"\b[A-Za-z0-9_-]{40,}\b"), "<REDACTED>"),
+)
+_SENSITIVE_METADATA_KEY_PARTS = {
+    "authorization",
+    "credential",
+    "input",
+    "message",
+    "model",
+    "password",
+    "prompt",
+    "raw_message",
+    "raw_text",
+    "representative_lines",
+    "secret",
+    "source_token",
+    "template_context",
+    "token",
+}
+_SAFE_STRING_LIST_METADATA = {"export_types"}
+
+
+def sanitize_error_message(error: object, *, max_length: int = 500) -> str:
+    message = str(error)
+    for pattern, replacement in _SENSITIVE_ERROR_PATTERNS:
+        message = pattern.sub(replacement, message)
+    if len(message) > max_length:
+        message = f"{message[: max_length - 3]}..."
+    return message
+
+
+def _is_sensitive_metadata_key(key: str) -> bool:
+    lowered = key.lower()
+    return any(part in lowered for part in _SENSITIVE_METADATA_KEY_PARTS)
+
+
+def _sanitize_metadata_value(value: Any, *, parent_key: str) -> Any:
+    if value is None or isinstance(value, bool | int | float):
+        return value
+    if isinstance(value, str):
+        if parent_key in _SAFE_STRING_LIST_METADATA and value in {"html", "json", "markdown"}:
+            return value
+        return None
+    if isinstance(value, list):
+        sanitized_items = [
+            _sanitize_metadata_value(item, parent_key=parent_key) for item in value
+        ]
+        return [item for item in sanitized_items if item is not None]
+    if isinstance(value, dict):
+        return sanitize_job_metadata(value)
+    return None
+
+
+def sanitize_job_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {}
+    sanitized: dict[str, Any] = {}
+    for key, value in metadata.items():
+        key_text = str(key)
+        if _is_sensitive_metadata_key(key_text):
+            continue
+        sanitized_value = _sanitize_metadata_value(value, parent_key=key_text)
+        if sanitized_value is not None:
+            sanitized[key_text] = sanitized_value
+    return sanitized
 
 
 @dataclass
@@ -119,6 +204,55 @@ class AnalysisRunRecord:
     error_message: str | None = None
     result: AnalysisResult | None = None
     progress: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class JobEventRecord:
+    id: str
+    case_id: str
+    analysis_run_id: str
+    step_name: str
+    event_type: str
+    status: str
+    attempt: int
+    idempotency_key: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    error_message: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+def apply_job_event_progress(
+    progress: dict[str, Any] | None, event: JobEventRecord
+) -> dict[str, Any]:
+    next_progress = dict(progress or {})
+    raw_steps = next_progress.get("steps")
+    steps = dict(raw_steps) if isinstance(raw_steps, dict) else {}
+    raw_step = steps.get(event.step_name)
+    step = dict(raw_step) if isinstance(raw_step, dict) else {}
+    step["status"] = event.status
+    step["attempt"] = event.attempt
+    step[f"{event.event_type}_at"] = event.created_at.isoformat()
+    if event.metadata:
+        step["metadata"] = event.metadata
+        next_progress.update(event.metadata)
+        if "files" in event.metadata:
+            next_progress["files_total"] = event.metadata["files"]
+            next_progress["files_processed"] = event.metadata["files"]
+        if "samples" in event.metadata:
+            next_progress["representative_samples"] = event.metadata["samples"]
+        if "annotations" in event.metadata:
+            next_progress["annotated_templates"] = event.metadata["annotations"]
+    if event.error_message:
+        step["error_message"] = event.error_message
+        next_progress["error_message"] = event.error_message
+    steps[event.step_name] = step
+    next_progress["steps"] = steps
+    next_progress["current_step"] = (
+        "completed"
+        if event.step_name == "export_artifacts" and event.event_type == "completed"
+        else event.step_name
+    )
+    return next_progress
 
 
 @dataclass
@@ -227,6 +361,28 @@ class MetadataStore(Protocol):
 
     def list_analysis_runs(self, case_id: str) -> list[AnalysisRunRecord]: ...
 
+    def record_job_event(
+        self,
+        *,
+        case_id: str,
+        analysis_run_id: str,
+        step_name: str,
+        event_type: str,
+        status: str,
+        attempt: int = 1,
+        idempotency_key: str,
+        metadata: dict[str, Any] | None = None,
+        error_message: str | None = None,
+    ) -> JobEventRecord: ...
+
+    def list_job_events(
+        self,
+        *,
+        case_id: str | None = None,
+        analysis_run_id: str | None = None,
+        step_name: str | None = None,
+    ) -> list[JobEventRecord]: ...
+
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None: ...
 
     def create_export(
@@ -288,6 +444,8 @@ class InMemoryStore:
         self.cases: dict[str, CaseRecord] = {}
         self.uploads: dict[str, UploadRecord] = {}
         self.runs: dict[str, AnalysisRunRecord] = {}
+        self.job_events: dict[str, JobEventRecord] = {}
+        self.job_event_keys: dict[tuple[str, str, str], str] = {}
         self.feedback: dict[str, FeedbackRecord] = {}
         self.exports: dict[str, ExportRecord] = {}
         self.audit_logs: dict[str, AuditLogRecord] = {}
@@ -491,6 +649,52 @@ class InMemoryStore:
             if not input_paths:
                 fixture_dir = Path("tests/fixtures/logs/checkout_incident")
                 input_paths = [str(path) for path in sorted(fixture_dir.glob("*.log"))]
+            orchestrator = (self.settings.analysis_orchestrator or "local").lower()
+            if orchestrator not in {"local", "temporal"}:
+                raise ValueError(
+                    "LOGAN_ANALYSIS_ORCHESTRATOR must be one of: local, temporal"
+                )
+            if orchestrator == "temporal":
+                from logan_workers.temporal_client import (
+                    TemporalClientConfig,
+                    start_analyze_case_workflow,
+                )
+
+                run.progress = {"current_step": "workflow_start", "orchestrator": "temporal"}
+                await start_analyze_case_workflow(
+                    case_id=case_id,
+                    analysis_run_id=run.id,
+                    paths=input_paths,
+                    case_context={
+                        "title": case.title,
+                        "issue_description": case.issue_description,
+                        "product": case.product,
+                        "environment": case.environment,
+                        "user_id": user_id,
+                    },
+                    config=config,
+                    temporal_config=TemporalClientConfig(
+                        address=self.settings.temporal_address,
+                        namespace=self.settings.temporal_namespace,
+                        task_queue=self.settings.temporal_task_queue,
+                    ),
+                )
+                return run
+
+            def record_progress(event: dict[str, Any]) -> None:
+                job_event = self.record_job_event(
+                    case_id=case_id,
+                    analysis_run_id=run.id,
+                    step_name=str(event["step_name"]),
+                    event_type=str(event["event_type"]),
+                    status=str(event["status"]),
+                    attempt=int(event.get("attempt", 1)),
+                    idempotency_key=str(event["idempotency_key"]),
+                    metadata=event.get("metadata") if isinstance(event.get("metadata"), dict) else {},
+                    error_message=event.get("error_message"),
+                )
+                run.progress = apply_job_event_progress(run.progress, job_event)
+
             run.result = await AnalyzeCasePipeline().run(
                 case_id=case_id,
                 analysis_run_id=run.id,
@@ -504,6 +708,7 @@ class InMemoryStore:
                 },
                 config=config,
                 gateway=gateway,
+                progress_callback=record_progress,
             )
             run.progress = run.result.progress
             run.status = "completed"
@@ -518,8 +723,9 @@ class InMemoryStore:
                 metadata={"progress": run.progress},
             )
         except Exception as exc:
+            error_message = sanitize_error_message(exc)
             run.status = "failed"
-            run.error_message = str(exc)
+            run.error_message = error_message
             case.status = "failed"
             self.record_audit(
                 action="analysis.fail",
@@ -527,7 +733,7 @@ class InMemoryStore:
                 target_type="analysis_run",
                 target_id=run.id,
                 case_id=case_id,
-                metadata={"error_message": str(exc)},
+                metadata={"error_message": error_message},
             )
             raise
         return run
@@ -541,6 +747,55 @@ class InMemoryStore:
             key=lambda run: run.run_number,
             reverse=True,
         )
+
+    def record_job_event(
+        self,
+        *,
+        case_id: str,
+        analysis_run_id: str,
+        step_name: str,
+        event_type: str,
+        status: str,
+        attempt: int = 1,
+        idempotency_key: str,
+        metadata: dict[str, Any] | None = None,
+        error_message: str | None = None,
+    ) -> JobEventRecord:
+        key = (analysis_run_id, idempotency_key, event_type)
+        existing_id = self.job_event_keys.get(key)
+        if existing_id is not None:
+            return self.job_events[existing_id]
+        record = JobEventRecord(
+            id=str(uuid.uuid4()),
+            case_id=case_id,
+            analysis_run_id=analysis_run_id,
+            step_name=step_name,
+            event_type=event_type,
+            status=status,
+            attempt=attempt,
+            idempotency_key=idempotency_key,
+            metadata=sanitize_job_metadata(metadata),
+            error_message=sanitize_error_message(error_message) if error_message else None,
+        )
+        self.job_events[record.id] = record
+        self.job_event_keys[key] = record.id
+        return record
+
+    def list_job_events(
+        self,
+        *,
+        case_id: str | None = None,
+        analysis_run_id: str | None = None,
+        step_name: str | None = None,
+    ) -> list[JobEventRecord]:
+        items = list(self.job_events.values())
+        if case_id is not None:
+            items = [item for item in items if item.case_id == case_id]
+        if analysis_run_id is not None:
+            items = [item for item in items if item.analysis_run_id == analysis_run_id]
+        if step_name is not None:
+            items = [item for item in items if item.step_name == step_name]
+        return sorted(items, key=lambda item: (item.created_at, item.id))
 
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
         run = self.runs.get(run_id)

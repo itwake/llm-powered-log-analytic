@@ -129,6 +129,29 @@ class AnalysisRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class JobEvent(Base):
+    __tablename__ = "job_events"
+    __table_args__ = (
+        UniqueConstraint("analysis_run_id", "idempotency_key", "event_type"),
+    )
+
+    id: Mapped[str] = uuid_pk()
+    case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
+    step_name: Mapped[str] = mapped_column(Text, nullable=False)
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON_TYPE, nullable=False, default=dict, server_default="{}"
+    )
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class RawFile(Base):
     __tablename__ = "raw_files"
 

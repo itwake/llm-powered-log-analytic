@@ -19,6 +19,19 @@ from app.store import create_store
 
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
+PIPELINE_STEPS = [
+    "ingest_paths",
+    "merge_entries",
+    "preprocess_redact",
+    "drain_templating",
+    "representative_sampling",
+    "copilot_annotation",
+    "broadcast_annotations",
+    "temporal_aggregation",
+    "causal_graph",
+    "causal_summary",
+    "export_artifacts",
+]
 
 
 async def _client(store: SQLAlchemyStore) -> AsyncClient:
@@ -297,6 +310,47 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     assert status.json()["status"] == "completed"
     progress = status.json()["progress"]
     assert progress["templates"] > 0
+    events = recreated_store.list_job_events(case_id=case_id, analysis_run_id=run_id)
+    assert [event.created_at for event in events] == sorted(event.created_at for event in events)
+    assert [event.step_name for event in events if event.event_type == "completed"] == PIPELINE_STEPS
+    assert all(event.case_id == case_id for event in events)
+    assert all(event.analysis_run_id == run_id for event in events)
+    serialized_event_metadata = json.dumps(
+        [event.metadata for event in events],
+        sort_keys=True,
+    )
+    assert "model_inputs" not in serialized_event_metadata
+    assert "representative_lines" not in serialized_event_metadata
+    duplicate = recreated_store.record_job_event(
+        case_id=case_id,
+        analysis_run_id=run_id,
+        step_name="manual_idempotency",
+        event_type="completed",
+        status="completed",
+        idempotency_key="manual-idempotency-key",
+        metadata={"files": 1},
+    )
+    duplicate_again = recreated_store.record_job_event(
+        case_id=case_id,
+        analysis_run_id=run_id,
+        step_name="manual_idempotency",
+        event_type="completed",
+        status="completed",
+        idempotency_key="manual-idempotency-key",
+        metadata={"files": 2},
+    )
+    assert duplicate_again.id == duplicate.id
+    with recreated_store.session_factory() as session:
+        duplicate_count = session.scalar(
+            select(func.count())
+            .select_from(tables.JobEvent)
+            .where(
+                tables.JobEvent.analysis_run_id == run_id,
+                tables.JobEvent.idempotency_key == "manual-idempotency-key",
+                tables.JobEvent.event_type == "completed",
+            )
+        )
+    assert duplicate_count == 1
     assert _raw_file_analysis_run_id(recreated_store, file_id) is None
     persisted_result = recreated_store.get_analysis_result(case_id, run_id)
     assert persisted_result is not None

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from logan_workers.pipeline import AnalyzeCasePipeline
 
@@ -11,6 +12,8 @@ class AnalyzeCaseParams:
     case_id: str
     analysis_run_id: str
     paths: list[str]
+    case_context: dict[str, Any] = field(default_factory=dict)
+    config: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,8 @@ class AnalyzeCaseWorkflow:
             case_id=params.case_id,
             analysis_run_id=params.analysis_run_id,
             paths=params.paths,
+            case_context=params.case_context,
+            config=params.config,
         )
         return AnalyzeCaseResult(
             case_id=result.case_id,

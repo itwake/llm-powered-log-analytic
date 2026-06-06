@@ -88,6 +88,24 @@ CREATE TABLE analysis_runs (
   UNIQUE(case_id, run_number)
 );
 
+CREATE TABLE job_events (
+  id UUID PRIMARY KEY,
+  case_id UUID NOT NULL REFERENCES cases(id),
+  analysis_run_id UUID NOT NULL REFERENCES analysis_runs(id),
+  step_name TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  attempt INT NOT NULL DEFAULT 1,
+  idempotency_key TEXT NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}',
+  error_message TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(analysis_run_id, idempotency_key, event_type)
+);
+
+CREATE INDEX idx_job_events_case_run ON job_events(case_id, analysis_run_id);
+CREATE INDEX idx_job_events_step ON job_events(step_name);
+
 CREATE TABLE raw_files (
   id UUID PRIMARY KEY,
   case_id UUID NOT NULL REFERENCES cases(id),
