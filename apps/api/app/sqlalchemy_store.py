@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -25,7 +27,11 @@ from app.core.security import (
 )
 from app.db import Base
 from app.models import tables
-from app.services.analytics_sinks import AnalyticsSinkError, AnalyticsSinkPublisher
+from app.services.analytics_sinks import (
+    AnalyticsSinkError,
+    AnalyticsSinkPublisher,
+    AnalyticsSinkWriteOperation,
+)
 from app.services.object_store import (
     is_local_backend,
     is_s3_backend,
@@ -35,6 +41,7 @@ from app.services.object_store import (
 )
 from app.store import (
     AnalysisRunRecord,
+    AnalyticsSinkWriteRecord,
     AuditLogRecord,
     CaseRecord,
     CopilotAuthRecord,
@@ -79,6 +86,11 @@ def _worker_uuid(value: str | None, fallback_key: str) -> str:
 
 def _iso(value: datetime | None) -> str | None:
     return _utc(value).isoformat() if value else None
+
+
+def _hash_json(value: dict[str, Any], *, prefix: str = "") -> str:
+    encoded = json.dumps(value, separators=(",", ":"), sort_keys=True)
+    return f"{prefix}{hashlib.sha256(encoded.encode('utf-8')).hexdigest()}"
 
 
 def _str_list(value: Any) -> list[str]:
@@ -696,6 +708,32 @@ class SQLAlchemyStore:
                 query = query.where(tables.JobEvent.step_name == step_name)
             query = query.order_by(tables.JobEvent.created_at, tables.JobEvent.id)
             return [self._job_event_record(row) for row in session.scalars(query).all()]
+
+    def list_analytics_sink_writes(
+        self,
+        *,
+        case_id: str | None = None,
+        analysis_run_id: str | None = None,
+        sink_name: str | None = None,
+    ) -> list[AnalyticsSinkWriteRecord]:
+        with self._session() as session:
+            query = select(tables.AnalyticsSinkWrite)
+            if case_id is not None:
+                query = query.where(tables.AnalyticsSinkWrite.case_id == case_id)
+            if analysis_run_id is not None:
+                query = query.where(
+                    tables.AnalyticsSinkWrite.analysis_run_id == analysis_run_id
+                )
+            if sink_name is not None:
+                query = query.where(tables.AnalyticsSinkWrite.sink_name == sink_name)
+            query = query.order_by(
+                tables.AnalyticsSinkWrite.created_at,
+                tables.AnalyticsSinkWrite.id,
+            )
+            return [
+                self._analytics_sink_write_record(row)
+                for row in session.scalars(query).all()
+            ]
 
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
         with self._session() as session:
@@ -1435,19 +1473,26 @@ class SQLAlchemyStore:
             run = session.get(tables.AnalysisRun, run_id)
             if run is None:
                 raise KeyError(run_id)
+            run.error_message = None
+            run.progress_json = result.progress
+            run.result_json = result_json
+            self._fan_out_analysis_result(session=session, run=run, result=result)
+
+        self._publish_analytics_sinks(
+            run_id=run_id,
+            result=result,
+            user_id=user_id,
+        )
+
+        with self._session() as session:
+            run = session.get(tables.AnalysisRun, run_id)
+            if run is None:
+                raise KeyError(run_id)
             case = session.get(tables.Case, run.case_id)
             run.status = "completed"
             run.completed_at = _now()
             run.error_message = None
             run.progress_json = result.progress
-            run.result_json = result_json
-            self._fan_out_analysis_result(session=session, run=run, result=result)
-            self._publish_analytics_sinks(
-                session=session,
-                run=run,
-                result=result,
-                user_id=user_id,
-            )
             if case:
                 case.status = "ready"
                 case.updated_at = _now()
@@ -1465,8 +1510,7 @@ class SQLAlchemyStore:
     def _publish_analytics_sinks(
         self,
         *,
-        session: Session,
-        run: tables.AnalysisRun,
+        run_id: str,
         result: AnalysisResult,
         user_id: str,
     ) -> None:
@@ -1478,41 +1522,192 @@ class SQLAlchemyStore:
         publisher = self.analytics_sink_publisher or AnalyticsSinkPublisher.from_settings(
             self.settings
         )
-        try:
-            publish_result = publisher.publish(result)
-        except AnalyticsSinkError as exc:
-            failure_mode = self.settings.analytics_sink_failure_mode.lower()
-            self._add_audit(
-                session,
-                action="analytics_sink.publish_failed",
-                user_id=user_id,
-                target_type="analysis_run",
-                target_id=run.id,
-                case_id=run.case_id,
-                metadata={
-                    "error": str(exc),
-                    "failure_mode": failure_mode,
-                },
-            )
-            if failure_mode == "fail":
-                raise
+        if hasattr(publisher, "publish_operations"):
+            operations = list(publisher.publish_operations(result))
+        else:
+            operations = [self._legacy_analytics_sink_operation(publisher, result)]
+        if not operations:
             return
 
-        if hasattr(publish_result, "to_dict"):
-            metadata = publish_result.to_dict()
-        elif isinstance(publish_result, dict):
-            metadata = publish_result
-        else:
-            metadata = {}
-        self._add_audit(
-            session,
+        failure_mode = self.settings.analytics_sink_failure_mode.lower()
+        metadata: dict[str, int] = {
+            "clickhouse_enriched_log_rows": 0,
+            "clickhouse_window_rows": 0,
+            "opensearch_documents": 0,
+            "succeeded_writes": 0,
+            "failed_writes": 0,
+            "skipped_writes": 0,
+        }
+
+        for operation in operations:
+            record, skipped = self._prepare_analytics_sink_write(operation)
+            if skipped:
+                metadata["skipped_writes"] += 1
+                continue
+            try:
+                operation.execute()
+            except AnalyticsSinkError as exc:
+                sanitized_error = sanitize_error_message(exc)
+                self._mark_analytics_sink_write_failed(
+                    write_id=record.id,
+                    error_message=sanitized_error,
+                )
+                metadata["failed_writes"] += 1
+                self.record_audit(
+                    action="analytics_sink.publish_failed",
+                    user_id=user_id,
+                    target_type="analysis_run",
+                    target_id=run_id,
+                    case_id=operation.case_id,
+                    metadata={
+                        "destination": operation.destination,
+                        "error": sanitized_error,
+                        "failure_mode": failure_mode,
+                        "idempotency_key": operation.idempotency_key,
+                        "sink_name": operation.sink_name,
+                    },
+                )
+                if failure_mode == "fail":
+                    raise
+                continue
+
+            self._mark_analytics_sink_write_succeeded(
+                write_id=record.id,
+                row_count=operation.row_count,
+            )
+            metadata["succeeded_writes"] += 1
+            self._add_analytics_sink_count(metadata, operation)
+
+        self.record_audit(
             action="analytics_sink.publish",
             user_id=user_id,
             target_type="analysis_run",
-            target_id=run.id,
-            case_id=run.case_id,
+            target_id=run_id,
+            case_id=result.case_id,
             metadata=metadata,
         )
+
+    def _legacy_analytics_sink_operation(
+        self, publisher: Any, result: AnalysisResult
+    ) -> AnalyticsSinkWriteOperation:
+        sink_name = "clickhouse" if self.settings.clickhouse_url else "opensearch"
+        destinations: list[str] = []
+        if self.settings.clickhouse_url:
+            destinations.append(f"{self.settings.clickhouse_database}.*")
+        if self.settings.opensearch_url:
+            destinations.append("opensearch/_bulk")
+        destination = "+".join(destinations) or "external"
+        payload_hash = _hash_json(
+            {
+                "normalized_logs": len(result.normalized_logs),
+                "temporal_windows": len(result.temporal),
+                "sink_name": sink_name,
+                "destination": destination,
+            }
+        )
+        idempotency_key = _hash_json(
+            {
+                "analysis_run_id": result.analysis_run_id,
+                "case_id": result.case_id,
+                "destination": destination,
+                "payload_hash": payload_hash,
+                "sink_name": sink_name,
+            },
+            prefix="analytics-sink:",
+        )
+
+        def publish_legacy() -> None:
+            publisher.publish(result)
+
+        return AnalyticsSinkWriteOperation(
+            case_id=result.case_id,
+            analysis_run_id=result.analysis_run_id,
+            sink_name=sink_name,
+            destination=destination,
+            idempotency_key=idempotency_key,
+            payload_hash=payload_hash,
+            row_count=0,
+            _publish=publish_legacy,
+        )
+
+    def _prepare_analytics_sink_write(
+        self, operation: AnalyticsSinkWriteOperation
+    ) -> tuple[AnalyticsSinkWriteRecord, bool]:
+        now = _now()
+        with self._session() as session:
+            row = session.scalar(
+                select(tables.AnalyticsSinkWrite).where(
+                    tables.AnalyticsSinkWrite.idempotency_key == operation.idempotency_key
+                )
+            )
+            if row is not None and row.status in {"succeeded", "skipped"}:
+                return self._analytics_sink_write_record(row), True
+            if row is None:
+                row = tables.AnalyticsSinkWrite(
+                    id=str(uuid.uuid4()),
+                    case_id=operation.case_id,
+                    analysis_run_id=operation.analysis_run_id,
+                    sink_name=operation.sink_name,
+                    destination=operation.destination,
+                    idempotency_key=operation.idempotency_key,
+                    payload_hash=operation.payload_hash,
+                    status="pending",
+                    attempt_count=0,
+                    row_count=operation.row_count,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(row)
+            else:
+                row.sink_name = operation.sink_name
+                row.destination = operation.destination
+                row.payload_hash = operation.payload_hash
+                row.row_count = operation.row_count
+
+            row.status = "running"
+            row.attempt_count = int(row.attempt_count or 0) + 1
+            row.last_error = None
+            row.last_attempt_at = now
+            row.next_retry_at = None
+            row.updated_at = now
+            session.flush()
+            return self._analytics_sink_write_record(row), False
+
+    def _mark_analytics_sink_write_succeeded(self, *, write_id: str, row_count: int) -> None:
+        now = _now()
+        with self._session() as session:
+            row = session.get(tables.AnalyticsSinkWrite, write_id)
+            if row is None:
+                raise KeyError(write_id)
+            row.status = "succeeded"
+            row.row_count = row_count
+            row.last_error = None
+            row.next_retry_at = None
+            row.updated_at = now
+
+    def _mark_analytics_sink_write_failed(
+        self, *, write_id: str, error_message: str
+    ) -> None:
+        now = _now()
+        with self._session() as session:
+            row = session.get(tables.AnalyticsSinkWrite, write_id)
+            if row is None:
+                raise KeyError(write_id)
+            row.status = "failed"
+            row.last_error = sanitize_error_message(error_message)
+            row.next_retry_at = now
+            row.updated_at = now
+
+    def _add_analytics_sink_count(
+        self, metadata: dict[str, int], operation: AnalyticsSinkWriteOperation
+    ) -> None:
+        if operation.sink_name == "clickhouse":
+            if operation.destination.endswith(".enriched_log_lines"):
+                metadata["clickhouse_enriched_log_rows"] += operation.row_count
+            elif operation.destination.endswith(".window_aggregates"):
+                metadata["clickhouse_window_rows"] += operation.row_count
+        elif operation.sink_name == "opensearch":
+            metadata["opensearch_documents"] += operation.row_count
 
     def _fan_out_analysis_result(
         self, *, session: Session, run: tables.AnalysisRun, result: AnalysisResult
@@ -1978,6 +2173,27 @@ class SQLAlchemyStore:
             metadata=row.metadata_json or {},
             error_message=row.error_message,
             created_at=_utc(row.created_at) or _now(),
+        )
+
+    def _analytics_sink_write_record(
+        self, row: tables.AnalyticsSinkWrite
+    ) -> AnalyticsSinkWriteRecord:
+        return AnalyticsSinkWriteRecord(
+            id=row.id,
+            case_id=row.case_id,
+            analysis_run_id=row.analysis_run_id,
+            sink_name=row.sink_name,
+            destination=row.destination,
+            idempotency_key=row.idempotency_key,
+            payload_hash=row.payload_hash,
+            status=row.status,
+            attempt_count=row.attempt_count,
+            row_count=row.row_count,
+            last_error=row.last_error,
+            last_attempt_at=_utc(row.last_attempt_at),
+            next_retry_at=_utc(row.next_retry_at),
+            created_at=_utc(row.created_at) or _now(),
+            updated_at=_utc(row.updated_at) or _now(),
         )
 
     def _export_record(self, row: tables.Export) -> ExportRecord:

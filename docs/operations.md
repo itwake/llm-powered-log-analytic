@@ -57,8 +57,8 @@ failures are serialized as sanitized `event: error` SSE frames.
 The test suite injects fake auth/model clients and does not require GitHub network access.
 Analysis completion in the SQLAlchemy backend now writes normalized analytics rows into
 PostgreSQL/SQLite tables in the same local path. ClickHouse/OpenSearch payload builders and
-optional HTTP publishers are implemented, but external sinks are disabled by default and Docker
-is not required for deterministic tests.
+optional HTTP publishers are implemented with managed database/table/index lifecycle, but
+external sinks are disabled by default and Docker is not required for deterministic tests.
 SQLAlchemy-backed report endpoints read summary, temporal, log table, causal graph, and causal
 summary views from the normalized fan-out tables, with the in-memory backend and missing fan-out
 rows still falling back to the legacy `analysis_runs.result_json` path.
@@ -86,8 +86,15 @@ External analytics sinks can be enabled for SQLAlchemy-backed runs with:
 
 The adapters publish only redacted/normalized log content and derived metadata. They do not
 publish raw log text, model prompts, model inputs, source tokens, or credential material.
-ClickHouse/OpenSearch table/index creation, schema migrations, retries, idempotency records,
-and service-backed external analytics queries remain production work.
+Before ClickHouse inserts, the publisher creates the configured database plus
+`enriched_log_lines` and `window_aggregates` with MergeTree schemas if needed. Before
+OpenSearch bulk indexing, it creates the run-scoped `logan-logs-{case_id}-{analysis_run_id}`
+index with mappings/settings and treats `resource_already_exists_exception` as success.
+SQLAlchemy stores one `analytics_sink_writes` record per target write with destination,
+idempotency key, payload hash, status, attempt count, row count, sanitized error, and retry
+timestamps. Succeeded records skip duplicate publishes for the same run/target/payload; failed
+records retry on the next completion attempt. Service-backed external analytics queries remain
+production work.
 
 Run the web workspace against the local API:
 
@@ -110,9 +117,6 @@ docker compose up --build
 
 ## Remaining Staged Work
 
-- Add managed ClickHouse table lifecycle for `enriched_log_lines` and `window_aggregates`.
-- Add managed OpenSearch index lifecycle for `logan-logs-{case_id}-{analysis_run_id}`.
-- Add external sink retry/idempotency records for ClickHouse/OpenSearch writes.
 - Add report/query reads over external analytics stores.
 - Add resumable/multipart uploads for large files and interrupted browser sessions.
 - Replace the Temporal placeholder with real activities backed by durable retries and replay-safe

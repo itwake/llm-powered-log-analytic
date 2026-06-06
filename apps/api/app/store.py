@@ -229,6 +229,25 @@ class JobEventRecord:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
+@dataclass
+class AnalyticsSinkWriteRecord:
+    id: str
+    case_id: str
+    analysis_run_id: str
+    sink_name: str
+    destination: str
+    idempotency_key: str
+    payload_hash: str
+    status: str
+    attempt_count: int
+    row_count: int
+    last_error: str | None = None
+    last_attempt_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
 def apply_job_event_progress(
     progress: dict[str, Any] | None, event: JobEventRecord
 ) -> dict[str, Any]:

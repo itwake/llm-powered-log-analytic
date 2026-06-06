@@ -107,6 +107,27 @@ CREATE TABLE job_events (
 CREATE INDEX idx_job_events_case_run ON job_events(case_id, analysis_run_id);
 CREATE INDEX idx_job_events_step ON job_events(step_name);
 
+CREATE TABLE analytics_sink_writes (
+  id UUID PRIMARY KEY,
+  case_id UUID NOT NULL REFERENCES cases(id),
+  analysis_run_id UUID NOT NULL REFERENCES analysis_runs(id),
+  sink_name TEXT NOT NULL,
+  destination TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  payload_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INT NOT NULL DEFAULT 0,
+  row_count BIGINT NOT NULL DEFAULT 0,
+  last_error TEXT,
+  last_attempt_at TIMESTAMPTZ,
+  next_retry_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_analytics_sink_writes_case_run ON analytics_sink_writes(case_id, analysis_run_id);
+CREATE INDEX idx_analytics_sink_writes_status_retry ON analytics_sink_writes(status, next_retry_at);
+
 CREATE TABLE raw_files (
   id UUID PRIMARY KEY,
   case_id UUID NOT NULL REFERENCES cases(id),

@@ -42,9 +42,13 @@ extension seam.
 The SQLAlchemy completion path is also the optional external analytics sink seam. When
 `LOGAN_ANALYTICS_SINKS_ENABLED=true` and sink URLs are configured, it publishes whitelisted
 redacted/normalized payloads to ClickHouse and/or OpenSearch after the normalized SQL fan-out.
-The default remains no external sink network calls. In `warn` mode sink failures are audited
-and analysis completion continues; in `fail` mode the typed sink error is allowed to fail the
-run.
+The publisher manages the configured ClickHouse database/tables and run-scoped OpenSearch
+index mappings before writing. SQLAlchemy records each external target write in
+`analytics_sink_writes` with an idempotency key and payload hash, so completed targets are
+skipped on re-publish and failed targets retry on the next completion attempt. The default
+remains no external sink network calls. In `warn` mode sink failures are audited and analysis
+completion continues; in `fail` mode the typed sink error is allowed to fail the run after the
+failed write record is preserved.
 
 The API owns runtime injection points on app state:
 
@@ -71,8 +75,7 @@ Causal edges are candidate relationships only. API and worker fields use `candid
 ## Extension Seams
 
 - Replace `StableDrainAdapter` with `drain3` behind the same `cluster()` interface.
-- Extend the ClickHouse/OpenSearch sink adapters with managed table/index lifecycle, retries,
-  idempotency records, and service-backed query paths.
+- Extend the ClickHouse/OpenSearch sink adapters with service-backed query paths.
 - Add S3 object storage adapters for report artifacts.
 - Add resumable/multipart S3 uploads for large files and interrupted browser sessions.
 - Replace the Temporal facade placeholder with replay-safe workflow activities and durable retry

@@ -2,11 +2,11 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing, an in-memory test option, local object-byte uploads, synchronous worker pipeline, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, an in-memory test option, local object-byte uploads, synchronous worker pipeline, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell, and deployment scaffolding.
 
 ## Architecture
 
-- `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, real GitHub Copilot device-code auth, Copilot `/responses` gateway with streaming support, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters, and a lightweight in-memory store for explicit tests/local experimentation.
+- `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, real GitHub Copilot device-code auth, Copilot `/responses` gateway with streaming support, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters with lifecycle/idempotency tracking, and a lightweight in-memory store for explicit tests/local experimentation.
 - `apps/workers`: Python log-analysis pipeline for ingestion, multi-line merge, timestamp parsing, redaction, templating, representative sampling, model annotation, label broadcasting, temporal aggregation, candidate causal graph generation, causal summary rendering, and export generation.
 - `apps/web`: Next.js/React/TypeScript operational workbench shell aligned to final API shapes.
 - `infra/docker`: first-pass Dockerfiles for web, API, and worker.
@@ -112,9 +112,9 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_CLICKHOUSE_USERNAME=` and `LOGAN_CLICKHOUSE_PASSWORD=` optional HTTP basic auth.
 - `LOGAN_OPENSEARCH_URL=` optional OpenSearch endpoint.
 - `LOGAN_OPENSEARCH_USERNAME=` and `LOGAN_OPENSEARCH_PASSWORD=` optional HTTP basic auth.
-- `LOGAN_ANALYTICS_SINK_FAILURE_MODE=warn`; use `fail` to make sink publish errors fail the analysis run.
+- `LOGAN_ANALYTICS_SINK_FAILURE_MODE=warn`; use `fail` to make sink publish errors fail the analysis run. SQLAlchemy-backed sink writes are tracked per external target in `analytics_sink_writes`, so succeeded targets are skipped on re-publish and failed targets are retried on the next completion attempt.
 - `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` for the web workspace API base URL.
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are ClickHouse/OpenSearch table and index lifecycle, external sink retry/idempotency records, service-backed analytics query paths, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are service-backed external analytics query paths, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
