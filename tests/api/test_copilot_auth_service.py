@@ -8,6 +8,7 @@ import httpx
 from app.core.security import decrypt_token
 from app.services.copilot_auth_service import (
     DEVICE_CODE_GRANT_TYPE,
+    GITHUB_COPILOT_OAUTH_BASE_URL,
     DeviceCodePollResult,
     GitHubDeviceCodeClient,
     MockGitHubDeviceClient,
@@ -61,6 +62,29 @@ def test_device_code_start_success_uses_github_payload_and_headers() -> None:
     assert response.interval == 5
 
 
+def test_device_code_start_ignores_request_base_url() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "device_code": "device-code-1",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://github.com/login/device",
+            },
+        )
+
+    client = GitHubDeviceCodeClient(http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+    client.start("https://evil.example")
+
+    assert [str(request.url) for request in requests] == [
+        "https://github.com/login/device/code"
+    ]
+
+
 def test_device_code_poll_pending_uses_expected_payload() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
@@ -80,6 +104,23 @@ def test_device_code_poll_pending_uses_expected_payload() -> None:
 
     assert result.status == "pending"
     assert result.message == "authorization_pending"
+
+
+def test_device_code_poll_ignores_record_base_url() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"error": "authorization_pending"})
+
+    client = GitHubDeviceCodeClient(http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+    result = client.check(_auth_record(github_base_url="https://evil.example"))
+
+    assert result.status == "pending"
+    assert [str(request.url) for request in requests] == [
+        "https://github.com/login/oauth/access_token"
+    ]
 
 
 def test_device_code_poll_slow_down_updates_service_interval() -> None:
@@ -118,6 +159,33 @@ def test_device_code_poll_slow_down_updates_service_interval() -> None:
         "next_poll_after_seconds": 10,
     }
     assert store.get_copilot_auth(record.auth_id).interval == 10  # type: ignore[union-attr]
+
+
+def test_service_stores_public_github_base_url_for_arbitrary_start_request() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "device_code": "device-code-1",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://github.com/login/device",
+                "verification_uri_complete": "https://github.com/login/device?user_code=ABCD-EFGH",
+                "expires_in": 900,
+                "interval": 5,
+            },
+        )
+
+    store = InMemoryStore()
+    user = _user(store)
+    client = GitHubDeviceCodeClient(http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    service = CopilotAuthService(store, client=client)
+
+    record = service.start(user=user, github_base_url="https://evil.example")
+
+    assert record.github_base_url == GITHUB_COPILOT_OAUTH_BASE_URL
+    stored = store.get_copilot_auth(record.auth_id)
+    assert stored is not None
+    assert stored.github_base_url == GITHUB_COPILOT_OAUTH_BASE_URL
 
 
 def test_device_code_authorized_stores_encrypted_token_and_returns_no_token() -> None:
@@ -220,7 +288,7 @@ def test_service_respects_interval_before_polling_real_client() -> None:
     assert calls == 0
 
 
-def _auth_record() -> CopilotAuthRecord:
+def _auth_record(github_base_url: str = GITHUB_COPILOT_OAUTH_BASE_URL) -> CopilotAuthRecord:
     now = datetime(2026, 6, 6, 10, 0, tzinfo=UTC)
     return CopilotAuthRecord(
         auth_id="auth-id-1",
@@ -231,7 +299,7 @@ def _auth_record() -> CopilotAuthRecord:
         verification_uri_complete="https://github.com/login/device?user_code=ABCD-EFGH",
         expires_in=900,
         interval=5,
-        github_base_url="https://github.com",
+        github_base_url=github_base_url,
         created_at=now,
         updated_at=now,
     )

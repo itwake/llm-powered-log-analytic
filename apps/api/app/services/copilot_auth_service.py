@@ -13,6 +13,7 @@ from app.store import CopilotAuthRecord, MetadataStore, UserRecord
 
 
 GITHUB_COPILOT_USER_AGENT = "GitHubCopilotChat/0.35.0"
+GITHUB_COPILOT_OAUTH_BASE_URL = "https://github.com"
 DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 
 
@@ -55,9 +56,8 @@ class GitHubDeviceCodeClient:
         self.http_client = http_client or httpx.Client(timeout=app_settings.copilot_timeout_seconds)
 
     def start(self, github_base_url: str) -> DeviceCodeResponse:
-        base_url = github_base_url.rstrip("/")
         response = self.http_client.post(
-            f"{base_url}/login/device/code",
+            f"{GITHUB_COPILOT_OAUTH_BASE_URL}/login/device/code",
             json={"client_id": self.settings.copilot_oauth_client_id, "scope": "read:user"},
             headers=self._headers(),
         )
@@ -74,9 +74,8 @@ class GitHubDeviceCodeClient:
         )
 
     def check(self, record: CopilotAuthRecord) -> DeviceCodePollResult:
-        base_url = record.github_base_url.rstrip("/")
         response = self.http_client.post(
-            f"{base_url}/login/oauth/access_token",
+            f"{GITHUB_COPILOT_OAUTH_BASE_URL}/login/oauth/access_token",
             json={
                 "client_id": self.settings.copilot_oauth_client_id,
                 "device_code": record.device_code,
@@ -170,7 +169,7 @@ class CopilotAuthService:
             verification_uri_complete=response.verification_uri_complete,
             expires_in=response.expires_in,
             interval=response.interval,
-            github_base_url=github_base_url,
+            github_base_url=GITHUB_COPILOT_OAUTH_BASE_URL,
             created_at=now,
             updated_at=now,
         )

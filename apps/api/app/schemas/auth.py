@@ -28,7 +28,13 @@ class AuthUserResponse(BaseModel):
 
 
 class CopilotStartRequest(BaseModel):
-    github_base_url: str = "https://github.com"
+    github_base_url: str = Field(
+        default="https://github.com",
+        description=(
+            "Accepted for backwards compatibility; Copilot OAuth always uses "
+            "https://github.com regardless of this value."
+        ),
+    )
 
 
 class CopilotCheckRequest(BaseModel):
