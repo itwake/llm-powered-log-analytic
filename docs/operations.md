@@ -32,6 +32,9 @@ The default API path uses real GitHub Copilot auth and model calls:
 - analysis runs use `CopilotModelGateway` and require a stored credential or one of `LOGAN_GITHUB_COPILOT_TOKEN` / `LOGAN_GITHUB_SOURCE_TOKEN`.
 
 The test suite injects fake auth/model clients and does not require GitHub network access.
+Analysis completion in the SQLAlchemy backend now writes normalized analytics rows into
+PostgreSQL/SQLite tables in the same local path; ClickHouse, OpenSearch, and Docker are not
+required for deterministic tests.
 
 Run the web workspace against the local API:
 
@@ -54,9 +57,11 @@ docker compose up --build
 
 ## Remaining Staged Work
 
-- Fan out serialized `AnalysisResult` artifacts into normalized PostgreSQL tables, ClickHouse, and OpenSearch.
 - Persist enriched logs and window aggregates into ClickHouse.
 - Index redacted/normalized logs into OpenSearch.
+- Add external sink retry/idempotency records for ClickHouse/OpenSearch writes.
+- Move report/query endpoints from `analysis_runs.result_json` to service-backed reads over
+  normalized SQL and external analytics stores.
 - Add an S3/MinIO presigned object-store adapter for production deployments.
 - Add resumable/multipart uploads for large files and interrupted browser sessions.
 - Cache Copilot plugin tokens until their `expires_at` instead of exchanging the source token per model call.

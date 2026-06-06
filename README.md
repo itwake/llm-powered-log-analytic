@@ -2,11 +2,11 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with an in-memory test option, local object-byte uploads, synchronous worker pipeline, synthetic checkout incident fixtures, tests, a Next.js workbench shell, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, an in-memory test option, local object-byte uploads, synchronous worker pipeline, synthetic checkout incident fixtures, tests, a Next.js workbench shell, and deployment scaffolding.
 
 ## Architecture
 
-- `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, real GitHub Copilot device-code auth, Copilot `/responses` gateway, SQLAlchemy metadata persistence, and a lightweight in-memory store for explicit tests/local experimentation.
+- `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, real GitHub Copilot device-code auth, Copilot `/responses` gateway, SQLAlchemy metadata persistence with normalized analysis rows, and a lightweight in-memory store for explicit tests/local experimentation.
 - `apps/workers`: Python log-analysis pipeline for ingestion, multi-line merge, timestamp parsing, redaction, templating, representative sampling, model annotation, label broadcasting, temporal aggregation, candidate causal graph generation, causal summary rendering, and export generation.
 - `apps/web`: Next.js/React/TypeScript operational workbench shell aligned to final API shapes.
 - `infra/docker`: first-pass Dockerfiles for web, API, and worker.
@@ -105,4 +105,4 @@ See `.env.example` for the full list. Key defaults:
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are Copilot plugin-token expiry caching/revocation, `/api/chat/stream` SSE wiring, ClickHouse/OpenSearch fan-out for analysis artifacts, S3/MinIO presigned object-store adapters, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are Copilot plugin-token expiry caching/revocation, `/api/chat/stream` SSE wiring, ClickHouse persistence, OpenSearch indexing, external sink retry/idempotency records, service-backed analytics query paths, S3/MinIO presigned object-store adapters, resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.

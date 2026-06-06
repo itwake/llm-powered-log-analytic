@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, select
 
 from logan_workers.activities.inference import MockCopilotAnnotationGateway
 
 from app.config import Settings
 from app.main import create_app
+from app.models import tables
 from app.services.copilot_auth_service import MockGitHubDeviceClient
 from app.sqlalchemy_store import SQLAlchemyStore
 from app.store import create_store
@@ -25,6 +28,103 @@ async def _client(store: SQLAlchemyStore) -> AsyncClient:
         model_gateway=MockCopilotAnnotationGateway(),
     )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+
+
+def _analytics_counts(store: SQLAlchemyStore, run_id: str) -> dict[str, int]:
+    with store.session_factory() as session:
+        return {
+            "raw_files": session.scalar(
+                select(func.count())
+                .select_from(tables.RawFile)
+                .where(tables.RawFile.analysis_run_id == run_id)
+            )
+            or 0,
+            "raw_log_lines": session.scalar(
+                select(func.count())
+                .select_from(tables.RawLogLine)
+                .where(tables.RawLogLine.analysis_run_id == run_id)
+            )
+            or 0,
+            "normalized_log_lines": session.scalar(
+                select(func.count())
+                .select_from(tables.NormalizedLogLine)
+                .where(tables.NormalizedLogLine.analysis_run_id == run_id)
+            )
+            or 0,
+            "log_templates": session.scalar(
+                select(func.count())
+                .select_from(tables.LogTemplate)
+                .where(tables.LogTemplate.analysis_run_id == run_id)
+            )
+            or 0,
+            "representative_samples": session.scalar(
+                select(func.count())
+                .select_from(tables.RepresentativeSample)
+                .join(
+                    tables.LogTemplate,
+                    tables.RepresentativeSample.template_id == tables.LogTemplate.id,
+                )
+                .where(tables.LogTemplate.analysis_run_id == run_id)
+            )
+            or 0,
+            "template_annotations": session.scalar(
+                select(func.count())
+                .select_from(tables.TemplateAnnotation)
+                .where(tables.TemplateAnnotation.analysis_run_id == run_id)
+            )
+            or 0,
+            "time_window_signals": session.scalar(
+                select(func.count())
+                .select_from(tables.TimeWindowSignal)
+                .where(tables.TimeWindowSignal.analysis_run_id == run_id)
+            )
+            or 0,
+            "causal_nodes": session.scalar(
+                select(func.count())
+                .select_from(tables.CausalNode)
+                .where(tables.CausalNode.analysis_run_id == run_id)
+            )
+            or 0,
+            "causal_edges": session.scalar(
+                select(func.count())
+                .select_from(tables.CausalEdge)
+                .where(tables.CausalEdge.analysis_run_id == run_id)
+            )
+            or 0,
+            "causal_summaries": session.scalar(
+                select(func.count())
+                .select_from(tables.CausalSummary)
+                .where(tables.CausalSummary.analysis_run_id == run_id)
+            )
+            or 0,
+        }
+
+
+def _run_raw_file_ids(store: SQLAlchemyStore, run_id: str) -> set[str]:
+    with store.session_factory() as session:
+        return set(
+            session.scalars(
+                select(tables.RawFile.id).where(tables.RawFile.analysis_run_id == run_id)
+            ).all()
+        )
+
+
+def _annotation_raw_responses(store: SQLAlchemyStore, run_id: str) -> list[dict[str, object]]:
+    with store.session_factory() as session:
+        return list(
+            session.scalars(
+                select(tables.TemplateAnnotation.raw_model_response).where(
+                    tables.TemplateAnnotation.analysis_run_id == run_id
+                )
+            ).all()
+        )
+
+
+def _raw_file_analysis_run_id(store: SQLAlchemyStore, file_id: str) -> str | None:
+    with store.session_factory() as session:
+        return session.scalar(
+            select(tables.RawFile.analysis_run_id).where(tables.RawFile.id == file_id)
+        )
 
 
 @pytest.mark.asyncio
@@ -175,7 +275,43 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     status = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")
     assert status.status_code == 200, status.text
     assert status.json()["status"] == "completed"
-    assert status.json()["progress"]["templates"] > 0
+    progress = status.json()["progress"]
+    assert progress["templates"] > 0
+    assert _raw_file_analysis_run_id(recreated_store, file_id) is None
+    persisted_result = recreated_store.get_analysis_result(case_id, run_id)
+    assert persisted_result is not None
+    assert persisted_result.model_inputs == []
+
+    analytics_counts = _analytics_counts(recreated_store, run_id)
+    assert analytics_counts["raw_files"] > 0
+    assert analytics_counts["raw_log_lines"] == progress["normalized_lines"]
+    assert analytics_counts["normalized_log_lines"] == progress["normalized_lines"]
+    assert analytics_counts["log_templates"] == progress["templates"]
+    assert analytics_counts["representative_samples"] == progress["representative_samples"]
+    assert analytics_counts["template_annotations"] == progress["annotated_templates"]
+    assert analytics_counts["time_window_signals"] > 0
+    assert analytics_counts["causal_nodes"] > 0
+    assert analytics_counts["causal_edges"] > 0
+    assert analytics_counts["causal_summaries"] == 1
+
+    annotation_responses = _annotation_raw_responses(recreated_store, run_id)
+    assert annotation_responses
+    assert all(annotation_responses)
+    serialized_responses = json.dumps(annotation_responses, sort_keys=True)
+    assert "case_context" not in serialized_responses
+    assert "representative_lines" not in serialized_responses
+    assert "template_context" not in serialized_responses
+    assert "model_inputs" not in serialized_responses
+
+    case_record = recreated_store.get_case(case_id)
+    assert case_record is not None
+    recreated_store._complete_analysis_run(
+        run_id=run_id,
+        result=persisted_result,
+        user_id=case_record.created_by,
+    )
+    assert _analytics_counts(recreated_store, run_id) == analytics_counts
+
     run_list = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs")
     assert run_list.status_code == 200, run_list.text
     assert run_list.json()["total"] == 1
@@ -210,6 +346,56 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
         "raw_log.search",
     }.issubset(audit_actions)
     await recreated_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_sqlalchemy_fanout_scopes_raw_file_ids_per_run(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    user = store.register_user(
+        email="repeat.engineer@example.com",
+        username="repeat-engineer",
+        full_name=None,
+        password="password123",
+    )
+    case = store.create_case(
+        user_id=user.id,
+        data={
+            "title": "Repeated checkout fixture analysis",
+            "issue_description": "Run the same input paths twice.",
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "test",
+            "timezone": "UTC",
+        },
+    )
+    input_paths = [str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))]
+
+    first = await store.start_analysis(
+        case_id=case.id,
+        user_id=user.id,
+        input_paths=input_paths,
+        config={"default_window_size_seconds": 60},
+        gateway=MockCopilotAnnotationGateway(),
+    )
+    second = await store.start_analysis(
+        case_id=case.id,
+        user_id=user.id,
+        input_paths=input_paths,
+        config={"default_window_size_seconds": 60},
+        gateway=MockCopilotAnnotationGateway(),
+    )
+
+    assert first.status == "completed"
+    assert second.status == "completed"
+    first_counts = _analytics_counts(store, first.id)
+    second_counts = _analytics_counts(store, second.id)
+    assert first_counts["raw_files"] > 0
+    assert second_counts["raw_files"] > 0
+    assert first_counts["normalized_log_lines"] > 0
+    assert second_counts["normalized_log_lines"] > 0
+    assert _run_raw_file_ids(store, first.id).isdisjoint(_run_raw_file_ids(store, second.id))
 
 
 def test_create_store_auto_uses_sqlalchemy_when_database_url_is_set(tmp_path: Path) -> None:

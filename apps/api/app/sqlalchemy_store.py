@@ -8,7 +8,7 @@ from typing import Any, Iterator
 
 from logan_workers.models import AnalysisResult
 from logan_workers.pipeline import AnalyzeCasePipeline
-from sqlalchemy import create_engine, func, or_, select
+from sqlalchemy import create_engine, delete, func, or_, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -50,6 +50,19 @@ def _utc(value: datetime | None) -> datetime | None:
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _uuid_or_none(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        return None
+
+
+def _worker_uuid(value: str | None, fallback_key: str) -> str:
+    return _uuid_or_none(value) or str(uuid.uuid5(uuid.NAMESPACE_URL, fallback_key))
 
 
 def _sqlite_connect_args(database_url: str) -> dict[str, Any]:
@@ -630,6 +643,7 @@ class SQLAlchemyStore:
             run.error_message = None
             run.progress_json = result.progress
             run.result_json = result_json
+            self._fan_out_analysis_result(session=session, run=run, result=result)
             if case:
                 case.status = "ready"
                 case.updated_at = _now()
@@ -643,6 +657,294 @@ class SQLAlchemyStore:
                 metadata={"progress": result.progress},
             )
         return self._analysis_run_record(run)
+
+    def _fan_out_analysis_result(
+        self, *, session: Session, run: tables.AnalysisRun, result: AnalysisResult
+    ) -> None:
+        self._delete_analysis_fanout(session=session, run_id=run.id)
+        case_id = run.case_id
+        created_at = _now()
+
+        # Worker file IDs are deterministic from source paths, so raw_files IDs must be run scoped.
+        file_ids = {
+            file.file_id: str(uuid.uuid5(uuid.NAMESPACE_URL, f"{run.id}:{file.file_id}"))
+            for file in result.files
+        }
+        raw_log_ids = {
+            entry.log_id: _worker_uuid(entry.log_id, f"{run.id}:raw_log:{index}:{entry.log_id}")
+            for index, entry in enumerate(result.raw_entries)
+        }
+        normalized_log_ids = {
+            line.log_id: _worker_uuid(line.log_id, f"{run.id}:normalized_log:{index}:{line.log_id}")
+            for index, line in enumerate(result.normalized_logs)
+        }
+        template_ids = {
+            template.template_id: _worker_uuid(
+                template.template_id, f"{run.id}:template:{index}:{template.template_id}"
+            )
+            for index, template in enumerate(result.templates)
+        }
+
+        def required(mapping: dict[str, str], worker_id: str, label: str) -> str:
+            try:
+                return mapping[worker_id]
+            except KeyError as exc:
+                raise ValueError(f"analysis result references unknown {label}: {worker_id}") from exc
+
+        def optional_template_id(worker_id: str | None) -> str | None:
+            if not worker_id:
+                return None
+            return required(template_ids, worker_id, "template_id")
+
+        def optional_normalized_log_id(worker_id: str | None) -> str | None:
+            if not worker_id:
+                return None
+            return normalized_log_ids.get(worker_id) or _uuid_or_none(worker_id)
+
+        session.add_all(
+            tables.RawFile(
+                id=file_ids[file.file_id],
+                case_id=case_id,
+                analysis_run_id=run.id,
+                original_filename=file.original_filename,
+                object_uri=file.object_uri,
+                content_type=None,
+                size_bytes=file.size_bytes,
+                sha256=file.sha256,
+                upload_completed=True,
+                detected_format=file.detected_format,
+                file_role="log",
+                created_at=created_at,
+            )
+            for file in result.files
+        )
+        session.flush()
+
+        session.add_all(
+            tables.RawLogLine(
+                id=raw_log_ids[entry.log_id],
+                case_id=case_id,
+                analysis_run_id=run.id,
+                file_id=required(file_ids, entry.file_id, "file_id"),
+                line_number=entry.line_number,
+                raw_text=entry.raw_message,
+                raw_text_redacted=None,
+                sha256=entry.sha256,
+                created_at=created_at,
+            )
+            for entry in result.raw_entries
+        )
+        session.flush()
+
+        session.add_all(
+            tables.LogTemplate(
+                id=template_ids[template.template_id],
+                case_id=case_id,
+                analysis_run_id=run.id,
+                template_key=template.template_key,
+                template_text=template.template_text,
+                normalized_template_text=template.normalized_template_text,
+                representative_log_id=optional_normalized_log_id(template.representative_log_id),
+                occurrence_count=template.occurrence_count,
+                first_seen=template.first_seen,
+                last_seen=template.last_seen,
+                services=template.services,
+                files=template.files,
+                sample_values=template.sample_values,
+                drain_cluster_id=template.drain_cluster_id,
+                created_at=created_at,
+            )
+            for template in result.templates
+        )
+        session.flush()
+
+        session.add_all(
+            tables.NormalizedLogLine(
+                id=normalized_log_ids[line.log_id],
+                raw_log_id=required(raw_log_ids, line.raw_log_id, "raw_log_id"),
+                case_id=case_id,
+                analysis_run_id=run.id,
+                timestamp=line.timestamp,
+                timestamp_quality=line.timestamp_quality,
+                level=line.level,
+                service=line.service,
+                message=line.message,
+                normalized_message=line.normalized_message,
+                redacted_message=line.redacted_message,
+                parsed_fields=line.parsed_fields,
+                parser_name=line.parser_name,
+                parser_confidence=line.parser_confidence,
+                template_id=optional_template_id(line.template_id),
+                created_at=created_at,
+            )
+            for line in result.normalized_logs
+        )
+        session.flush()
+
+        session.add_all(
+            tables.RepresentativeSample(
+                id=_worker_uuid(sample.sample_id, f"{run.id}:sample:{index}:{sample.sample_id}"),
+                template_id=required(template_ids, sample.template_id, "sample.template_id"),
+                log_id=required(normalized_log_ids, sample.log_id, "sample.log_id"),
+                sample_reason=sample.sample_reason,
+                sample_rank=sample.sample_rank,
+                created_at=created_at,
+            )
+            for index, sample in enumerate(result.samples)
+        )
+        session.flush()
+
+        session.add_all(
+            tables.TemplateAnnotation(
+                id=_worker_uuid(
+                    annotation.annotation_id,
+                    f"{run.id}:annotation:{index}:{annotation.annotation_id}",
+                ),
+                template_id=required(
+                    template_ids, annotation.template_id, "annotation.template_id"
+                ),
+                analysis_run_id=run.id,
+                golden_signal=annotation.golden_signal,
+                fault_categories=annotation.fault_categories,
+                entities=annotation.entities,
+                severity_score=annotation.severity_score,
+                confidence=annotation.confidence,
+                rationale=annotation.rationale,
+                model_provider=annotation.model_provider,
+                model_name=annotation.model_name,
+                prompt_version=annotation.prompt_version,
+                raw_model_response=annotation.raw_model_response,
+                created_at=created_at,
+            )
+            for index, annotation in enumerate(result.annotations)
+        )
+        session.flush()
+
+        session.add_all(
+            tables.TimeWindowSignal(
+                id=str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_URL,
+                        (
+                            f"{run.id}:time_window:{index}:"
+                            f"{aggregate.window_start.isoformat()}:"
+                            f"{aggregate.window_end.isoformat()}:"
+                            f"{aggregate.template_id}:{aggregate.service}:"
+                            f"{aggregate.golden_signal}:{aggregate.fault_category}"
+                        ),
+                    )
+                ),
+                case_id=case_id,
+                analysis_run_id=run.id,
+                window_start=aggregate.window_start,
+                window_end=aggregate.window_end,
+                window_size_seconds=aggregate.window_size_seconds,
+                template_id=optional_template_id(aggregate.template_id),
+                service=aggregate.service,
+                golden_signal=aggregate.golden_signal,
+                fault_category=aggregate.fault_category,
+                count=aggregate.count,
+                created_at=created_at,
+            )
+            for index, aggregate in enumerate(result.temporal)
+        )
+        session.flush()
+
+        session.add_all(
+            tables.CausalNode(
+                id=_worker_uuid(node.id, f"{run.id}:causal_node:{index}:{node.id}"),
+                case_id=case_id,
+                analysis_run_id=run.id,
+                template_id=required(template_ids, node.template_id, "causal_node.template_id"),
+                node_type="template",
+                rank_score=node.rank_score,
+                pagerank_score=node.pagerank_score,
+                golden_signal=node.golden_signal,
+                fault_categories=node.fault_categories,
+                first_seen=node.first_seen,
+                last_seen=node.last_seen,
+                occurrence_count=node.occurrence_count,
+                created_at=created_at,
+            )
+            for index, node in enumerate(result.causal_graph.nodes)
+        )
+        session.flush()
+
+        session.add_all(
+            tables.CausalEdge(
+                id=_worker_uuid(edge.id, f"{run.id}:causal_edge:{index}:{edge.id}"),
+                case_id=case_id,
+                analysis_run_id=run.id,
+                source_template_id=required(
+                    template_ids, edge.source_template_id, "causal_edge.source_template_id"
+                ),
+                target_template_id=required(
+                    template_ids, edge.target_template_id, "causal_edge.target_template_id"
+                ),
+                edge_type=edge.edge_type,
+                method=edge.method,
+                lag_seconds=edge.lag_seconds,
+                support_windows=edge.support_windows,
+                confidence=edge.confidence,
+                p_value_adj=edge.p_value_adj,
+                lift=edge.lift,
+                temporal_precedence_score=edge.temporal_precedence_score,
+                correlation_score=edge.correlation_score,
+                evidence=edge.evidence,
+                created_at=created_at,
+            )
+            for index, edge in enumerate(result.causal_graph.edges)
+        )
+        session.flush()
+
+        summary = result.causal_summary
+        session.add(
+            tables.CausalSummary(
+                id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{run.id}:causal_summary")),
+                case_id=case_id,
+                analysis_run_id=run.id,
+                summary_markdown=summary.summary_markdown,
+                customer_update_markdown=summary.customer_update_markdown,
+                next_actions_json=summary.next_actions,
+                evidence_refs_json=[
+                    evidence_ref.model_dump(mode="json")
+                    for evidence_ref in summary.evidence_refs
+                ],
+                confidence=summary.confidence,
+                model_provider=run.model_provider,
+                model_name=run.model_name,
+                prompt_version=run.prompt_version,
+                raw_model_response={},
+                created_at=created_at,
+            )
+        )
+        session.flush()
+
+    def _delete_analysis_fanout(self, *, session: Session, run_id: str) -> None:
+        template_ids = select(tables.LogTemplate.id).where(
+            tables.LogTemplate.analysis_run_id == run_id
+        )
+        for table in (
+            tables.CausalSummary,
+            tables.CausalEdge,
+            tables.CausalNode,
+            tables.TimeWindowSignal,
+            tables.TemplateAnnotation,
+        ):
+            session.execute(delete(table).where(table.analysis_run_id == run_id))
+        session.execute(
+            delete(tables.RepresentativeSample).where(
+                tables.RepresentativeSample.template_id.in_(template_ids)
+            )
+        )
+        for table in (
+            tables.NormalizedLogLine,
+            tables.LogTemplate,
+            tables.RawLogLine,
+            tables.RawFile,
+        ):
+            session.execute(delete(table).where(table.analysis_run_id == run_id))
+        session.flush()
 
     def _fail_analysis_run(
         self, *, run_id: str, error_message: str, user_id: str

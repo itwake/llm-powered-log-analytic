@@ -17,15 +17,23 @@ Core tables:
 - `feedback`, `exports`, `audit_logs`
 
 The API now has a durable SQLAlchemy metadata store for auth/session, Copilot credentials,
-device-auth polling state, cases, uploads, analysis runs, serialized results, exports,
-feedback, and audit logs. The in-memory store remains available as an explicit lightweight
-test option. This stage intentionally keeps full `AnalysisResult` report data serialized on
-`analysis_runs.result_json`; later stages can fan it out into the normalized analytics tables.
+device-auth polling state, cases, uploads, analysis runs, serialized results, normalized
+PostgreSQL/SQLite analytics rows, exports, feedback, and audit logs. The in-memory store
+remains available as an explicit lightweight test option.
+
+When an analysis completes, the SQLAlchemy store keeps the full `AnalysisResult` serialized
+on `analysis_runs.result_json` with `model_inputs=[]` and also fans worker artifacts out into
+the normalized analytics tables listed above. Worker file IDs are source-path deterministic,
+so persisted `raw_files.id` values are generated per analysis run before raw log rows are
+inserted. Existing report API endpoints continue to read from `result_json` for this stage.
 
 ## Analytics Shape
 
-ClickHouse and OpenSearch are included in deployment skeletons. The worker currently returns enriched log lines and window aggregates in memory. Later stages should persist these into:
+ClickHouse and OpenSearch are included in deployment skeletons, but are still deferred. Later
+stages should add:
 
 - ClickHouse `enriched_log_lines`
 - ClickHouse `window_aggregates`
 - OpenSearch `logan-logs-{case_id}-{analysis_run_id}`
+- External sink retry/idempotency records
+- Service-backed query paths that can read from the normalized and external analytics stores
