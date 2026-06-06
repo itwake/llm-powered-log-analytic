@@ -30,7 +30,10 @@ configured, SQLAlchemy completion can also publish redacted external analytics p
 the SQL fan-out and records each external target write in `analytics_sink_writes`.
 SQLAlchemy-backed report endpoints read summary, temporal, log table, causal graph, and causal
 summary views from normalized fan-out tables, with in-memory and missing fan-out rows falling
-back to `analysis_runs.result_json`.
+back to `analysis_runs.result_json`. When external analytics queries are explicitly enabled,
+temporal and log table reports may read from ClickHouse/OpenSearch first, but only after the
+matching succeeded `analytics_sink_writes` record proves that the run was published to that
+external target.
 
 `job_events` stores the append-only workflow progress stream for each analysis run. Events are
 run-scoped by `analysis_run_id` and deduplicated by `(analysis_run_id, idempotency_key,
@@ -56,7 +59,9 @@ entities, severity/confidence, and ingestion order. They deliberately exclude ra
 model inputs, model prompt payloads, and credential material. ClickHouse publishing manages
 the configured database plus `enriched_log_lines` and `window_aggregates` MergeTree tables
 before inserts. OpenSearch publishing manages run-scoped index creation with mappings before
-bulk indexing.
+bulk indexing. External report queries reuse the same configured credentials and URLs, never
+run unless `LOGAN_EXTERNAL_ANALYTICS_QUERIES_ENABLED=true`, and fall back to SQL fan-out with an
+`analytics_query.failed` audit record on typed query failures.
 
 Implemented external payload targets:
 
@@ -64,7 +69,14 @@ Implemented external payload targets:
 - ClickHouse `window_aggregates` JSONEachRow rows.
 - OpenSearch `logan-logs-{case_id}-{analysis_run_id}` `_bulk` documents with evidence refs.
 
+Implemented external read targets:
+
+- Temporal reports over ClickHouse `window_aggregates`.
+- Log table reports over the run-scoped OpenSearch index.
+
+Summary, causal graph, and causal summary reports intentionally continue to read the normalized
+SQL fan-out tables.
+
 Remaining production data-model work:
 
 - External analytics store aliases/retention policy.
-- Query paths over external ClickHouse/OpenSearch analytics stores.

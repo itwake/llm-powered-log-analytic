@@ -61,7 +61,9 @@ optional HTTP publishers are implemented with managed database/table/index lifec
 external sinks are disabled by default and Docker is not required for deterministic tests.
 SQLAlchemy-backed report endpoints read summary, temporal, log table, causal graph, and causal
 summary views from the normalized fan-out tables, with the in-memory backend and missing fan-out
-rows still falling back to the legacy `analysis_runs.result_json` path.
+rows still falling back to the legacy `analysis_runs.result_json` path. Temporal and log table
+reports can optionally try service-backed external analytics queries first when explicitly
+enabled and backed by succeeded sink write records.
 
 Analysis orchestration defaults to the current synchronous local path:
 
@@ -83,6 +85,10 @@ External analytics sinks can be enabled for SQLAlchemy-backed runs with:
 - `LOGAN_OPENSEARCH_URL=http://opensearch:9200` for OpenSearch `_bulk` indexing.
 - `LOGAN_ANALYTICS_SINK_FAILURE_MODE=warn` to audit and continue on sink errors, or `fail`
   to fail the analysis run.
+- `LOGAN_EXTERNAL_ANALYTICS_QUERIES_ENABLED=false` keeps report queries on SQL fan-out by
+  default. Set it to `true` only when report reads should query external stores.
+- `LOGAN_EXTERNAL_ANALYTICS_QUERY_TIMEOUT_SECONDS=10` controls the HTTP timeout for external
+  report queries.
 
 The adapters publish only redacted/normalized log content and derived metadata. They do not
 publish raw log text, model prompts, model inputs, source tokens, or credential material.
@@ -93,8 +99,16 @@ index with mappings/settings and treats `resource_already_exists_exception` as s
 SQLAlchemy stores one `analytics_sink_writes` record per target write with destination,
 idempotency key, payload hash, status, attempt count, row count, sanitized error, and retry
 timestamps. Succeeded records skip duplicate publishes for the same run/target/payload; failed
-records retry on the next completion attempt. Service-backed external analytics queries remain
-production work.
+records retry on the next completion attempt.
+
+When `LOGAN_EXTERNAL_ANALYTICS_QUERIES_ENABLED=true`, temporal reports first query ClickHouse
+`{LOGAN_CLICKHOUSE_DATABASE}.window_aggregates` only if `LOGAN_CLICKHOUSE_URL` is configured and
+a succeeded `analytics_sink_writes` row exists for that case/run and destination. Log table
+reports first query the run-scoped OpenSearch index only if `LOGAN_OPENSEARCH_URL` is configured
+and a succeeded write exists for `{index}/_bulk`. External query failures are audited as
+`analytics_query.failed` with the report name, sink name, case/run, and a sanitized error, then
+the API falls back to SQL fan-out. Summary, causal graph, and causal summary reports continue
+to use SQL fan-out intentionally.
 
 Run the web workspace against the local API:
 
@@ -117,7 +131,6 @@ docker compose up --build
 
 ## Remaining Staged Work
 
-- Add report/query reads over external analytics stores.
 - Add resumable/multipart uploads for large files and interrupted browser sessions.
 - Replace the Temporal placeholder with real activities backed by durable retries and replay-safe
   idempotency; job event rows already provide the run-scoped progress/event stream.

@@ -61,6 +61,12 @@ class Settings:
     opensearch_url: str | None = os.getenv("LOGAN_OPENSEARCH_URL") or None
     opensearch_username: str | None = os.getenv("LOGAN_OPENSEARCH_USERNAME") or None
     opensearch_password: str | None = os.getenv("LOGAN_OPENSEARCH_PASSWORD") or None
+    external_analytics_queries_enabled: bool = _env_bool(
+        "LOGAN_EXTERNAL_ANALYTICS_QUERIES_ENABLED", False
+    )
+    external_analytics_query_timeout_seconds: float = float(
+        os.getenv("LOGAN_EXTERNAL_ANALYTICS_QUERY_TIMEOUT_SECONDS", "10")
+    )
     analytics_sink_failure_mode: str = os.getenv(
         "LOGAN_ANALYTICS_SINK_FAILURE_MODE", "warn"
     ).lower()

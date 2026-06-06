@@ -31,6 +31,12 @@ from app.services.analytics_sinks import (
     AnalyticsSinkError,
     AnalyticsSinkPublisher,
     AnalyticsSinkWriteOperation,
+    opensearch_index_name,
+)
+from app.services.analytics_queries import (
+    AnalyticsQueryClient,
+    AnalyticsQueryError,
+    sanitize_analytics_query_error,
 )
 from app.services.object_store import (
     is_local_backend,
@@ -169,9 +175,11 @@ class SQLAlchemyStore:
         engine: Engine | None = None,
         create_schema: bool = True,
         analytics_sink_publisher: Any | None = None,
+        analytics_query_client: Any | None = None,
     ) -> None:
         self.settings = app_settings
         self.analytics_sink_publisher = analytics_sink_publisher
+        self.analytics_query_client = analytics_query_client
         self.database_url = _sync_database_url(database_url)
         self.engine = engine or create_engine(
             self.database_url,
@@ -735,6 +743,139 @@ class SQLAlchemyStore:
                 for row in session.scalars(query).all()
             ]
 
+    def _succeeded_analytics_sink_write_exists(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        sink_name: str,
+        destination: str,
+    ) -> bool:
+        with self._session() as session:
+            write_id = session.scalar(
+                select(tables.AnalyticsSinkWrite.id)
+                .where(
+                    tables.AnalyticsSinkWrite.case_id == case_id,
+                    tables.AnalyticsSinkWrite.analysis_run_id == run_id,
+                    tables.AnalyticsSinkWrite.sink_name == sink_name,
+                    tables.AnalyticsSinkWrite.destination == destination,
+                    tables.AnalyticsSinkWrite.status == "succeeded",
+                )
+                .limit(1)
+            )
+            return bool(write_id)
+
+    def _record_analytics_query_failure(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        report_name: str,
+        sink_name: str,
+        error: AnalyticsQueryError,
+    ) -> None:
+        sanitized_error = sanitize_error_message(sanitize_analytics_query_error(error))
+        self.record_audit(
+            action="analytics_query.failed",
+            target_type="analysis_run",
+            target_id=run_id,
+            case_id=case_id,
+            metadata={
+                "analysis_run_id": run_id,
+                "case_id": case_id,
+                "error": sanitized_error,
+                "report": report_name,
+                "sink_name": sink_name,
+            },
+        )
+
+    def _external_analytics_query_client(self) -> Any:
+        if self.analytics_query_client is None:
+            self.analytics_query_client = AnalyticsQueryClient.from_settings(self.settings)
+        return self.analytics_query_client
+
+    def _try_external_temporal_report(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        group_by: str,
+    ) -> dict[str, object] | None:
+        if not self.settings.external_analytics_queries_enabled:
+            return None
+        if not self.settings.clickhouse_url:
+            return None
+        destination = f"{self.settings.clickhouse_database}.window_aggregates"
+        if not self._succeeded_analytics_sink_write_exists(
+            case_id=case_id,
+            run_id=run_id,
+            sink_name="clickhouse",
+            destination=destination,
+        ):
+            return None
+
+        try:
+            return self._external_analytics_query_client().query_temporal(
+                case_id=case_id,
+                run_id=run_id,
+                group_by=group_by,
+            )
+        except AnalyticsQueryError as exc:
+            self._record_analytics_query_failure(
+                case_id=case_id,
+                run_id=run_id,
+                report_name="temporal",
+                sink_name="clickhouse",
+                error=exc,
+            )
+            return None
+
+    def _try_external_logs_report(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        window_start: datetime | None,
+        window_end: datetime | None,
+        q: str | None,
+        service: str | None,
+        limit: int,
+        offset: int,
+    ) -> dict[str, object] | None:
+        if not self.settings.external_analytics_queries_enabled:
+            return None
+        if not self.settings.opensearch_url:
+            return None
+        destination = f"{opensearch_index_name(case_id, run_id)}/_bulk"
+        if not self._succeeded_analytics_sink_write_exists(
+            case_id=case_id,
+            run_id=run_id,
+            sink_name="opensearch",
+            destination=destination,
+        ):
+            return None
+
+        try:
+            return self._external_analytics_query_client().query_logs(
+                case_id=case_id,
+                run_id=run_id,
+                window_start=window_start,
+                window_end=window_end,
+                q=q,
+                service=service,
+                limit=limit,
+                offset=offset,
+            )
+        except AnalyticsQueryError as exc:
+            self._record_analytics_query_failure(
+                case_id=case_id,
+                run_id=run_id,
+                report_name="logs",
+                sink_name="opensearch",
+                error=exc,
+            )
+            return None
+
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
         with self._session() as session:
             run = session.get(tables.AnalysisRun, run_id)
@@ -875,6 +1016,14 @@ class SQLAlchemyStore:
         run_id: str,
         group_by: str = "golden_signal",
     ) -> dict[str, object] | None:
+        external_report = self._try_external_temporal_report(
+            case_id=case_id,
+            run_id=run_id,
+            group_by=group_by,
+        )
+        if external_report is not None:
+            return external_report
+
         with self._session() as session:
             rows = session.scalars(
                 select(tables.TimeWindowSignal)
@@ -932,6 +1081,19 @@ class SQLAlchemyStore:
         limit: int = 200,
         offset: int = 0,
     ) -> dict[str, object] | None:
+        external_report = self._try_external_logs_report(
+            case_id=case_id,
+            run_id=run_id,
+            window_start=window_start,
+            window_end=window_end,
+            q=q,
+            service=service,
+            limit=limit,
+            offset=offset,
+        )
+        if external_report is not None:
+            return external_report
+
         with self._session() as session:
             has_rows = (
                 session.scalar(

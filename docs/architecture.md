@@ -50,6 +50,14 @@ remains no external sink network calls. In `warn` mode sink failures are audited
 completion continues; in `fail` mode the typed sink error is allowed to fail the run after the
 failed write record is preserved.
 
+Report reads remain SQL-backed by default. When
+`LOGAN_EXTERNAL_ANALYTICS_QUERIES_ENABLED=true`, the temporal report first queries ClickHouse
+`window_aggregates` and the log table report first queries the run-scoped OpenSearch index,
+but only when the matching service URL is configured and a succeeded `analytics_sink_writes`
+record exists for that case/run. Typed external query failures are audited and fall back to the
+SQL fan-out path. Summary, causal graph, and causal summary views intentionally stay on SQL
+fan-out.
+
 The API owns runtime injection points on app state:
 
 - `copilot_auth_client` defaults to the real GitHub device-code client.
@@ -75,7 +83,6 @@ Causal edges are candidate relationships only. API and worker fields use `candid
 ## Extension Seams
 
 - Replace `StableDrainAdapter` with `drain3` behind the same `cluster()` interface.
-- Extend the ClickHouse/OpenSearch sink adapters with service-backed query paths.
 - Add S3 object storage adapters for report artifacts.
 - Add resumable/multipart S3 uploads for large files and interrupted browser sessions.
 - Replace the Temporal facade placeholder with replay-safe workflow activities and durable retry
