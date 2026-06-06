@@ -4,7 +4,7 @@ import hashlib
 import json
 import uuid
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -49,6 +49,7 @@ from app.store import (
     AnalysisRunRecord,
     AnalyticsSinkWriteRecord,
     AuditLogRecord,
+    CaseCollaboratorRecord,
     CaseRecord,
     CopilotAuthRecord,
     COPILOT_AUTH_CREDENTIAL_TYPES,
@@ -56,10 +57,15 @@ from app.store import (
     ExportRecord,
     FeedbackRecord,
     JobEventRecord,
+    RAW_LOG_RETAINED_MARKER,
+    RetentionResultRecord,
     SessionRecord,
     UploadRecord,
     UserRecord,
     apply_job_event_progress,
+    _case_role_allows,
+    _validate_case_role,
+    _validate_global_role,
     sanitize_error_message,
     sanitize_job_metadata,
     sanitize_workflow_payload,
@@ -239,7 +245,11 @@ class SQLAlchemyStore:
                     )
                 )
             )
-            if not user or not verify_password(password, user.password_hash):
+            if (
+                not user
+                or not user.is_active
+                or not verify_password(password, user.password_hash)
+            ):
                 return None
             return self._user_record(user)
 
@@ -271,6 +281,8 @@ class SQLAlchemyStore:
             ):
                 return None
             user = session.get(tables.User, session_row.user_id)
+            if user and not user.is_active:
+                return None
             return self._user_record(user) if user else None
 
     def revoke_session(self, token: str | None) -> None:
@@ -282,6 +294,91 @@ class SQLAlchemyStore:
             )
             if session_row:
                 session_row.revoked_at = _now()
+
+    def get_user(self, user_id: str) -> UserRecord | None:
+        with self._session() as session:
+            user = session.get(tables.User, user_id)
+            return self._user_record(user) if user else None
+
+    def list_users(
+        self,
+        *,
+        q: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> tuple[list[UserRecord], int]:
+        with self._session() as session:
+            criteria = []
+            if q:
+                like = f"%{q.lower()}%"
+                criteria.append(
+                    or_(
+                        func.lower(tables.User.email).like(like),
+                        func.lower(tables.User.username).like(like),
+                        func.lower(tables.User.full_name).like(like),
+                    )
+                )
+            if role:
+                criteria.append(tables.User.role == role)
+            if is_active is not None:
+                criteria.append(tables.User.is_active == is_active)
+            total_query = select(func.count()).select_from(tables.User)
+            items_query = select(tables.User).order_by(
+                tables.User.created_at,
+                tables.User.email,
+                tables.User.id,
+            )
+            if criteria:
+                total_query = total_query.where(*criteria)
+                items_query = items_query.where(*criteria)
+            items_query = items_query.offset(offset)
+            if limit is not None:
+                items_query = items_query.limit(limit)
+            total = session.scalar(total_query) or 0
+            return [self._user_record(row) for row in session.scalars(items_query).all()], total
+
+    def update_user_role(
+        self, *, user_id: str, role: str, updated_by: str | None = None
+    ) -> UserRecord:
+        _validate_global_role(role)
+        with self._session() as session:
+            user = session.get(tables.User, user_id)
+            if user is None:
+                raise KeyError(user_id)
+            previous_role = user.role
+            user.role = role
+            user.updated_at = _now()
+            self._add_audit(
+                session,
+                action="admin.user.role_update",
+                user_id=updated_by,
+                target_type="user",
+                target_id=user_id,
+                metadata={"previous_role": previous_role, "role": role},
+            )
+        return self._user_record(user)
+
+    def set_user_active(
+        self, *, user_id: str, is_active: bool, updated_by: str | None = None
+    ) -> UserRecord:
+        with self._session() as session:
+            user = session.get(tables.User, user_id)
+            if user is None:
+                raise KeyError(user_id)
+            previous_active = user.is_active
+            user.is_active = is_active
+            user.updated_at = _now()
+            self._add_audit(
+                session,
+                action="admin.user.active_update",
+                user_id=updated_by,
+                target_type="user",
+                target_id=user_id,
+                metadata={"previous_active": previous_active, "is_active": is_active},
+            )
+        return self._user_record(user)
 
     def save_credential(
         self,
@@ -445,6 +542,17 @@ class SQLAlchemyStore:
                 updated_at=_now(),
             )
             session.add(case)
+            session.add(
+                tables.CaseCollaborator(
+                    id=str(uuid.uuid4()),
+                    case_id=case_id,
+                    user_id=user_id,
+                    role="owner",
+                    added_by=user_id,
+                    created_at=_now(),
+                    updated_at=_now(),
+                )
+            )
             self._add_audit(
                 session,
                 action="case.create",
@@ -485,6 +593,172 @@ class SQLAlchemyStore:
             total = session.scalar(total_query) or 0
             rows = session.scalars(items_query).all()
             return [self._case_record(row) for row in rows], total
+
+    def list_cases_for_user(
+        self,
+        user: UserRecord,
+        *,
+        status: str | None = None,
+        product: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> tuple[list[CaseRecord], int]:
+        with self._session() as session:
+            criteria = []
+            if status:
+                criteria.append(tables.Case.status == status)
+            if product:
+                criteria.append(tables.Case.product == product)
+            if user.role != "admin":
+                collaborator_cases = select(tables.CaseCollaborator.case_id).where(
+                    tables.CaseCollaborator.user_id == user.id,
+                    tables.CaseCollaborator.role.in_(["owner", "editor", "viewer"]),
+                )
+                criteria.append(
+                    or_(
+                        tables.Case.created_by == user.id,
+                        tables.Case.id.in_(collaborator_cases),
+                    )
+                )
+            total_query = select(func.count()).select_from(tables.Case)
+            items_query = select(tables.Case).order_by(tables.Case.created_at, tables.Case.id)
+            if criteria:
+                total_query = total_query.where(*criteria)
+                items_query = items_query.where(*criteria)
+            items_query = items_query.offset(offset)
+            if limit is not None:
+                items_query = items_query.limit(limit)
+            total = session.scalar(total_query) or 0
+            rows = session.scalars(items_query).all()
+            return [self._case_record(row) for row in rows], total
+
+    def user_can_access_case(
+        self, user_id: str, case_id: str, permission: str
+    ) -> bool:
+        with self._session() as session:
+            user = session.get(tables.User, user_id)
+            if user is None or not user.is_active:
+                return False
+            case = session.get(tables.Case, case_id)
+            if case is None:
+                return False
+            if user.role == "admin" or case.created_by == user_id:
+                return True
+            collaborator = session.scalar(
+                select(tables.CaseCollaborator).where(
+                    tables.CaseCollaborator.case_id == case_id,
+                    tables.CaseCollaborator.user_id == user_id,
+                )
+            )
+            return _case_role_allows(collaborator.role if collaborator else None, permission)
+
+    def list_case_collaborators(self, case_id: str) -> list[CaseCollaboratorRecord]:
+        with self._session() as session:
+            case = session.get(tables.Case, case_id)
+            if case is None:
+                raise KeyError(case_id)
+            rows = session.execute(
+                select(tables.CaseCollaborator, tables.User)
+                .join(tables.User, tables.CaseCollaborator.user_id == tables.User.id)
+                .where(tables.CaseCollaborator.case_id == case_id)
+                .order_by(tables.CaseCollaborator.created_at, tables.CaseCollaborator.id)
+            ).all()
+            items = [
+                self._case_collaborator_record(collaborator, user)
+                for collaborator, user in rows
+            ]
+            if case.created_by and not any(item.user_id == case.created_by for item in items):
+                creator = session.get(tables.User, case.created_by)
+                items.append(
+                    CaseCollaboratorRecord(
+                        id=f"implicit-owner:{case_id}:{case.created_by}",
+                        case_id=case_id,
+                        user_id=case.created_by,
+                        role="owner",
+                        added_by=case.created_by,
+                        created_at=_utc(case.created_at) or _now(),
+                        updated_at=_utc(case.created_at) or _now(),
+                        email=creator.email if creator else None,
+                        username=creator.username if creator else None,
+                        full_name=creator.full_name if creator else None,
+                    )
+                )
+            return sorted(
+                items,
+                key=lambda item: (item.role != "owner", item.created_at, item.user_id),
+            )
+
+    def upsert_case_collaborator(
+        self, *, case_id: str, user_id: str, role: str, added_by: str
+    ) -> CaseCollaboratorRecord:
+        _validate_case_role(role)
+        with self._session() as session:
+            if session.get(tables.Case, case_id) is None:
+                raise KeyError(case_id)
+            user = session.get(tables.User, user_id)
+            if user is None:
+                raise KeyError(user_id)
+            collaborator = session.scalar(
+                select(tables.CaseCollaborator).where(
+                    tables.CaseCollaborator.case_id == case_id,
+                    tables.CaseCollaborator.user_id == user_id,
+                )
+            )
+            previous_role = collaborator.role if collaborator else None
+            now = _now()
+            if collaborator is None:
+                collaborator = tables.CaseCollaborator(
+                    id=str(uuid.uuid4()),
+                    case_id=case_id,
+                    user_id=user_id,
+                    role=role,
+                    added_by=added_by,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(collaborator)
+            else:
+                collaborator.role = role
+                collaborator.added_by = added_by
+                collaborator.updated_at = now
+            self._add_audit(
+                session,
+                action="case.collaborator.add",
+                user_id=added_by,
+                target_type="user",
+                target_id=user_id,
+                case_id=case_id,
+                metadata={"role": role, "previous_role": previous_role},
+            )
+            session.flush()
+            return self._case_collaborator_record(collaborator, user)
+
+    def remove_case_collaborator(
+        self, *, case_id: str, user_id: str, removed_by: str
+    ) -> bool:
+        with self._session() as session:
+            if session.get(tables.Case, case_id) is None:
+                raise KeyError(case_id)
+            collaborator = session.scalar(
+                select(tables.CaseCollaborator).where(
+                    tables.CaseCollaborator.case_id == case_id,
+                    tables.CaseCollaborator.user_id == user_id,
+                )
+            )
+            if collaborator is None:
+                return False
+            removed_role = collaborator.role
+            session.delete(collaborator)
+            self._add_audit(
+                session,
+                action="case.collaborator.remove",
+                user_id=removed_by,
+                target_type="user",
+                target_id=user_id,
+                case_id=case_id,
+                metadata={"role": removed_role},
+            )
+            return True
 
     def create_upload(
         self, *, case_id: str, filename: str, content_type: str | None, size_bytes: int
@@ -1612,7 +1886,13 @@ class SQLAlchemyStore:
         return self._audit_record(audit)
 
     def list_audit_logs(
-        self, *, case_id: str | None = None, action: str | None = None
+        self,
+        *,
+        case_id: str | None = None,
+        action: str | None = None,
+        user_id: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
     ) -> list[AuditLogRecord]:
         with self._session() as session:
             query = select(tables.AuditLog).order_by(tables.AuditLog.created_at, tables.AuditLog.id)
@@ -1620,7 +1900,73 @@ class SQLAlchemyStore:
                 query = query.where(tables.AuditLog.case_id == case_id)
             if action:
                 query = query.where(tables.AuditLog.action == action)
+            if user_id:
+                query = query.where(tables.AuditLog.user_id == user_id)
+            query = query.offset(offset)
+            if limit is not None:
+                query = query.limit(limit)
             return [self._audit_record(row) for row in session.scalars(query).all()]
+
+    def run_retention(self, *, now: datetime | None = None) -> RetentionResultRecord:
+        current_time = now or _now()
+        result = RetentionResultRecord()
+        with self._session() as session:
+            audit_cutoff = current_time - timedelta(days=self.settings.audit_retention_days)
+            audit_delete = session.execute(
+                delete(tables.AuditLog).where(tables.AuditLog.created_at < audit_cutoff)
+            )
+            result.audit_logs_deleted = int(audit_delete.rowcount or 0)
+
+            raw_cutoff = current_time - timedelta(days=self.settings.raw_log_retention_days)
+            old_raw_lines = session.scalars(
+                select(tables.RawLogLine).where(
+                    tables.RawLogLine.created_at < raw_cutoff,
+                    tables.RawLogLine.raw_text != RAW_LOG_RETAINED_MARKER,
+                )
+            ).all()
+            for raw_line in old_raw_lines:
+                raw_line.raw_text = RAW_LOG_RETAINED_MARKER
+                raw_line.raw_text_redacted = RAW_LOG_RETAINED_MARKER
+            result.raw_log_lines_scrubbed = len(old_raw_lines)
+
+            report_cutoff = current_time - timedelta(days=self.settings.report_retention_days)
+            export_delete = session.execute(
+                delete(tables.Export).where(tables.Export.created_at < report_cutoff)
+            )
+            result.exports_deleted = int(export_delete.rowcount or 0)
+
+            old_runs = session.scalars(
+                select(tables.AnalysisRun).where(
+                    tables.AnalysisRun.result_json.is_not(None),
+                    or_(
+                        tables.AnalysisRun.completed_at < report_cutoff,
+                        (
+                            tables.AnalysisRun.completed_at.is_(None)
+                            & (tables.AnalysisRun.started_at < report_cutoff)
+                        ),
+                    ),
+                )
+            ).all()
+            for run in old_runs:
+                fanout_counts = [
+                    session.scalar(
+                        select(func.count())
+                        .select_from(table)
+                        .where(table.analysis_run_id == run.id)
+                    )
+                    or 0
+                    for table in (
+                        tables.NormalizedLogLine,
+                        tables.LogTemplate,
+                        tables.TimeWindowSignal,
+                        tables.CausalNode,
+                        tables.CausalSummary,
+                    )
+                ]
+                if all(fanout_counts):
+                    run.result_json = None
+                    result.analysis_results_cleared += 1
+        return result
 
     def _create_analysis_run(
         self, *, case_id: str, user_id: str, config: dict[str, Any]
@@ -2344,6 +2690,22 @@ class SQLAlchemyStore:
             status=row.status,
             created_by=row.created_by,
             created_at=_utc(row.created_at) or _now(),
+        )
+
+    def _case_collaborator_record(
+        self, row: tables.CaseCollaborator, user: tables.User | None = None
+    ) -> CaseCollaboratorRecord:
+        return CaseCollaboratorRecord(
+            id=row.id,
+            case_id=row.case_id,
+            user_id=row.user_id,
+            role=row.role,
+            added_by=row.added_by,
+            created_at=_utc(row.created_at) or _now(),
+            updated_at=_utc(row.updated_at) or _now(),
+            email=user.email if user else None,
+            username=user.username if user else None,
+            full_name=user.full_name if user else None,
         )
 
     def _upload_record(self, row: tables.RawFile) -> UploadRecord:

@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, capabilities, cases, chat, copilot_auth
+from app.api import admin, auth, capabilities, cases, chat, copilot_auth
+from app.rate_limit import RateLimitMiddleware
 from app.services.copilot_auth_service import DeviceCodeClient, GitHubDeviceCodeClient
 from app.services.copilot_model_gateway import CopilotModelGateway
 from app.store import MetadataStore, create_store
@@ -33,11 +34,13 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RateLimitMiddleware, app_settings=app.state.store.settings)
     app.include_router(auth.router)
     app.include_router(copilot_auth.router)
     app.include_router(capabilities.router)
     app.include_router(cases.router)
     app.include_router(chat.router)
+    app.include_router(admin.router)
     return app
 
 

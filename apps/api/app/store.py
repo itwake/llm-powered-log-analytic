@@ -29,6 +29,16 @@ from app.services.object_store import (
 )
 
 
+GLOBAL_USER_ROLES = frozenset({"admin", "engineer"})
+CASE_COLLABORATOR_ROLES = frozenset({"owner", "editor", "viewer"})
+CASE_PERMISSION_ROLES: dict[str, frozenset[str]] = {
+    "view": frozenset({"owner", "editor", "viewer"}),
+    "edit": frozenset({"owner", "editor"}),
+    "owner": frozenset({"owner"}),
+}
+RAW_LOG_RETAINED_MARKER = "[raw log text scrubbed by retention policy]"
+
+
 _SENSITIVE_ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s,;]+"),
@@ -218,6 +228,20 @@ class CaseRecord:
 
 
 @dataclass
+class CaseCollaboratorRecord:
+    id: str
+    case_id: str
+    user_id: str
+    role: str
+    added_by: str | None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    email: str | None = None
+    username: str | None = None
+    full_name: str | None = None
+
+
+@dataclass
 class UploadRecord:
     id: str
     case_id: str
@@ -358,6 +382,14 @@ class AuditLogRecord:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
+@dataclass
+class RetentionResultRecord:
+    audit_logs_deleted: int = 0
+    raw_log_lines_scrubbed: int = 0
+    exports_deleted: int = 0
+    analysis_results_cleared: int = 0
+
+
 COPILOT_AUTH_CREDENTIAL_TYPES = frozenset(
     {"github_source_oauth", "copilot_plugin_token"}
 )
@@ -378,6 +410,22 @@ def _credential_is_active(record: CredentialRecord, *, now: datetime | None = No
     return expires_at is None or expires_at > (now or datetime.now(UTC))
 
 
+def _case_role_allows(role: str | None, permission: str) -> bool:
+    return role in CASE_PERMISSION_ROLES.get(permission, frozenset())
+
+
+def _validate_global_role(role: str) -> str:
+    if role not in GLOBAL_USER_ROLES:
+        raise ValueError("role must be one of: admin, engineer")
+    return role
+
+
+def _validate_case_role(role: str) -> str:
+    if role not in CASE_COLLABORATOR_ROLES:
+        raise ValueError("collaborator role must be one of: owner, editor, viewer")
+    return role
+
+
 class MetadataStore(Protocol):
     settings: Settings
 
@@ -392,6 +440,26 @@ class MetadataStore(Protocol):
     def get_user_by_session(self, token: str | None) -> UserRecord | None: ...
 
     def revoke_session(self, token: str | None) -> None: ...
+
+    def get_user(self, user_id: str) -> UserRecord | None: ...
+
+    def list_users(
+        self,
+        *,
+        q: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> tuple[list[UserRecord], int]: ...
+
+    def update_user_role(
+        self, *, user_id: str, role: str, updated_by: str | None = None
+    ) -> UserRecord: ...
+
+    def set_user_active(
+        self, *, user_id: str, is_active: bool, updated_by: str | None = None
+    ) -> UserRecord: ...
 
     def save_credential(
         self,
@@ -431,6 +499,30 @@ class MetadataStore(Protocol):
         offset: int = 0,
         limit: int | None = None,
     ) -> tuple[list[CaseRecord], int]: ...
+
+    def list_cases_for_user(
+        self,
+        user: UserRecord,
+        *,
+        status: str | None = None,
+        product: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> tuple[list[CaseRecord], int]: ...
+
+    def user_can_access_case(
+        self, user_id: str, case_id: str, permission: str
+    ) -> bool: ...
+
+    def list_case_collaborators(self, case_id: str) -> list[CaseCollaboratorRecord]: ...
+
+    def upsert_case_collaborator(
+        self, *, case_id: str, user_id: str, role: str, added_by: str
+    ) -> CaseCollaboratorRecord: ...
+
+    def remove_case_collaborator(
+        self, *, case_id: str, user_id: str, removed_by: str
+    ) -> bool: ...
 
     def create_upload(
         self, *, case_id: str, filename: str, content_type: str | None, size_bytes: int
@@ -537,8 +629,16 @@ class MetadataStore(Protocol):
     ) -> AuditLogRecord: ...
 
     def list_audit_logs(
-        self, *, case_id: str | None = None, action: str | None = None
+        self,
+        *,
+        case_id: str | None = None,
+        action: str | None = None,
+        user_id: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
     ) -> list[AuditLogRecord]: ...
+
+    def run_retention(self, *, now: datetime | None = None) -> RetentionResultRecord: ...
 
 
 class InMemoryStore:
@@ -551,6 +651,7 @@ class InMemoryStore:
         self.credentials_by_user: dict[tuple[str, str], CredentialRecord] = {}
         self.copilot_auth: dict[str, CopilotAuthRecord] = {}
         self.cases: dict[str, CaseRecord] = {}
+        self.case_collaborators: dict[tuple[str, str], CaseCollaboratorRecord] = {}
         self.uploads: dict[str, UploadRecord] = {}
         self.runs: dict[str, AnalysisRunRecord] = {}
         self.job_events: dict[str, JobEventRecord] = {}
@@ -583,6 +684,8 @@ class InMemoryStore:
         if not user_id:
             return None
         user = self.users[user_id]
+        if not user.is_active:
+            return None
         if not verify_password(password, user.password_hash):
             return None
         return user
@@ -604,7 +707,8 @@ class InMemoryStore:
         session = self.sessions_by_hash.get(hash_token(token))
         if not session or session.revoked_at or session.expires_at < datetime.now(UTC):
             return None
-        return self.users.get(session.user_id)
+        user = self.users.get(session.user_id)
+        return user if user and user.is_active else None
 
     def revoke_session(self, token: str | None) -> None:
         if not token:
@@ -612,6 +716,71 @@ class InMemoryStore:
         session = self.sessions_by_hash.get(hash_token(token))
         if session:
             session.revoked_at = datetime.now(UTC)
+
+    def get_user(self, user_id: str) -> UserRecord | None:
+        return self.users.get(user_id)
+
+    def list_users(
+        self,
+        *,
+        q: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> tuple[list[UserRecord], int]:
+        items = list(self.users.values())
+        if q:
+            lowered = q.lower()
+            items = [
+                item
+                for item in items
+                if lowered in item.email.lower()
+                or lowered in item.username.lower()
+                or lowered in (item.full_name or "").lower()
+            ]
+        if role:
+            items = [item for item in items if item.role == role]
+        if is_active is not None:
+            items = [item for item in items if item.is_active == is_active]
+        items.sort(key=lambda item: (item.created_at, item.email, item.id))
+        total = len(items)
+        return items[offset : offset + limit if limit is not None else None], total
+
+    def update_user_role(
+        self, *, user_id: str, role: str, updated_by: str | None = None
+    ) -> UserRecord:
+        _validate_global_role(role)
+        user = self.users.get(user_id)
+        if user is None:
+            raise KeyError(user_id)
+        previous_role = user.role
+        user.role = role
+        self.record_audit(
+            action="admin.user.role_update",
+            user_id=updated_by,
+            target_type="user",
+            target_id=user_id,
+            metadata={"previous_role": previous_role, "role": role},
+        )
+        return user
+
+    def set_user_active(
+        self, *, user_id: str, is_active: bool, updated_by: str | None = None
+    ) -> UserRecord:
+        user = self.users.get(user_id)
+        if user is None:
+            raise KeyError(user_id)
+        previous_active = user.is_active
+        user.is_active = is_active
+        self.record_audit(
+            action="admin.user.active_update",
+            user_id=updated_by,
+            target_type="user",
+            target_id=user_id,
+            metadata={"previous_active": previous_active, "is_active": is_active},
+        )
+        return user
 
     def save_credential(
         self,
@@ -680,6 +849,16 @@ class InMemoryStore:
         case_key = f"LOGAN-{datetime.now(UTC):%Y%m%d}-{len(self.cases) + 1:04d}"
         record = CaseRecord(id=case_id, case_key=case_key, created_by=user_id, **data)
         self.cases[case_id] = record
+        self.case_collaborators[(case_id, user_id)] = CaseCollaboratorRecord(
+            id=str(uuid.uuid4()),
+            case_id=case_id,
+            user_id=user_id,
+            role="owner",
+            added_by=user_id,
+            email=self.users.get(user_id).email if user_id in self.users else None,
+            username=self.users.get(user_id).username if user_id in self.users else None,
+            full_name=self.users.get(user_id).full_name if user_id in self.users else None,
+        )
         self.record_audit(
             action="case.create",
             user_id=user_id,
@@ -707,6 +886,145 @@ class InMemoryStore:
             items = [item for item in items if item.product == product]
         total = len(items)
         return items[offset : offset + limit if limit is not None else None], total
+
+    def list_cases_for_user(
+        self,
+        user: UserRecord,
+        *,
+        status: str | None = None,
+        product: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> tuple[list[CaseRecord], int]:
+        items = list(self.cases.values())
+        if user.role != "admin":
+            collaborator_case_ids = {
+                case_id
+                for (case_id, collaborator_user_id), collaborator in self.case_collaborators.items()
+                if collaborator_user_id == user.id
+                and _case_role_allows(collaborator.role, "view")
+            }
+            items = [
+                item
+                for item in items
+                if item.created_by == user.id or item.id in collaborator_case_ids
+            ]
+        if status:
+            items = [item for item in items if item.status == status]
+        if product:
+            items = [item for item in items if item.product == product]
+        items.sort(key=lambda item: (item.created_at, item.id))
+        total = len(items)
+        return items[offset : offset + limit if limit is not None else None], total
+
+    def user_can_access_case(
+        self, user_id: str, case_id: str, permission: str
+    ) -> bool:
+        user = self.users.get(user_id)
+        if user is None or not user.is_active:
+            return False
+        if user.role == "admin":
+            return case_id in self.cases
+        case = self.cases.get(case_id)
+        if case is None:
+            return False
+        if case.created_by == user_id:
+            return True
+        collaborator = self.case_collaborators.get((case_id, user_id))
+        return _case_role_allows(collaborator.role if collaborator else None, permission)
+
+    def list_case_collaborators(self, case_id: str) -> list[CaseCollaboratorRecord]:
+        case = self.cases.get(case_id)
+        if case is None:
+            raise KeyError(case_id)
+        items = [
+            self._with_user_details(collaborator)
+            for (collaborator_case_id, _user_id), collaborator in self.case_collaborators.items()
+            if collaborator_case_id == case_id
+        ]
+        if case.created_by and not any(item.user_id == case.created_by for item in items):
+            user = self.users.get(case.created_by)
+            items.append(
+                CaseCollaboratorRecord(
+                    id=f"implicit-owner:{case_id}:{case.created_by}",
+                    case_id=case_id,
+                    user_id=case.created_by,
+                    role="owner",
+                    added_by=case.created_by,
+                    created_at=case.created_at,
+                    updated_at=case.created_at,
+                    email=user.email if user else None,
+                    username=user.username if user else None,
+                    full_name=user.full_name if user else None,
+                )
+            )
+        return sorted(items, key=lambda item: (item.role != "owner", item.created_at, item.user_id))
+
+    def upsert_case_collaborator(
+        self, *, case_id: str, user_id: str, role: str, added_by: str
+    ) -> CaseCollaboratorRecord:
+        _validate_case_role(role)
+        if case_id not in self.cases:
+            raise KeyError(case_id)
+        if user_id not in self.users:
+            raise KeyError(user_id)
+        now = datetime.now(UTC)
+        key = (case_id, user_id)
+        existing = self.case_collaborators.get(key)
+        record = CaseCollaboratorRecord(
+            id=existing.id if existing else str(uuid.uuid4()),
+            case_id=case_id,
+            user_id=user_id,
+            role=role,
+            added_by=added_by,
+            created_at=existing.created_at if existing else now,
+            updated_at=now,
+        )
+        self.case_collaborators[key] = record
+        self.record_audit(
+            action="case.collaborator.add",
+            user_id=added_by,
+            target_type="user",
+            target_id=user_id,
+            case_id=case_id,
+            metadata={"role": role, "previous_role": existing.role if existing else None},
+        )
+        return self._with_user_details(record)
+
+    def remove_case_collaborator(
+        self, *, case_id: str, user_id: str, removed_by: str
+    ) -> bool:
+        if case_id not in self.cases:
+            raise KeyError(case_id)
+        removed = self.case_collaborators.pop((case_id, user_id), None)
+        if removed is None:
+            return False
+        self.record_audit(
+            action="case.collaborator.remove",
+            user_id=removed_by,
+            target_type="user",
+            target_id=user_id,
+            case_id=case_id,
+            metadata={"role": removed.role},
+        )
+        return True
+
+    def _with_user_details(
+        self, collaborator: CaseCollaboratorRecord
+    ) -> CaseCollaboratorRecord:
+        user = self.users.get(collaborator.user_id)
+        return CaseCollaboratorRecord(
+            id=collaborator.id,
+            case_id=collaborator.case_id,
+            user_id=collaborator.user_id,
+            role=collaborator.role,
+            added_by=collaborator.added_by,
+            created_at=collaborator.created_at,
+            updated_at=collaborator.updated_at,
+            email=user.email if user else collaborator.email,
+            username=user.username if user else collaborator.username,
+            full_name=user.full_name if user else collaborator.full_name,
+        )
 
     def create_upload(
         self, *, case_id: str, filename: str, content_type: str | None, size_bytes: int
@@ -1128,14 +1446,61 @@ class InMemoryStore:
         return record
 
     def list_audit_logs(
-        self, *, case_id: str | None = None, action: str | None = None
+        self,
+        *,
+        case_id: str | None = None,
+        action: str | None = None,
+        user_id: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
     ) -> list[AuditLogRecord]:
         items = list(self.audit_logs.values())
         if case_id:
             items = [item for item in items if item.case_id == case_id]
         if action:
             items = [item for item in items if item.action == action]
-        return sorted(items, key=lambda item: item.created_at)
+        if user_id:
+            items = [item for item in items if item.user_id == user_id]
+        items = sorted(items, key=lambda item: item.created_at)
+        return items[offset : offset + limit if limit is not None else None]
+
+    def run_retention(self, *, now: datetime | None = None) -> RetentionResultRecord:
+        current_time = now or datetime.now(UTC)
+        result = RetentionResultRecord()
+
+        audit_cutoff = current_time.timestamp() - self.settings.audit_retention_days * 86400
+        old_audit_ids = [
+            audit_id
+            for audit_id, audit in self.audit_logs.items()
+            if audit.created_at.timestamp() < audit_cutoff
+        ]
+        for audit_id in old_audit_ids:
+            self.audit_logs.pop(audit_id, None)
+        result.audit_logs_deleted = len(old_audit_ids)
+
+        raw_cutoff = current_time.timestamp() - self.settings.raw_log_retention_days * 86400
+        for run in self.runs.values():
+            run_time = run.completed_at or run.started_at or current_time
+            if run_time.timestamp() >= raw_cutoff or run.result is None:
+                continue
+            for raw_entry in run.result.raw_entries:
+                if raw_entry.raw_message != RAW_LOG_RETAINED_MARKER:
+                    raw_entry.raw_message = RAW_LOG_RETAINED_MARKER
+                    result.raw_log_lines_scrubbed += 1
+            for file in run.result.files:
+                for line in file.lines:
+                    line.raw_text = RAW_LOG_RETAINED_MARKER
+
+        report_cutoff = current_time.timestamp() - self.settings.report_retention_days * 86400
+        old_export_ids = [
+            export_id
+            for export_id, export in self.exports.items()
+            if export.created_at.timestamp() < report_cutoff
+        ]
+        for export_id in old_export_ids:
+            self.exports.pop(export_id, None)
+        result.exports_deleted = len(old_export_ids)
+        return result
 
 
 def create_store(app_settings: Settings = settings) -> MetadataStore:

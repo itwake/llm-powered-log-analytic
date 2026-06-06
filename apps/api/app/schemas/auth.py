@@ -8,6 +8,7 @@ class UserOut(BaseModel):
     email: str
     username: str
     role: str
+    is_active: bool = True
     has_copilot_credential: bool = False
 
 

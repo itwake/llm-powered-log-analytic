@@ -54,8 +54,11 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
       );
     }
     links.push(["Copilot", "/settings/copilot"]);
+    if (user?.role === "admin") {
+      links.push(["Admin", "/admin"]);
+    }
     return links;
-  }, [caseId, runId]);
+  }, [caseId, runId, user?.role]);
 
   const copilotStatus = user?.has_copilot_credential ? "Copilot connected" : "Copilot disconnected";
 

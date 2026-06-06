@@ -21,6 +21,11 @@ device-auth polling state, cases, uploads, analysis runs, serialized results, no
 PostgreSQL/SQLite analytics rows, exports, feedback, and audit logs. The in-memory store
 remains available as an explicit lightweight test option.
 
+`case_collaborators` stores per-case access grants with `case_id`, `user_id`, `role`, `added_by`,
+and create/update timestamps. `(case_id, user_id)` is unique. New case creators are written as
+`owner` collaborators, and access checks also treat `cases.created_by` as an implicit owner so
+pre-existing cases remain accessible after migration.
+
 When an analysis completes, the SQLAlchemy store keeps the full `AnalysisResult` serialized
 on `analysis_runs.result_json` with `model_inputs=[]` and also fans worker artifacts out into
 the normalized analytics tables listed above. Worker file IDs are source-path deterministic,
@@ -77,6 +82,14 @@ Implemented external read targets:
 Summary, causal graph, and causal summary reports intentionally continue to read the normalized
 SQL fan-out tables.
 
+Retention preserves report readability. Audit rows older than
+`LOGAN_AUDIT_RETENTION_DAYS` are deleted. Raw log text older than
+`LOGAN_RAW_LOG_RETENTION_DAYS` is scrubbed in-place to a retained marker while raw row ids,
+normalized log rows, samples, templates, causal nodes/edges, and evidence refs are preserved.
+Report retention deletes old export rows and clears `analysis_runs.result_json` only when
+normalized fan-out rows remain available for the report endpoints.
+
 Remaining production data-model work:
 
 - External analytics store aliases/retention policy.
+- Advanced policy groups or SCIM/user-directory integration if required by deployment.

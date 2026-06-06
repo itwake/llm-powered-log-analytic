@@ -170,6 +170,35 @@ async def _authenticated_client(
     return client, store, store.users_by_username["engineer"]
 
 
+async def _register_and_login(
+    client: AsyncClient,
+    store: InMemoryStore,
+    *,
+    email: str,
+    username: str,
+    full_name: str | None = None,
+    role: str = "engineer",
+) -> str:
+    register = await client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            "username": username,
+            "full_name": full_name,
+            "password": "password123",
+        },
+    )
+    assert register.status_code == 200, register.text
+    user_id = store.users_by_username[username]
+    store.users[user_id].role = role
+    login = await client.post(
+        "/api/auth/login",
+        json={"email_or_username": username, "password": "password123"},
+    )
+    assert login.status_code == 200, login.text
+    return user_id
+
+
 def _parse_sse_frames(text: str) -> list[tuple[str, dict[str, object]]]:
     frames: list[tuple[str, dict[str, object]]] = []
     for block in text.strip().split("\n\n"):
@@ -403,6 +432,272 @@ async def test_copilot_auth_api_responses_never_include_token_material() -> None
     assert plugin_token not in serialized_audit_metadata
     assert "token_hint" not in serialized_audit_metadata
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None:
+    store = InMemoryStore(Settings(local_object_store_dir=str(tmp_path / "object-store")))
+    app = create_app(
+        store=store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    owner = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    collaborator = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+
+    owner_id = await _register_and_login(
+        owner,
+        store,
+        email="owner@example.com",
+        username="owner",
+        full_name="Owner",
+    )
+    collaborator_id = await _register_and_login(
+        collaborator,
+        store,
+        email="collaborator@example.com",
+        username="collaborator",
+        full_name="Collaborator",
+    )
+    admin_id = await _register_and_login(
+        admin,
+        store,
+        email="admin@example.com",
+        username="admin",
+        full_name="Admin",
+        role="admin",
+    )
+
+    case_id = await _create_case(owner)
+    run = await owner.post(
+        f"/api/cases/{case_id}/analysis-runs",
+        json={
+            "input_paths": [str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
+            "config": {"default_window_size_seconds": 60},
+        },
+    )
+    assert run.status_code == 200, run.text
+    run_id = run.json()["analysis_run_id"]
+
+    assert (await collaborator.get("/api/cases")).json()["total"] == 0
+    assert (await collaborator.get(f"/api/cases/{case_id}")).status_code == 404
+    forbidden_upload = await collaborator.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "blocked.log", "content_type": "text/plain", "size_bytes": 10},
+    )
+    assert forbidden_upload.status_code == 403
+
+    viewer = await owner.post(
+        f"/api/cases/{case_id}/collaborators",
+        json={"user_id": collaborator_id, "role": "viewer"},
+    )
+    assert viewer.status_code == 200, viewer.text
+    assert viewer.json()["role"] == "viewer"
+    collaborators = await owner.get(f"/api/cases/{case_id}/collaborators")
+    assert collaborators.status_code == 200
+    assert {item["user_id"] for item in collaborators.json()["items"]} >= {
+        owner_id,
+        collaborator_id,
+    }
+
+    visible_cases = await collaborator.get("/api/cases")
+    assert visible_cases.status_code == 200
+    assert visible_cases.json()["total"] == 1
+    assert (await collaborator.get(f"/api/cases/{case_id}")).status_code == 200
+    assert (await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/events")).status_code == 200
+    assert (await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")).status_code == 200
+    viewer_start = await collaborator.post(
+        f"/api/cases/{case_id}/analysis-runs",
+        json={"input_paths": [], "config": {"default_window_size_seconds": 60}},
+    )
+    assert viewer_start.status_code == 403
+    viewer_feedback = await collaborator.post(
+        f"/api/cases/{case_id}/feedback",
+        json={
+            "analysis_run_id": run_id,
+            "target_type": "template",
+            "target_id": "template-1",
+            "feedback_type": "note",
+        },
+    )
+    assert viewer_feedback.status_code == 403
+
+    editor = await owner.post(
+        f"/api/cases/{case_id}/collaborators",
+        json={"user_id": collaborator_id, "role": "editor"},
+    )
+    assert editor.status_code == 200, editor.text
+    assert editor.json()["role"] == "editor"
+    editor_upload = await collaborator.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "editor.log", "content_type": "text/plain", "size_bytes": 4},
+    )
+    assert editor_upload.status_code == 200, editor_upload.text
+    editor_start = await collaborator.post(
+        f"/api/cases/{case_id}/analysis-runs",
+        json={"input_paths": [], "config": {"default_window_size_seconds": 60}},
+    )
+    assert editor_start.status_code == 200, editor_start.text
+    editor_manage = await collaborator.post(
+        f"/api/cases/{case_id}/collaborators",
+        json={"user_id": admin_id, "role": "viewer"},
+    )
+    assert editor_manage.status_code == 403
+
+    admin_cases = await admin.get("/api/cases")
+    assert admin_cases.status_code == 200
+    assert admin_cases.json()["total"] == 1
+    removed = await admin.delete(f"/api/cases/{case_id}/collaborators/{collaborator_id}")
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["removed"] is True
+    assert (await collaborator.get(f"/api/cases/{case_id}")).status_code == 404
+    added_by_admin = await admin.post(
+        f"/api/cases/{case_id}/collaborators",
+        json={"user_id": collaborator_id, "role": "viewer"},
+    )
+    assert added_by_admin.status_code == 200, added_by_admin.text
+
+    audit_actions = {record.action for record in store.list_audit_logs(case_id=case_id)}
+    assert {"case.collaborator.add", "case.collaborator.remove"}.issubset(audit_actions)
+
+    await owner.aclose()
+    await collaborator.aclose()
+    await admin.aclose()
+
+
+@pytest.mark.asyncio
+async def test_admin_api_settings_are_safe_and_admin_only() -> None:
+    store = InMemoryStore(
+        Settings(
+            database_url="postgresql://logan:db-secret@postgres/logan",
+            github_source_token="gho_source_secret",
+            github_copilot_token="copilot-secret",
+            s3_access_key="access-secret",
+            s3_secret_key="s3-secret",
+            clickhouse_password="clickhouse-secret",
+            opensearch_password="opensearch-secret",
+            rate_limit_enabled=False,
+        )
+    )
+    app = create_app(
+        store=store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    engineer = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    engineer_id = await _register_and_login(
+        engineer,
+        store,
+        email="admin-denied@example.com",
+        username="admin-denied",
+    )
+    admin_id = await _register_and_login(
+        admin,
+        store,
+        email="settings-admin@example.com",
+        username="settings-admin",
+        role="admin",
+    )
+    store.record_audit(
+        action="unsafe.audit",
+        user_id=engineer_id,
+        metadata={
+            "raw_text": "raw log line should not leave admin API",
+            "source_token": "gho_should_not_leave",
+            "safe": "ok",
+        },
+    )
+
+    assert (await engineer.get("/api/admin/users")).status_code == 403
+    settings_response = await admin.get("/api/admin/settings")
+    assert settings_response.status_code == 200, settings_response.text
+    settings_text = settings_response.text.lower()
+    for forbidden in (
+        "db-secret",
+        "gho_source_secret",
+        "copilot-secret",
+        "access-secret",
+        "s3-secret",
+        "clickhouse-secret",
+        "opensearch-secret",
+        "database_url",
+        "token",
+        "password",
+        "secret_key",
+    ):
+        assert forbidden.lower() not in settings_text
+
+    users = await admin.get("/api/admin/users")
+    assert users.status_code == 200, users.text
+    assert {item["id"] for item in users.json()["items"]} >= {engineer_id, admin_id}
+    patched = await admin.patch(
+        f"/api/admin/users/{engineer_id}",
+        json={"role": "admin", "is_active": False},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["role"] == "admin"
+    assert patched.json()["is_active"] is False
+
+    audit_logs = await admin.get("/api/admin/audit-logs", params={"action": "unsafe.audit"})
+    assert audit_logs.status_code == 200, audit_logs.text
+    assert audit_logs.json()["items"][0]["metadata"] == {"safe": "ok"}
+    assert "raw log line" not in audit_logs.text
+    assert "gho_should_not_leave" not in audit_logs.text
+
+    retention = await admin.post("/api/admin/retention/run")
+    assert retention.status_code == 200, retention.text
+    assert set(retention.json()) == {
+        "audit_logs_deleted",
+        "raw_log_lines_scrubbed",
+        "exports_deleted",
+        "analysis_results_cleared",
+    }
+    assert "admin.retention.run" in {
+        record.action for record in store.list_audit_logs(user_id=admin_id)
+    }
+
+    await engineer.aclose()
+    await admin.aclose()
+
+
+@pytest.mark.asyncio
+async def test_api_rate_limit_only_when_enabled() -> None:
+    disabled_store = InMemoryStore(
+        Settings(rate_limit_enabled=False, rate_limit_requests_per_minute=1)
+    )
+    disabled_app = create_app(
+        store=disabled_store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    disabled_client = AsyncClient(
+        transport=ASGITransport(app=disabled_app),
+        base_url="http://testserver",
+    )
+    assert (await disabled_client.get("/api/cases")).status_code == 401
+    assert (await disabled_client.get("/api/cases")).status_code == 401
+    await disabled_client.aclose()
+
+    enabled_store = InMemoryStore(
+        Settings(rate_limit_enabled=True, rate_limit_requests_per_minute=2)
+    )
+    enabled_app = create_app(
+        store=enabled_store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    enabled_client = AsyncClient(
+        transport=ASGITransport(app=enabled_app),
+        base_url="http://testserver",
+    )
+    assert (await enabled_client.get("/api/cases")).status_code == 401
+    assert (await enabled_client.get("/api/cases")).status_code == 401
+    limited = await enabled_client.get("/api/cases")
+    assert limited.status_code == 429
+    assert "rate limit exceeded" in limited.json()["detail"]
+    await enabled_client.aclose()
 
 
 @pytest.mark.asyncio

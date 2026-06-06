@@ -2,7 +2,7 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, RBAC case access with per-case collaborators, admin user/audit/settings/retention APIs, optional API rate limiting, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell with a minimal admin view, and deployment scaffolding.
 
 ## Architecture
 
@@ -111,6 +111,8 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_RAW_LOG_RETENTION_DAYS=30`
 - `LOGAN_REPORT_RETENTION_DAYS=365`
 - `LOGAN_AUDIT_RETENTION_DAYS=730`
+- `LOGAN_RATE_LIMIT_ENABLED=false`
+- `LOGAN_RATE_LIMIT_REQUESTS_PER_MINUTE=120`
 - `LOGAN_ANALYTICS_SINKS_ENABLED=false`; when true, SQLAlchemy analysis completion may publish redacted analytics payloads to configured external sinks.
 - `LOGAN_CLICKHOUSE_URL=` optional ClickHouse HTTP endpoint.
 - `LOGAN_CLICKHOUSE_DATABASE=logan`
@@ -124,4 +126,4 @@ See `.env.example` for the full list. Key defaults:
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are step-level external artifact materialization for very large Temporal histories, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are step-level external artifact materialization for very large Temporal histories, advanced policy groups/SCIM integration, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.

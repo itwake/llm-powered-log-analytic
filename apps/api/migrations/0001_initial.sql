@@ -66,6 +66,19 @@ CREATE TABLE cases (
   deleted_at TIMESTAMPTZ
 );
 
+CREATE TABLE case_collaborators (
+  id UUID PRIMARY KEY,
+  case_id UUID NOT NULL REFERENCES cases(id),
+  user_id UUID NOT NULL REFERENCES users(id),
+  role TEXT NOT NULL,
+  added_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(case_id, user_id)
+);
+
+CREATE INDEX idx_case_collaborators_user ON case_collaborators(user_id);
+
 CREATE TABLE analysis_runs (
   id UUID PRIMARY KEY,
   case_id UUID NOT NULL REFERENCES cases(id),

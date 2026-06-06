@@ -28,6 +28,24 @@ URL query parameters such as `token`, `password`, `secret`, `api_key`, and `acce
 
 Causal graph edges are candidates, not facts. Summaries must use cautious language such as `candidate cause`, `likely`, `evidence suggests`, and `needs validation`.
 
+## Access Control
+
+The API enforces RBAC on every case route. Global `admin` users can access all cases and admin
+APIs. Global `engineer` users can create cases and access only cases they own or collaborate on.
+Case collaborators have `owner`, `editor`, or `viewer` roles. Owners can manage collaborators,
+editors can upload/start analysis/submit feedback/create exports, and viewers can read case,
+run, event, report, log, and chat context views only. Inaccessible read routes return `404` to
+avoid exposing case existence; mutating routes return `403` when the case is known but the role is
+insufficient.
+
 ## Audit and Retention
 
-The API persists audit events for case creation, analysis start/complete/fail, raw-log search access, export creation, and feedback submission when the SQLAlchemy store is enabled. Production stages still need admin/UI access, retention jobs, and expanded model-invocation metadata. Retention defaults are declared in `.env.example`.
+The API persists audit events for case creation, collaborator add/remove, analysis
+start/complete/fail, raw-log search access, export creation, feedback submission, admin user
+role/active changes, and retention runs. Admin audit APIs omit IP/user-agent fields and sanitize
+metadata so raw log text, credential material, database URLs, tokens, and secrets are not returned.
+
+Retention defaults are declared in `.env.example`. Running retention deletes old audit logs,
+scrubs old raw log text to a retained marker while preserving normalized evidence/report rows,
+deletes old export rows, and conservatively clears SQLAlchemy `analysis_runs.result_json` only when
+fan-out report tables can still serve reports.

@@ -66,6 +66,10 @@ class Settings:
     raw_log_retention_days: int = int(os.getenv("LOGAN_RAW_LOG_RETENTION_DAYS", "30"))
     report_retention_days: int = int(os.getenv("LOGAN_REPORT_RETENTION_DAYS", "365"))
     audit_retention_days: int = int(os.getenv("LOGAN_AUDIT_RETENTION_DAYS", "730"))
+    rate_limit_enabled: bool = _env_bool("LOGAN_RATE_LIMIT_ENABLED", False)
+    rate_limit_requests_per_minute: int = int(
+        os.getenv("LOGAN_RATE_LIMIT_REQUESTS_PER_MINUTE", "120")
+    )
     analytics_sinks_enabled: bool = _env_bool("LOGAN_ANALYTICS_SINKS_ENABLED", False)
     clickhouse_url: str | None = os.getenv("LOGAN_CLICKHOUSE_URL") or None
     clickhouse_database: str = os.getenv("LOGAN_CLICKHOUSE_DATABASE", "logan")

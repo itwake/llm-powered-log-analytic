@@ -116,6 +116,19 @@ class Case(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class CaseCollaborator(Base):
+    __tablename__ = "case_collaborators"
+    __table_args__ = (UniqueConstraint("case_id", "user_id"),)
+
+    id: Mapped[str] = uuid_pk()
+    case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("users.id"), nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    added_by: Mapped[str | None] = mapped_column(UUID_TYPE, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class AnalysisRun(Base):
     __tablename__ = "analysis_runs"
     __table_args__ = (UniqueConstraint("case_id", "run_number"),)

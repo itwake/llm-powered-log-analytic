@@ -8,11 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from logan_workers.models import OFFENDING_SIGNALS
 
-from app.dependencies import current_user, get_model_gateway, get_store
+from app.dependencies import current_user, get_model_gateway, get_store, require_case_permission
 from app.schemas.case import (
     AnalysisRunListResponse,
     AnalysisRunRequest,
     AnalysisRunResponse,
+    CaseCollaboratorListResponse,
+    CaseCollaboratorRequest,
+    CaseCollaboratorResponse,
     CaseCreateRequest,
     CaseResponse,
     ExportRequest,
@@ -93,6 +96,21 @@ def _job_event_response(record: Any) -> JobEventResponse:
         metadata=record.metadata,
         error_message=record.error_message,
         created_at=record.created_at,
+    )
+
+
+def _case_collaborator_response(record: Any) -> CaseCollaboratorResponse:
+    return CaseCollaboratorResponse(
+        id=record.id,
+        case_id=record.case_id,
+        user_id=record.user_id,
+        role=record.role,
+        added_by=record.added_by,
+        email=record.email,
+        username=record.username,
+        full_name=record.full_name,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
     )
 
 
@@ -274,9 +292,14 @@ def list_cases(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
     offset = max(0, page - 1) * page_size
-    items, total = store.list_cases(status=status, product=product, offset=offset, limit=page_size)
+    items, total = store.list_cases_for_user(
+        user,
+        status=status,
+        product=product,
+        offset=offset,
+        limit=page_size,
+    )
     return {
         "items": [_case_response(item).model_dump(mode="json") for item in items],
         "total": total,
@@ -291,11 +314,93 @@ def get_case(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> CaseResponse:
-    del user
-    case = store.get_case(case_id)
-    if not case:
-        raise HTTPException(status_code=404, detail="case not found")
+    case = require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="view",
+        hide_forbidden=True,
+    )
     return _case_response(case)
+
+
+@router.get(
+    "/{case_id}/collaborators",
+    response_model=CaseCollaboratorListResponse,
+)
+def list_case_collaborators(
+    case_id: str,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> CaseCollaboratorListResponse:
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="owner",
+        hide_forbidden=False,
+    )
+    collaborators = store.list_case_collaborators(case_id)
+    return CaseCollaboratorListResponse(
+        items=[_case_collaborator_response(collaborator) for collaborator in collaborators],
+        total=len(collaborators),
+    )
+
+
+@router.post(
+    "/{case_id}/collaborators",
+    response_model=CaseCollaboratorResponse,
+)
+def upsert_case_collaborator(
+    case_id: str,
+    payload: CaseCollaboratorRequest,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> CaseCollaboratorResponse:
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="owner",
+        hide_forbidden=False,
+    )
+    try:
+        collaborator = store.upsert_case_collaborator(
+            case_id=case_id,
+            user_id=payload.user_id,
+            role=payload.role,
+            added_by=user.id,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="user or case not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _case_collaborator_response(collaborator)
+
+
+@router.delete("/{case_id}/collaborators/{user_id}")
+def remove_case_collaborator(
+    case_id: str,
+    user_id: str,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> dict[str, object]:
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="owner",
+        hide_forbidden=False,
+    )
+    try:
+        removed = store.remove_case_collaborator(
+            case_id=case_id,
+            user_id=user_id,
+            removed_by=user.id,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="case not found") from exc
+    return {"status": "removed" if removed else "not_found", "removed": removed}
 
 
 @router.post("/{case_id}/uploads")
@@ -306,9 +411,13 @@ def request_upload(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
-    if not store.get_case(case_id):
-        raise HTTPException(status_code=404, detail="case not found")
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
     try:
         upload = store.create_upload(
             case_id=case_id,
@@ -413,7 +522,13 @@ async def upload_content(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
     upload_record = _require_upload_for_case(store, case_id, file_id)
     content = await request.body()
     sha256, size_bytes = digest_bytes(content)
@@ -449,7 +564,13 @@ def refresh_multipart_upload(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
     upload_record, metadata = _require_multipart_upload_for_case(store, case_id, file_id)
     try:
         parts = create_multipart_part_urls(
@@ -489,7 +610,13 @@ def abort_case_multipart_upload(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
     upload_record, metadata = _require_multipart_upload_for_case(
         store, case_id, file_id, allow_aborted=True
     )
@@ -531,7 +658,13 @@ def complete_upload(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
     upload_record = _require_upload_for_case(store, case_id, file_id)
     if upload_record.completed:
         if upload_record.sha256 != payload.sha256:
@@ -633,8 +766,13 @@ async def start_analysis(
     store: MetadataStore = Depends(get_store),
     gateway: Any = Depends(get_model_gateway),
 ) -> dict[str, object]:
-    if not store.get_case(case_id):
-        raise HTTPException(status_code=404, detail="case not found")
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
     input_paths = list(payload.input_paths)
     for file_id in payload.input_file_ids:
         upload = _require_upload_for_case(store, case_id, file_id)
@@ -660,9 +798,13 @@ def list_analysis_runs(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> AnalysisRunListResponse:
-    del user
-    if not store.get_case(case_id):
-        raise HTTPException(status_code=404, detail="case not found")
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="view",
+        hide_forbidden=True,
+    )
     runs = store.list_analysis_runs(case_id)
     return AnalysisRunListResponse(
         items=[_analysis_run_response(run) for run in runs],
@@ -677,7 +819,13 @@ def get_analysis_run(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="view",
+        hide_forbidden=True,
+    )
     run = store.get_analysis_run(run_id)
     if not run or run.case_id != case_id:
         raise HTTPException(status_code=404, detail="analysis run not found")
@@ -694,7 +842,13 @@ def list_analysis_run_events(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> JobEventListResponse:
-    del user
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="view",
+        hide_forbidden=True,
+    )
     run = store.get_analysis_run(run_id)
     if not run or run.case_id != case_id:
         raise HTTPException(status_code=404, detail="analysis run not found")
@@ -762,7 +916,13 @@ def data_summary(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="view",
+        hide_forbidden=True,
+    )
     report = _query_report(
         store,
         "get_report_summary",
@@ -829,7 +989,14 @@ def temporal(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user, window_size_seconds
+    del window_size_seconds
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="view",
+        hide_forbidden=True,
+    )
     report = _query_report(
         store,
         "get_report_temporal",
@@ -881,6 +1048,13 @@ def logs(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="view",
+        hide_forbidden=True,
+    )
     start = _parse_dt(window_start)
     end = _parse_dt(window_end)
     report = _query_report(
@@ -988,7 +1162,13 @@ def causal_graph(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="view",
+        hide_forbidden=True,
+    )
     report = _query_report(
         store,
         "get_report_causal_graph",
@@ -1024,7 +1204,13 @@ def causal_summary(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="view",
+        hide_forbidden=True,
+    )
     report = _query_report(
         store,
         "get_report_causal_summary",
@@ -1046,6 +1232,13 @@ def create_export(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
     result = _require_result(store, case_id, run_id)
     artifact = result.exports.get(payload.export_type)
     if not artifact:
@@ -1072,8 +1265,13 @@ def feedback(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    if not store.get_case(case_id):
-        raise HTTPException(status_code=404, detail="case not found")
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
     record = store.record_feedback(
         case_id=case_id,
         analysis_run_id=payload.analysis_run_id,

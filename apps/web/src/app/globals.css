@@ -104,6 +104,10 @@ select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.grid.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -474,6 +478,7 @@ th {
   .layout,
   .grid.two,
   .grid.three,
+  .grid.four,
   .report-grid {
     grid-template-columns: 1fr;
   }

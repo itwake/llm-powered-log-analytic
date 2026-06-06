@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from app.dependencies import current_user, get_model_gateway, get_store
+from app.dependencies import current_user, get_model_gateway, get_store, require_case_permission
 from app.schemas.chat import ChatRequest, TaskExecuteRequest
 from app.services.copilot_model_gateway import CopilotGatewayError
 from app.store import MetadataStore, UserRecord, sanitize_error_message
@@ -28,8 +28,14 @@ def chat(
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
     if payload.case_id and payload.analysis_run_id:
+        require_case_permission(
+            store=store,
+            user=user,
+            case_id=payload.case_id,
+            permission="view",
+            hide_forbidden=True,
+        )
         result = store.get_analysis_result(payload.case_id, payload.analysis_run_id)
         if result:
             refs = [ref.model_dump(mode="json") for ref in result.causal_summary.evidence_refs[:3]]
@@ -50,6 +56,15 @@ async def chat_stream(
     store: MetadataStore = Depends(get_store),
     gateway: Any = Depends(get_model_gateway),
 ) -> StreamingResponse:
+    if payload.case_id and payload.analysis_run_id:
+        require_case_permission(
+            store=store,
+            user=user,
+            case_id=payload.case_id,
+            permission="view",
+            hide_forbidden=True,
+        )
+
     async def events() -> AsyncIterator[str]:
         context = _analysis_chat_context(store, payload)
         if context is None:

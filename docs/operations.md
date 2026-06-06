@@ -64,6 +64,29 @@ summary text, up to five evidence refs, and up to five template-level summary ro
 exists, it streams a short fallback response without calling Copilot. Credential and gateway
 failures are serialized as sanitized `event: error` SSE frames.
 
+Access control is enforced in the API. Global `admin` users can access every case and the admin
+routes. Global `engineer` users can create cases and access only cases they created or cases where
+they are collaborators. New case creators are stored as `owner` collaborators. Case `owner`
+collaborators can manage collaborators and perform edit actions; `editor` collaborators can upload
+files, start analysis, submit feedback, and create exports; `viewer` collaborators can read case,
+run, event, report, log, and chat context views but cannot mutate analysis/upload state. Read
+routes hide inaccessible cases with `404`; mutating routes return `403` when the case exists but
+the caller lacks the required role.
+
+Admin-only routes live under `/api/admin`:
+
+- `GET /api/admin/users`
+- `PATCH /api/admin/users/{user_id}` for role and active-state changes
+- `GET /api/admin/audit-logs`
+- `GET /api/admin/settings`
+- `POST /api/admin/retention/run`
+
+Admin settings intentionally return only safe runtime shape: environment, selected store/object
+backends, orchestrator, retention days, rate-limit settings, and analytics toggles. They do not
+return database URLs, access keys, tokens, passwords, credential hints, or raw log text. The web app
+adds an `Admin` nav item only for `user.role === "admin"` and exposes a minimal operational page
+for these controls.
+
 The test suite injects fake auth/model clients and does not require GitHub network access.
 Analysis completion in the SQLAlchemy backend now writes normalized analytics rows into
 PostgreSQL/SQLite tables in the same local path. ClickHouse/OpenSearch payload builders and
@@ -173,6 +196,23 @@ and a succeeded write exists for `{index}/_bulk`. External query failures are au
 the API falls back to SQL fan-out. Summary, causal graph, and causal summary reports continue
 to use SQL fan-out intentionally.
 
+Retention execution is built into both stores and can be invoked through
+`POST /api/admin/retention/run`. It deletes audit logs older than
+`LOGAN_AUDIT_RETENTION_DAYS`, scrubs `raw_log_lines.raw_text` and `raw_text_redacted` older than
+`LOGAN_RAW_LOG_RETENTION_DAYS` to a retained marker while preserving row/evidence references,
+deletes old export rows, and clears large SQLAlchemy `analysis_runs.result_json` only when the
+normalized fan-out report tables remain readable. The response returns counts for deleted audits,
+scrubbed raw lines, deleted exports, and cleared analysis results.
+
+The built-in API rate limiter is disabled by default:
+
+- `LOGAN_RATE_LIMIT_ENABLED=false`
+- `LOGAN_RATE_LIMIT_REQUESTS_PER_MINUTE=120`
+
+When enabled, it applies to `/api` routes, keys requests by hashed `logan_session` cookie when
+present and by client IP otherwise, and returns JSON `429` responses with `Retry-After` when the
+per-minute limit is exceeded.
+
 Run the web workspace against the local API:
 
 ```bash
@@ -196,7 +236,8 @@ docker compose up --build
 
 - Add step-level external artifact materialization for very large Temporal histories if pipeline
   intermediates grow beyond comfortable activity payload sizes.
-- Expand RBAC, collaborators, admin settings, audit log UI/API, retention jobs, and rate limits.
+- Add advanced policy groups, SCIM/user-directory sync, and richer approval workflows if enterprise
+  deployments need them.
 - Add Playwright e2e tests once the web app is connected to a running API.
 - Consider ECharts/Cytoscape or similar libraries for richer temporal and graph visualization.
 - Add Prometheus/OpenTelemetry instrumentation.

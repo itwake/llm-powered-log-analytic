@@ -30,6 +30,29 @@ class CaseResponse(BaseModel):
     timezone: str = "UTC"
 
 
+class CaseCollaboratorRequest(BaseModel):
+    user_id: str
+    role: str
+
+
+class CaseCollaboratorResponse(BaseModel):
+    id: str
+    case_id: str
+    user_id: str
+    role: str
+    added_by: str | None = None
+    email: str | None = None
+    username: str | None = None
+    full_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CaseCollaboratorListResponse(BaseModel):
+    items: list[CaseCollaboratorResponse]
+    total: int
+
+
 class UploadRequest(BaseModel):
     filename: str
     content_type: str | None = None

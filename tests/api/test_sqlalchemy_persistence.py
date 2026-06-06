@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from logan_workers.activities.inference import MockCopilotAnnotationGateway
 
@@ -17,7 +17,7 @@ from app.main import create_app
 from app.models import tables
 from app.services.copilot_auth_service import MockGitHubDeviceClient
 from app.sqlalchemy_store import SQLAlchemyStore
-from app.store import create_store
+from app.store import RAW_LOG_RETAINED_MARKER, create_store
 
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
@@ -326,6 +326,74 @@ def test_sqlalchemy_store_persists_upload_metadata(tmp_path: Path) -> None:
         "part_size_bytes": 5,
         "part_count": 3,
     }
+
+
+def test_sqlalchemy_case_collaborators_persist_and_filter_access(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    owner = store.register_user(
+        email="sql-owner@example.com",
+        username="sql-owner",
+        full_name="SQL Owner",
+        password="password123",
+    )
+    collaborator = store.register_user(
+        email="sql-collab@example.com",
+        username="sql-collab",
+        full_name="SQL Collaborator",
+        password="password123",
+    )
+    outsider = store.register_user(
+        email="sql-outsider@example.com",
+        username="sql-outsider",
+        full_name=None,
+        password="password123",
+    )
+    case = store.create_case(
+        user_id=owner.id,
+        data={
+            "title": "SQL RBAC case",
+            "issue_description": None,
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "test",
+            "incident_start": None,
+            "incident_end": None,
+            "timezone": "UTC",
+        },
+    )
+
+    owner_collaborators = store.list_case_collaborators(case.id)
+    assert [(item.user_id, item.role) for item in owner_collaborators] == [(owner.id, "owner")]
+    assert store.user_can_access_case(owner.id, case.id, "owner") is True
+    assert store.user_can_access_case(collaborator.id, case.id, "view") is False
+    assert store.list_cases_for_user(collaborator)[1] == 0
+
+    added = store.upsert_case_collaborator(
+        case_id=case.id,
+        user_id=collaborator.id,
+        role="editor",
+        added_by=owner.id,
+    )
+    assert added.role == "editor"
+    recreated = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    assert recreated.user_can_access_case(collaborator.id, case.id, "view") is True
+    assert recreated.user_can_access_case(collaborator.id, case.id, "edit") is True
+    assert recreated.user_can_access_case(collaborator.id, case.id, "owner") is False
+    items, total = recreated.list_cases_for_user(collaborator)
+    assert total == 1
+    assert items[0].id == case.id
+    assert recreated.list_cases_for_user(outsider)[1] == 0
+
+    assert recreated.remove_case_collaborator(
+        case_id=case.id,
+        user_id=collaborator.id,
+        removed_by=owner.id,
+    ) is True
+    assert recreated.user_can_access_case(collaborator.id, case.id, "view") is False
+    actions = {record.action for record in recreated.list_audit_logs(case_id=case.id)}
+    assert {"case.collaborator.add", "case.collaborator.remove"}.issubset(actions)
 
 
 @pytest.mark.asyncio
@@ -735,6 +803,143 @@ async def test_sqlalchemy_report_endpoints_read_fanout_without_result_json(
     assert causal_summary.json()["evidence_refs"]
     assert causal_summary.json()["edited"] is False
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_sqlalchemy_retention_scrubs_raw_text_and_preserves_reports(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(
+        database_url=database_url,
+        store_backend="sqlalchemy",
+        audit_retention_days=30,
+        raw_log_retention_days=30,
+        report_retention_days=30,
+    )
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    user = store.register_user(
+        email="retention@example.com",
+        username="retention",
+        full_name=None,
+        password="password123",
+    )
+    case = store.create_case(
+        user_id=user.id,
+        data={
+            "title": "Retention case",
+            "issue_description": "Old rows should be retained safely.",
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "test",
+            "timezone": "UTC",
+        },
+    )
+    run = await store.start_analysis(
+        case_id=case.id,
+        user_id=user.id,
+        input_paths=[str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
+        config={"default_window_size_seconds": 60},
+        gateway=MockCopilotAnnotationGateway(),
+    )
+    assert run.status == "completed"
+    result = store.get_analysis_result(case.id, run.id)
+    assert result is not None
+    export_artifact = result.exports["json"]
+    store.create_export(
+        export_id=export_artifact.export_id,
+        case_id=case.id,
+        analysis_run_id=run.id,
+        export_type="json",
+        object_uri=export_artifact.object_uri,
+        user_id=user.id,
+    )
+
+    now = datetime(2026, 6, 6, tzinfo=UTC)
+    old = datetime(2020, 1, 1, tzinfo=UTC)
+    recent = datetime(2026, 6, 1, tzinfo=UTC)
+    with store.session_factory() as session:
+        raw_count = session.scalar(
+            select(func.count())
+            .select_from(tables.RawLogLine)
+            .where(tables.RawLogLine.analysis_run_id == run.id)
+        )
+        normalized_count = session.scalar(
+            select(func.count())
+            .select_from(tables.NormalizedLogLine)
+            .where(tables.NormalizedLogLine.analysis_run_id == run.id)
+        )
+        assert raw_count and raw_count > 0
+        assert normalized_count and normalized_count > 0
+        session.execute(delete(tables.AuditLog))
+        session.add_all(
+            [
+                tables.AuditLog(
+                    id="00000000-0000-0000-0000-000000000001",
+                    action="old.audit",
+                    metadata_json={},
+                    created_at=old,
+                ),
+                tables.AuditLog(
+                    id="00000000-0000-0000-0000-000000000002",
+                    action="recent.audit",
+                    metadata_json={},
+                    created_at=recent,
+                ),
+            ]
+        )
+        run_row = session.get(tables.AnalysisRun, run.id)
+        assert run_row is not None
+        run_row.started_at = old
+        run_row.completed_at = old
+        export_row = session.get(tables.Export, export_artifact.export_id)
+        assert export_row is not None
+        export_row.created_at = old
+        for raw_line in session.scalars(
+            select(tables.RawLogLine).where(tables.RawLogLine.analysis_run_id == run.id)
+        ):
+            raw_line.created_at = old
+        session.commit()
+
+    retention = store.run_retention(now=now)
+
+    assert retention.audit_logs_deleted == 1
+    assert retention.raw_log_lines_scrubbed == raw_count
+    assert retention.exports_deleted == 1
+    assert retention.analysis_results_cleared == 1
+    assert store.get_export(export_artifact.export_id) is None
+    assert store.get_analysis_result(case.id, run.id) is None
+
+    with store.session_factory() as session:
+        remaining_audits = session.scalars(select(tables.AuditLog.action)).all()
+        assert remaining_audits == ["recent.audit"]
+        raw_values = session.scalars(
+            select(tables.RawLogLine.raw_text).where(tables.RawLogLine.analysis_run_id == run.id)
+        ).all()
+        raw_redacted_values = session.scalars(
+            select(tables.RawLogLine.raw_text_redacted).where(
+                tables.RawLogLine.analysis_run_id == run.id
+            )
+        ).all()
+        assert set(raw_values) == {RAW_LOG_RETAINED_MARKER}
+        assert set(raw_redacted_values) == {RAW_LOG_RETAINED_MARKER}
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(tables.NormalizedLogLine)
+                .where(tables.NormalizedLogLine.analysis_run_id == run.id)
+            )
+            == normalized_count
+        )
+
+    summary = store.get_report_summary(case_id=case.id, run_id=run.id)
+    logs = store.get_report_logs(case_id=case.id, run_id=run.id, limit=5)
+    causal_summary = store.get_report_causal_summary(case_id=case.id, run_id=run.id)
+    causal_graph = store.get_report_causal_graph(case_id=case.id, run_id=run.id)
+    assert summary is not None and summary["items"]
+    assert logs is not None and logs["items"]
+    assert causal_summary is not None and causal_summary["evidence_refs"]
+    assert causal_graph is not None and causal_graph["nodes"]
 
 
 def test_create_store_auto_uses_sqlalchemy_when_database_url_is_set(tmp_path: Path) -> None:

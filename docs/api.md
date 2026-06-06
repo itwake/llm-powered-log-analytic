@@ -10,6 +10,20 @@ The current FastAPI app exposes the required foundation routes under `/api`.
 - `GET /api/auth/me`
 
 Sessions use an HttpOnly `logan_session` cookie and are revocable in the local store.
+`GET /api/auth/me` returns safe user fields including `role`, `is_active`, and
+`has_copilot_credential`.
+
+## Access Control
+
+Global roles are `admin` and `engineer`. Admins can access all cases and admin APIs. Engineers
+can create cases and access only their own or collaborator cases. Case collaborators use
+`owner`, `editor`, and `viewer`: owners can manage collaborators and edit; editors can upload,
+start analysis, submit feedback, and create exports; viewers can read case/report/event/log
+views only. Case creators are automatically owners.
+
+Read routes such as `GET /api/cases/{case_id}` and report/event/log routes return `404` for
+inaccessible cases. Mutating case routes return `403` when the case exists but the caller lacks
+the needed collaborator role.
 
 ## Copilot Auth
 
@@ -87,6 +101,9 @@ SSE frames are JSON:
 - `POST /api/cases`
 - `GET /api/cases`
 - `GET /api/cases/{case_id}`
+- `GET /api/cases/{case_id}/collaborators`
+- `POST /api/cases/{case_id}/collaborators`
+- `DELETE /api/cases/{case_id}/collaborators/{user_id}`
 - `POST /api/cases/{case_id}/uploads`
 - `PUT /api/cases/{case_id}/uploads/{file_id}/content`
 - `GET /api/cases/{case_id}/uploads/{file_id}/multipart`
@@ -144,6 +161,10 @@ accepts `input_paths`. When no paths or file ids are provided, the local synchro
 uses the checkout incident fixture files for deterministic development and tests.
 `GET /api/cases/{case_id}/analysis-runs` returns `items` with `analysis_run_id`, `run_number`, `status`, `current_step`, `progress`, `started_at`, `completed_at`, `error_message`, `model_provider`, and `model_name`.
 
+Collaborator management requires case owner or global admin access. `POST /collaborators`
+accepts `user_id` and role (`owner`, `editor`, or `viewer`) and upserts the collaborator.
+Add/remove operations are audited.
+
 ## Reports
 
 - `GET /api/cases/{case_id}/analysis-runs/{run_id}/summary`
@@ -155,3 +176,31 @@ uses the checkout incident fixture files for deterministic development and tests
 - `POST /api/cases/{case_id}/feedback`
 
 Report responses are generated from the stored analysis result, not static fixtures.
+
+## Admin
+
+- `GET /api/admin/users`
+- `PATCH /api/admin/users/{user_id}`
+- `GET /api/admin/audit-logs`
+- `GET /api/admin/settings`
+- `POST /api/admin/retention/run`
+
+Admin routes require a global `admin` role. User patch accepts `role` and/or `is_active` and
+records audit events. Audit log listing supports `case_id`, `action`, `user_id`, `limit`, and
+`offset`. Settings returns only safe runtime shape: env, store backend, object backend,
+orchestrator, retention days, rate-limit settings, and analytics toggles. It does not return
+secrets, database URLs, access keys, tokens, credential hints, or raw log text.
+
+Retention run responses return:
+
+- `audit_logs_deleted`
+- `raw_log_lines_scrubbed`
+- `exports_deleted`
+- `analysis_results_cleared`
+
+## Rate Limiting
+
+Set `LOGAN_RATE_LIMIT_ENABLED=true` to enable the built-in fixed-window API limiter.
+`LOGAN_RATE_LIMIT_REQUESTS_PER_MINUTE` defaults to `120`. Requests are keyed by hashed
+`logan_session` cookie when present and by client IP otherwise. Exceeded requests return JSON
+`429` with a clear `detail` and `Retry-After`.

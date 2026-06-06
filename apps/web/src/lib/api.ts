@@ -165,6 +165,7 @@ export interface UserOut {
   email: string;
   username: string;
   role: string;
+  is_active: boolean;
   has_copilot_credential: boolean;
 }
 
@@ -213,6 +214,24 @@ export interface CaseListResponse {
   total: number;
   page: number;
   page_size: number;
+}
+
+export interface CaseCollaborator {
+  id: string;
+  case_id: string;
+  user_id: string;
+  role: "owner" | "editor" | "viewer" | string;
+  added_by: string | null;
+  email: string | null;
+  username: string | null;
+  full_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CaseCollaboratorListResponse {
+  items: CaseCollaborator[];
+  total: number;
 }
 
 export interface UploadRequest {
@@ -501,6 +520,63 @@ export interface CopilotDisconnectResponse {
   revoked_count: number;
 }
 
+export interface AdminUser {
+  id: string;
+  email: string;
+  username: string;
+  full_name: string | null;
+  role: "admin" | "engineer" | string;
+  is_active: boolean;
+  has_copilot_credential: boolean;
+  created_at: string;
+}
+
+export interface AdminUserListResponse {
+  items: AdminUser[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface AdminAuditLog {
+  id: string;
+  action: string;
+  user_id: string | null;
+  target_type: string | null;
+  target_id: string | null;
+  case_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AdminAuditLogListResponse {
+  items: AdminAuditLog[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface AdminSettingsResponse {
+  env: string;
+  store_backend: string;
+  configured_store_backend: string;
+  object_backend: string;
+  orchestrator: string;
+  retention_days: Record<string, number>;
+  rate_limit: {
+    enabled: boolean;
+    requests_per_minute: number;
+  };
+  analytics: Record<string, string | boolean>;
+}
+
+export interface RetentionRunResponse {
+  audit_logs_deleted: number;
+  raw_log_lines_scrubbed: number;
+  exports_deleted: number;
+  analysis_results_cleared: number;
+}
+
 export const authApi = {
   me: () => request<AuthUserResponse>("/api/auth/me"),
   login: (payload: LoginRequest) =>
@@ -516,6 +592,18 @@ export const casesApi = {
   create: (payload: CaseCreateRequest) =>
     request<CaseResponse>("/api/cases", {method: "POST", body: payload}),
   get: (caseId: string) => request<CaseResponse>(`/api/cases/${caseId}`),
+  listCollaborators: (caseId: string) =>
+    request<CaseCollaboratorListResponse>(`/api/cases/${caseId}/collaborators`),
+  upsertCollaborator: (caseId: string, payload: {user_id: string; role: string}) =>
+    request<CaseCollaborator>(`/api/cases/${caseId}/collaborators`, {
+      method: "POST",
+      body: payload,
+    }),
+  removeCollaborator: (caseId: string, userId: string) =>
+    request<{status: string; removed: boolean}>(
+      `/api/cases/${caseId}/collaborators/${userId}`,
+      {method: "DELETE"},
+    ),
   requestUpload: (caseId: string, payload: UploadRequest) =>
     request<UploadStartResponse>(`/api/cases/${caseId}/uploads`, {
       method: "POST",
@@ -672,6 +760,26 @@ export const copilotAuthApi = {
     request<CopilotDisconnectResponse>("/api/copilot/auth/credential", {
       method: "DELETE",
     }),
+};
+
+export const adminApi = {
+  users: (query?: {q?: string; role?: string; active?: boolean; limit?: number; offset?: number}) =>
+    request<AdminUserListResponse>("/api/admin/users", {query}),
+  updateUser: (userId: string, payload: {role?: string; is_active?: boolean}) =>
+    request<AdminUser>(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      body: payload,
+    }),
+  auditLogs: (query?: {
+    case_id?: string;
+    action?: string;
+    user_id?: string;
+    limit?: number;
+    offset?: number;
+  }) => request<AdminAuditLogListResponse>("/api/admin/audit-logs", {query}),
+  settings: () => request<AdminSettingsResponse>("/api/admin/settings"),
+  runRetention: () =>
+    request<RetentionRunResponse>("/api/admin/retention/run", {method: "POST"}),
 };
 
 function dispatchSseFrames(buffer: string, handlers: ChatStreamHandlers): string {
