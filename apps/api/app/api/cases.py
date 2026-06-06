@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -24,12 +24,20 @@ from app.schemas.case import (
 )
 from app.services.copilot_model_gateway import CopilotCredentialError, CopilotGatewayError
 from app.services.object_store import (
+    CompletedMultipartUploadPart,
     ObjectStoreConfigurationError,
+    ObjectStoreError,
+    abort_multipart_upload,
+    complete_multipart_upload,
+    create_multipart_part_urls,
+    create_multipart_upload,
+    create_multipart_upload_plan,
     create_presigned_upload,
     digest_bytes,
     file_uri_to_path,
     is_local_backend,
     is_s3_backend,
+    list_multipart_parts,
     object_store_backend,
     stat_object,
     write_bytes,
@@ -108,6 +116,128 @@ def _completed_upload_response(upload: Any, *, size_bytes: int | None = None) ->
         "sha256": upload.sha256,
         "size_bytes": upload.size_bytes if size_bytes is None else size_bytes,
     }
+
+
+def _upload_metadata(upload: Any) -> dict[str, Any]:
+    metadata = getattr(upload, "upload_metadata", {}) or {}
+    return dict(metadata) if isinstance(metadata, dict) else {}
+
+
+def _multipart_upload_metadata(
+    *,
+    multipart_upload_id: str,
+    part_size_bytes: int,
+    part_count: int,
+) -> dict[str, Any]:
+    return {
+        "upload_mode": "multipart",
+        "multipart_upload_id": multipart_upload_id,
+        "part_size_bytes": part_size_bytes,
+        "part_count": part_count,
+    }
+
+
+def _part_url_response(part: Any) -> dict[str, object]:
+    return {
+        "part_number": part.part_number,
+        "upload_url": part.upload_url,
+        "upload_headers": part.upload_headers,
+    }
+
+
+def _uploaded_part_response(part: Any) -> dict[str, object]:
+    return {
+        "part_number": part.part_number,
+        "etag": part.etag,
+        "size_bytes": part.size_bytes,
+    }
+
+
+def _multipart_response(
+    upload: Any,
+    *,
+    backend: str,
+    metadata: dict[str, Any],
+    parts: list[Any],
+    expires_in: int,
+    uploaded_parts: list[Any] | None = None,
+) -> dict[str, object]:
+    return {
+        "file_id": upload.id,
+        "upload_backend": backend,
+        "upload_mode": "multipart",
+        "multipart_upload_id": str(metadata["multipart_upload_id"]),
+        "part_size_bytes": int(metadata["part_size_bytes"]),
+        "part_count": int(metadata["part_count"]),
+        "parts": [_part_url_response(part) for part in parts],
+        "uploaded_parts": [
+            _uploaded_part_response(part) for part in (uploaded_parts or [])
+        ],
+        "expires_in": expires_in,
+    }
+
+
+def _require_multipart_upload_for_case(
+    store: MetadataStore,
+    case_id: str,
+    file_id: str,
+    *,
+    allow_aborted: bool = False,
+) -> tuple[Any, dict[str, Any]]:
+    upload = _require_upload_for_case(store, case_id, file_id)
+    metadata = _upload_metadata(upload)
+    if not upload.object_uri.startswith("s3://") or metadata.get("upload_mode") != "multipart":
+        raise HTTPException(status_code=400, detail="upload is not an S3 multipart upload")
+    if upload.completed:
+        raise HTTPException(status_code=400, detail="multipart upload is already completed")
+    if metadata.get("aborted_at") and not allow_aborted:
+        raise HTTPException(status_code=400, detail="multipart upload has been aborted")
+    multipart_upload_id = metadata.get("multipart_upload_id")
+    part_size_bytes = metadata.get("part_size_bytes")
+    part_count = metadata.get("part_count")
+    if (
+        not isinstance(multipart_upload_id, str)
+        or not multipart_upload_id
+        or not isinstance(part_size_bytes, int)
+        or isinstance(part_size_bytes, bool)
+        or not isinstance(part_count, int)
+        or isinstance(part_count, bool)
+        or part_size_bytes <= 0
+        or part_count <= 0
+    ):
+        raise HTTPException(status_code=400, detail="multipart upload metadata is incomplete")
+    return upload, metadata
+
+
+def _normalize_complete_parts(
+    payload: UploadCompleteRequest,
+    *,
+    part_count: int,
+) -> list[CompletedMultipartUploadPart]:
+    if not payload.parts:
+        raise HTTPException(status_code=400, detail="multipart completion requires parts")
+    etags_by_part: dict[int, str] = {}
+    for part in payload.parts:
+        if part.part_number < 1 or part.part_number > part_count:
+            raise HTTPException(
+                status_code=400,
+                detail=f"multipart part_number must be between 1 and {part_count}",
+            )
+        if part.part_number in etags_by_part:
+            raise HTTPException(
+                status_code=400,
+                detail=f"duplicate multipart part_number {part.part_number}",
+            )
+        etags_by_part[part.part_number] = part.etag
+    if len(etags_by_part) != part_count:
+        raise HTTPException(
+            status_code=400,
+            detail=f"multipart completion requires all {part_count} parts",
+        )
+    return [
+        CompletedMultipartUploadPart(part_number=part_number, etag=etag)
+        for part_number, etag in sorted(etags_by_part.items())
+    ]
 
 
 def _upload_path_for_analysis(upload: Any) -> str:
@@ -195,6 +325,53 @@ def request_upload(
     if is_local_backend(store.settings):
         upload_url = str(request.url_for("upload_content", case_id=case_id, file_id=upload.id))
     elif is_s3_backend(store.settings):
+        use_multipart = (
+            payload.multipart is True
+            or payload.size_bytes >= store.settings.s3_multipart_threshold_bytes
+        )
+        if use_multipart:
+            part_size_bytes = (
+                payload.part_size_bytes or store.settings.s3_multipart_part_size_bytes
+            )
+            try:
+                plan = create_multipart_upload_plan(
+                    size_bytes=payload.size_bytes,
+                    part_size_bytes=part_size_bytes,
+                    max_parts=store.settings.s3_multipart_max_parts,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            try:
+                multipart_upload_id = create_multipart_upload(
+                    upload.object_uri,
+                    content_type=payload.content_type,
+                    app_settings=store.settings,
+                    s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
+                )
+                metadata = _multipart_upload_metadata(
+                    multipart_upload_id=multipart_upload_id,
+                    part_size_bytes=plan.part_size_bytes,
+                    part_count=plan.part_count,
+                )
+                parts = create_multipart_part_urls(
+                    upload.object_uri,
+                    multipart_upload_id=multipart_upload_id,
+                    part_count=plan.part_count,
+                    app_settings=store.settings,
+                    s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
+                )
+            except ObjectStoreConfigurationError as exc:
+                raise HTTPException(status_code=500, detail=str(exc)) from exc
+            except ObjectStoreError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+            upload = store.update_upload_metadata(upload_id=upload.id, metadata=metadata)
+            return _multipart_response(
+                upload,
+                backend=backend,
+                metadata=metadata,
+                parts=parts,
+                expires_in=store.settings.s3_presign_expires_seconds,
+            )
         try:
             presigned = create_presigned_upload(
                 upload.object_uri,
@@ -209,9 +386,13 @@ def request_upload(
         backend = presigned.upload_backend
         expires_in = presigned.expires_in
         object_uri = None
+        upload = store.update_upload_metadata(
+            upload_id=upload.id,
+            metadata={"upload_mode": "single"},
+        )
     else:
         upload_url = upload.object_uri
-    return {
+    response: dict[str, object] = {
         "file_id": upload.id,
         "upload_url": upload_url,
         "object_uri": object_uri,
@@ -219,6 +400,9 @@ def request_upload(
         "upload_headers": upload_headers,
         "expires_in": expires_in,
     }
+    if is_s3_backend(store.settings):
+        response["upload_mode"] = "single"
+    return response
 
 
 @router.put("/{case_id}/uploads/{file_id}/content", name="upload_content")
@@ -257,6 +441,87 @@ async def upload_content(
     return _completed_upload_response(upload, size_bytes=stored.size_bytes)
 
 
+@router.get("/{case_id}/uploads/{file_id}/multipart")
+def refresh_multipart_upload(
+    request: Request,
+    case_id: str,
+    file_id: str,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> dict[str, object]:
+    del user
+    upload_record, metadata = _require_multipart_upload_for_case(store, case_id, file_id)
+    try:
+        parts = create_multipart_part_urls(
+            upload_record.object_uri,
+            multipart_upload_id=str(metadata["multipart_upload_id"]),
+            part_count=int(metadata["part_count"]),
+            app_settings=store.settings,
+            s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
+        )
+        uploaded_parts = list_multipart_parts(
+            upload_record.object_uri,
+            multipart_upload_id=str(metadata["multipart_upload_id"]),
+            app_settings=store.settings,
+            s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail="multipart upload is not active") from exc
+    except ObjectStoreConfigurationError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ObjectStoreError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return _multipart_response(
+        upload_record,
+        backend=object_store_backend(store.settings),
+        metadata=metadata,
+        parts=parts,
+        uploaded_parts=uploaded_parts,
+        expires_in=store.settings.s3_presign_expires_seconds,
+    )
+
+
+@router.delete("/{case_id}/uploads/{file_id}/multipart")
+def abort_case_multipart_upload(
+    request: Request,
+    case_id: str,
+    file_id: str,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> dict[str, object]:
+    del user
+    upload_record, metadata = _require_multipart_upload_for_case(
+        store, case_id, file_id, allow_aborted=True
+    )
+    aborted_at = metadata.get("aborted_at")
+    if not aborted_at:
+        try:
+            abort_multipart_upload(
+                upload_record.object_uri,
+                multipart_upload_id=str(metadata["multipart_upload_id"]),
+                app_settings=store.settings,
+                s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
+            )
+        except ObjectStoreConfigurationError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except ObjectStoreError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        aborted_at = datetime.now(UTC).isoformat()
+        metadata = dict(metadata)
+        metadata["aborted_at"] = aborted_at
+        upload_record = store.update_upload_metadata(
+            upload_id=upload_record.id,
+            metadata=metadata,
+        )
+    return {
+        "file_id": upload_record.id,
+        "status": "aborted",
+        "upload_backend": object_store_backend(store.settings),
+        "upload_mode": "multipart",
+        "aborted_at": str(aborted_at),
+    }
+
+
 @router.post("/{case_id}/uploads/{file_id}/complete")
 def complete_upload(
     request: Request,
@@ -275,6 +540,45 @@ def complete_upload(
                 detail="upload already completed with different sha256",
             )
         return _completed_upload_response(upload_record)
+    metadata = _upload_metadata(upload_record)
+    if metadata.get("upload_mode") == "multipart":
+        upload_record, metadata = _require_multipart_upload_for_case(store, case_id, file_id)
+        expected_upload_id = str(metadata["multipart_upload_id"])
+        if payload.multipart_upload_id != expected_upload_id:
+            raise HTTPException(status_code=400, detail="multipart_upload_id does not match")
+        complete_parts = _normalize_complete_parts(
+            payload,
+            part_count=int(metadata["part_count"]),
+        )
+        try:
+            complete_multipart_upload(
+                upload_record.object_uri,
+                multipart_upload_id=expected_upload_id,
+                parts=complete_parts,
+                app_settings=store.settings,
+                s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
+            )
+            stored = stat_object(
+                upload_record.object_uri,
+                app_settings=store.settings,
+                s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail="upload content has not been uploaded") from exc
+        except ObjectStoreConfigurationError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except ObjectStoreError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        if upload_record.size_bytes != stored.size_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"upload size mismatch: expected {upload_record.size_bytes} bytes, "
+                    f"found {stored.size_bytes} bytes"
+                ),
+            )
+        upload = store.complete_upload(upload_id=file_id, sha256=payload.sha256)
+        return _completed_upload_response(upload)
     if upload_record.object_uri.startswith("file://"):
         try:
             stored = stat_object(upload_record.object_uri)

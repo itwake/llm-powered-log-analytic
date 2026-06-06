@@ -2,7 +2,7 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, synchronous worker pipeline, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads, synchronous worker pipeline, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell, and deployment scaffolding.
 
 ## Architecture
 
@@ -93,7 +93,8 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy when `LOGAN_DATABASE_URL` is set and memory otherwise. Use `memory` or `sqlalchemy` to force a backend.
 - `LOGAN_OBJECT_STORE_BACKEND=local`; local uploads store real file bytes on disk and record `file://` object URIs.
 - `LOGAN_LOCAL_OBJECT_STORE_DIR=.logan/object-store` relative to the API process working directory by default.
-- `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio` enables presigned S3/MinIO `PUT` uploads; configure `LOGAN_S3_BUCKET`, `LOGAN_S3_ACCESS_KEY`, `LOGAN_S3_SECRET_KEY`, and `LOGAN_S3_ENDPOINT` for MinIO.
+- `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio` enables presigned S3/MinIO raw uploads; configure `LOGAN_S3_BUCKET`, `LOGAN_S3_ACCESS_KEY`, `LOGAN_S3_SECRET_KEY`, and `LOGAN_S3_ENDPOINT` for MinIO.
+- `LOGAN_S3_MULTIPART_THRESHOLD_BYTES=104857600`, `LOGAN_S3_MULTIPART_PART_SIZE_BYTES=67108864`, and `LOGAN_S3_MULTIPART_MAX_PARTS=10000` control S3/MinIO multipart upload planning. Local uploads remain direct authenticated API `PUT` requests.
 - `LOGAN_COPILOT_MODEL=gpt-5.4`
 - `LOGAN_COPILOT_REASONING_EFFORT=high`
 - `LOGAN_COPILOT_OAUTH_CLIENT_ID=Iv1.b507a08c87ecfe98`
@@ -119,4 +120,4 @@ See `.env.example` for the full list. Key defaults:
 
 ## Roadmap
 
-Remaining staged work is tracked in `docs/operations.md`. The main gaps are resumable/multipart uploads, Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.
+Remaining staged work is tracked in `docs/operations.md`. The main gaps are Temporal activity idempotency backed by durable state, RBAC policy expansion, Playwright e2e coverage, richer chart/graph libraries, and production observability wiring.

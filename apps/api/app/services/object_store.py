@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import uuid
 from dataclasses import dataclass
@@ -33,6 +34,33 @@ class PresignedUpload:
     upload_headers: dict[str, str]
     upload_backend: str
     expires_in: int
+
+
+@dataclass(frozen=True)
+class MultipartUploadPlan:
+    size_bytes: int
+    part_size_bytes: int
+    part_count: int
+
+
+@dataclass(frozen=True)
+class MultipartPartUploadUrl:
+    part_number: int
+    upload_url: str
+    upload_headers: dict[str, str]
+
+
+@dataclass(frozen=True)
+class CompletedMultipartUploadPart:
+    part_number: int
+    etag: str
+
+
+@dataclass(frozen=True)
+class UploadedMultipartPart:
+    part_number: int
+    etag: str
+    size_bytes: int
 
 
 S3_BACKENDS = frozenset({"s3", "minio"})
@@ -231,6 +259,188 @@ def create_presigned_upload(
         upload_backend=object_store_backend(app_settings),
         expires_in=app_settings.s3_presign_expires_seconds,
     )
+
+
+def create_multipart_upload_plan(
+    *,
+    size_bytes: int,
+    part_size_bytes: int,
+    max_parts: int,
+) -> MultipartUploadPlan:
+    if size_bytes <= 0:
+        raise ValueError("multipart uploads require size_bytes greater than 0")
+    if part_size_bytes <= 0:
+        raise ValueError("multipart part size must be greater than 0")
+    if max_parts <= 0:
+        raise ValueError("multipart max parts must be greater than 0")
+    part_count = math.ceil(size_bytes / part_size_bytes)
+    if part_count > max_parts:
+        raise ValueError(
+            f"multipart upload requires {part_count} parts, exceeding the maximum of {max_parts}"
+        )
+    return MultipartUploadPlan(
+        size_bytes=size_bytes,
+        part_size_bytes=part_size_bytes,
+        part_count=part_count,
+    )
+
+
+def _raise_s3_operation_error(operation: str, error: Exception) -> None:
+    code = _s3_error_code(error)
+    suffix = f" ({code})" if code else ""
+    raise ObjectStoreError(f"S3 {operation} failed{suffix}") from error
+
+
+def create_multipart_upload(
+    object_uri: str,
+    *,
+    content_type: str | None = None,
+    app_settings: Settings = settings,
+    s3_client_factory: S3ClientFactory | None = None,
+) -> str:
+    bucket, key = parse_s3_object_uri(object_uri)
+    require_s3_settings(app_settings)
+    params: dict[str, Any] = {"Bucket": bucket, "Key": key}
+    if content_type:
+        params["ContentType"] = content_type
+    client = get_s3_client(app_settings, s3_client_factory=s3_client_factory)
+    try:
+        response = client.create_multipart_upload(**params)
+    except Exception as exc:
+        _raise_s3_operation_error("create_multipart_upload", exc)
+    upload_id = response.get("UploadId") if isinstance(response, dict) else None
+    if not upload_id:
+        raise ObjectStoreError("S3 create_multipart_upload response did not include UploadId")
+    return str(upload_id)
+
+
+def create_multipart_part_urls(
+    object_uri: str,
+    *,
+    multipart_upload_id: str,
+    part_count: int,
+    app_settings: Settings = settings,
+    s3_client_factory: S3ClientFactory | None = None,
+) -> list[MultipartPartUploadUrl]:
+    if part_count <= 0:
+        raise ValueError("multipart part count must be greater than 0")
+    bucket, key = parse_s3_object_uri(object_uri)
+    require_s3_settings(app_settings)
+    client = get_s3_client(app_settings, s3_client_factory=s3_client_factory)
+    parts: list[MultipartPartUploadUrl] = []
+    for part_number in range(1, part_count + 1):
+        params = {
+            "Bucket": bucket,
+            "Key": key,
+            "UploadId": multipart_upload_id,
+            "PartNumber": part_number,
+        }
+        try:
+            upload_url = client.generate_presigned_url(
+                "upload_part",
+                Params=params,
+                ExpiresIn=app_settings.s3_presign_expires_seconds,
+                HttpMethod="PUT",
+            )
+        except Exception as exc:
+            _raise_s3_operation_error("generate_presigned_upload_part_url", exc)
+        parts.append(
+            MultipartPartUploadUrl(
+                part_number=part_number,
+                upload_url=str(upload_url),
+                upload_headers={},
+            )
+        )
+    return parts
+
+
+def complete_multipart_upload(
+    object_uri: str,
+    *,
+    multipart_upload_id: str,
+    parts: list[CompletedMultipartUploadPart],
+    app_settings: Settings = settings,
+    s3_client_factory: S3ClientFactory | None = None,
+) -> dict[str, Any]:
+    bucket, key = parse_s3_object_uri(object_uri)
+    client = get_s3_client(app_settings, s3_client_factory=s3_client_factory)
+    multipart_payload = {
+        "Parts": [
+            {"PartNumber": part.part_number, "ETag": part.etag}
+            for part in parts
+        ]
+    }
+    try:
+        response = client.complete_multipart_upload(
+            Bucket=bucket,
+            Key=key,
+            UploadId=multipart_upload_id,
+            MultipartUpload=multipart_payload,
+        )
+    except Exception as exc:
+        _raise_s3_operation_error("complete_multipart_upload", exc)
+    return dict(response or {})
+
+
+def abort_multipart_upload(
+    object_uri: str,
+    *,
+    multipart_upload_id: str,
+    app_settings: Settings = settings,
+    s3_client_factory: S3ClientFactory | None = None,
+) -> None:
+    bucket, key = parse_s3_object_uri(object_uri)
+    client = get_s3_client(app_settings, s3_client_factory=s3_client_factory)
+    try:
+        client.abort_multipart_upload(
+            Bucket=bucket,
+            Key=key,
+            UploadId=multipart_upload_id,
+        )
+    except Exception as exc:
+        if _s3_error_code(exc) in {"404", "NoSuchUpload", "NotFound"}:
+            return
+        _raise_s3_operation_error("abort_multipart_upload", exc)
+
+
+def list_multipart_parts(
+    object_uri: str,
+    *,
+    multipart_upload_id: str,
+    app_settings: Settings = settings,
+    s3_client_factory: S3ClientFactory | None = None,
+) -> list[UploadedMultipartPart]:
+    bucket, key = parse_s3_object_uri(object_uri)
+    client = get_s3_client(app_settings, s3_client_factory=s3_client_factory)
+    request: dict[str, Any] = {"Bucket": bucket, "Key": key, "UploadId": multipart_upload_id}
+    uploaded_parts: list[UploadedMultipartPart] = []
+    while True:
+        try:
+            response = client.list_parts(**request)
+        except Exception as exc:
+            if _s3_error_code(exc) in {"404", "NoSuchUpload", "NotFound"}:
+                raise FileNotFoundError(object_uri) from exc
+            _raise_s3_operation_error("list_parts", exc)
+        for part in response.get("Parts") or []:
+            part_number = part.get("PartNumber")
+            etag = part.get("ETag")
+            size = part.get("Size")
+            if not isinstance(part_number, int) or not etag or not isinstance(size, int):
+                raise ObjectStoreError("S3 list_parts response included an invalid part")
+            uploaded_parts.append(
+                UploadedMultipartPart(
+                    part_number=part_number,
+                    etag=str(etag),
+                    size_bytes=size,
+                )
+            )
+        if not response.get("IsTruncated"):
+            break
+        next_marker = response.get("NextPartNumberMarker")
+        if not isinstance(next_marker, int):
+            raise ObjectStoreError("S3 list_parts response did not include NextPartNumberMarker")
+        request["PartNumberMarker"] = next_marker
+    return sorted(uploaded_parts, key=lambda part: part.part_number)
 
 
 def _s3_error_code(error: Exception) -> str | None:

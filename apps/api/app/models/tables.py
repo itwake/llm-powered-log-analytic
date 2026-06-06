@@ -199,6 +199,7 @@ class RawFile(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str | None] = mapped_column(Text)
     upload_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    upload_metadata: Mapped[dict[str, Any]] = jsonb_default()
     detected_format: Mapped[str | None] = mapped_column(Text)
     file_role: Mapped[str] = mapped_column(Text, default="log")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

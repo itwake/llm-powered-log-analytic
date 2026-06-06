@@ -516,6 +516,7 @@ class SQLAlchemyStore:
                 size_bytes=size_bytes,
                 sha256=None,
                 upload_completed=False,
+                upload_metadata={},
                 file_role="log",
                 created_at=_now(),
             )
@@ -530,6 +531,16 @@ class SQLAlchemyStore:
         with self._session() as session:
             upload = session.get(tables.RawFile, upload_id)
             return self._upload_record(upload) if upload else None
+
+    def update_upload_metadata(
+        self, *, upload_id: str, metadata: dict[str, Any]
+    ) -> UploadRecord:
+        with self._session() as session:
+            upload = session.get(tables.RawFile, upload_id)
+            if upload is None:
+                raise KeyError(upload_id)
+            upload.upload_metadata = dict(metadata)
+        return self._upload_record(upload)
 
     def complete_upload(self, *, upload_id: str, sha256: str) -> UploadRecord:
         with self._session() as session:
@@ -2299,6 +2310,7 @@ class SQLAlchemyStore:
             object_uri=row.object_uri,
             sha256=row.sha256,
             completed=row.upload_completed,
+            upload_metadata=dict(row.upload_metadata or {}),
             created_at=_utc(row.created_at) or _now(),
         )
 

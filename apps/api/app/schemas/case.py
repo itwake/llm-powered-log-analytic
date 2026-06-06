@@ -34,10 +34,19 @@ class UploadRequest(BaseModel):
     filename: str
     content_type: str | None = None
     size_bytes: int = Field(ge=0)
+    multipart: bool | None = None
+    part_size_bytes: int | None = Field(default=None, gt=0)
+
+
+class UploadCompletePart(BaseModel):
+    part_number: int = Field(ge=1)
+    etag: str = Field(min_length=1)
 
 
 class UploadCompleteRequest(BaseModel):
     sha256: str
+    multipart_upload_id: str | None = None
+    parts: list[UploadCompletePart] | None = None
 
 
 class AnalysisRunRequest(BaseModel):

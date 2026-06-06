@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.config import Settings
 from app.services.object_store import (
+    create_multipart_upload_plan,
     create_presigned_upload,
     file_uri_to_path,
     parse_s3_object_uri,
@@ -136,3 +137,31 @@ def test_presigned_upload_uses_fake_s3_client_without_network() -> None:
             "HttpMethod": "PUT",
         }
     ]
+
+
+def test_multipart_upload_plan_calculates_part_count() -> None:
+    plan = create_multipart_upload_plan(
+        size_bytes=129,
+        part_size_bytes=64,
+        max_parts=10,
+    )
+
+    assert plan.size_bytes == 129
+    assert plan.part_size_bytes == 64
+    assert plan.part_count == 3
+
+
+def test_multipart_upload_plan_rejects_invalid_or_excessive_parts() -> None:
+    try:
+        create_multipart_upload_plan(size_bytes=0, part_size_bytes=64, max_parts=10)
+    except ValueError as exc:
+        assert "size_bytes" in str(exc)
+    else:
+        raise AssertionError("expected zero-byte multipart upload to be rejected")
+
+    try:
+        create_multipart_upload_plan(size_bytes=129, part_size_bytes=64, max_parts=2)
+    except ValueError as exc:
+        assert "exceeding the maximum" in str(exc)
+    else:
+        raise AssertionError("expected multipart upload exceeding max parts to be rejected")

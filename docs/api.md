@@ -89,6 +89,8 @@ SSE frames are JSON:
 - `GET /api/cases/{case_id}`
 - `POST /api/cases/{case_id}/uploads`
 - `PUT /api/cases/{case_id}/uploads/{file_id}/content`
+- `GET /api/cases/{case_id}/uploads/{file_id}/multipart`
+- `DELETE /api/cases/{case_id}/uploads/{file_id}/multipart`
 - `POST /api/cases/{case_id}/uploads/{file_id}/complete`
 - `POST /api/cases/{case_id}/analysis-runs`
 - `GET /api/cases/{case_id}/analysis-runs`
@@ -102,12 +104,32 @@ SSE frames are JSON:
 a local `file://` object URI. Local responses still include `object_uri` for compatibility.
 
 With `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio`, the API records an internal
-`s3://bucket/cases/{case_id}/uploads/{file_id}/{safe_filename}` object URI and returns a
-presigned S3/MinIO `PUT` URL plus any headers that the browser must send. Browser clients upload
-directly to object storage, compute SHA-256 locally, then call `POST /complete` with the digest.
-The completion route verifies existence and size with `head_object`. If object metadata contains
-`sha256`, it must match the client digest; otherwise the verified client digest is stored. The API
-does not read full S3 objects during completion.
+`s3://bucket/cases/{case_id}/uploads/{file_id}/{safe_filename}` object URI. Smaller files keep the
+existing single presigned `PUT` behavior and the response includes `upload_mode: "single"`,
+`upload_url`, `upload_headers`, and `expires_in`; `object_uri` is not exposed publicly.
+
+S3/MinIO raw uploads switch to multipart when `multipart: true` is passed to
+`POST /uploads`, or when `size_bytes >= LOGAN_S3_MULTIPART_THRESHOLD_BYTES` (default
+100 MiB). The response includes `upload_mode: "multipart"`, `multipart_upload_id`,
+`part_size_bytes`, `part_count`, `parts` with `{part_number, upload_url, upload_headers}`, and
+`expires_in`. The API rejects plans whose part count exceeds
+`LOGAN_S3_MULTIPART_MAX_PARTS` (default 10000). `LOGAN_S3_MULTIPART_PART_SIZE_BYTES` defaults to
+64 MiB and can be overridden per request with `part_size_bytes`.
+
+Clients upload each part directly to S3/MinIO, collect ETags, compute SHA-256 locally, then call
+`POST /complete` with `sha256`, matching `multipart_upload_id`, and
+`parts: [{part_number, etag}]`. Completion calls S3 `complete_multipart_upload`, verifies
+existence and size with `head_object`, and stores the client digest without reading the full
+object. `GET /multipart` returns fresh part URLs and any uploaded parts reported by S3
+`list_parts`, allowing clients that persisted `file_id` to resume. `DELETE /multipart` aborts the
+S3 multipart upload and records `aborted_at` in safe upload metadata. Local uploads do not use
+multipart and remain direct authenticated API `PUT` uploads.
+
+For single S3/MinIO uploads, browser clients upload directly to object storage, compute SHA-256
+locally, then call `POST /complete` with the digest. The completion route verifies existence and
+size with `head_object`. If object metadata contains `sha256`, it must match the client digest;
+otherwise the verified client digest is stored. The API does not read full S3 objects during
+completion.
 
 `POST /complete` is idempotent for matching sha256 values and returns `409` for conflicting
 sha256 values.

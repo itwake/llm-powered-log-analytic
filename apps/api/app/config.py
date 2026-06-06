@@ -49,6 +49,13 @@ class Settings:
     s3_region: str = os.getenv("LOGAN_S3_REGION", "us-east-1")
     s3_presign_expires_seconds: int = int(os.getenv("LOGAN_S3_PRESIGN_EXPIRES_SECONDS", "900"))
     s3_force_path_style: bool = _env_bool("LOGAN_S3_FORCE_PATH_STYLE", True)
+    s3_multipart_threshold_bytes: int = int(
+        os.getenv("LOGAN_S3_MULTIPART_THRESHOLD_BYTES", "104857600")
+    )
+    s3_multipart_part_size_bytes: int = int(
+        os.getenv("LOGAN_S3_MULTIPART_PART_SIZE_BYTES", "67108864")
+    )
+    s3_multipart_max_parts: int = int(os.getenv("LOGAN_S3_MULTIPART_MAX_PARTS", "10000"))
     secure_cookies: bool = os.getenv("LOGAN_ENV", "development") == "production"
     raw_log_retention_days: int = int(os.getenv("LOGAN_RAW_LOG_RETENTION_DAYS", "30"))
     report_retention_days: int = int(os.getenv("LOGAN_REPORT_RETENTION_DAYS", "365"))

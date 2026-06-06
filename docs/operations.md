@@ -34,6 +34,16 @@ The defaults are `LOGAN_S3_REGION=us-east-1`, `LOGAN_S3_PRESIGN_EXPIRES_SECONDS=
 size. S3-backed `input_file_ids` are intentionally rejected by the current local analysis path
 until the worker supports streaming or downloading S3 inputs.
 
+Large S3/MinIO raw uploads use multipart/resumable sessions when the client asks with
+`multipart=true` or when the declared size reaches `LOGAN_S3_MULTIPART_THRESHOLD_BYTES`
+(default `104857600`, 100 MiB). `LOGAN_S3_MULTIPART_PART_SIZE_BYTES` defaults to `67108864`
+(64 MiB), and `LOGAN_S3_MULTIPART_MAX_PARTS` defaults to `10000`. Multipart session metadata is
+stored on the upload record with safe fields such as upload mode, S3 upload id, part size, part
+count, and abort timestamp; raw bytes, log content, credentials, and source tokens are never stored
+there. Clients can resume with `GET /api/cases/{case_id}/uploads/{file_id}/multipart`, which
+returns fresh part URLs and S3 `list_parts` data, or abort with `DELETE` on the same route. The
+local backend intentionally remains a direct authenticated API `PUT`.
+
 The default API path uses real GitHub Copilot auth and model calls:
 
 - `POST /api/copilot/auth/start` starts GitHub device-code auth.
@@ -131,7 +141,6 @@ docker compose up --build
 
 ## Remaining Staged Work
 
-- Add resumable/multipart uploads for large files and interrupted browser sessions.
 - Replace the Temporal placeholder with real activities backed by durable retries and replay-safe
   idempotency; job event rows already provide the run-scoped progress/event stream.
 - Add PGEM and Granger methods behind the current causal method seams.

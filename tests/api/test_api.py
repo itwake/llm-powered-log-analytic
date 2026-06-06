@@ -82,14 +82,28 @@ class FakeS3NotFound(Exception):
 class FakeS3Client:
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str], dict[str, object]] = {}
+        self.complete_objects: dict[tuple[str, str, str], dict[str, object]] = {}
+        self.uploaded_parts: dict[tuple[str, str, str], list[dict[str, object]]] = {}
         self.presign_calls: list[dict[str, object]] = []
         self.head_calls: list[dict[str, str]] = []
+        self.create_multipart_calls: list[dict[str, object]] = []
+        self.complete_multipart_calls: list[dict[str, object]] = []
+        self.abort_multipart_calls: list[dict[str, str]] = []
+        self.list_parts_calls: list[dict[str, object]] = []
+        self._upload_counter = 0
 
     def generate_presigned_url(self, operation: str, **kwargs: object) -> str:
         self.presign_calls.append({"operation": operation, **kwargs})
         params = kwargs.get("Params")
         assert isinstance(params, dict)
-        return f"https://minio.example/{params['Bucket']}/{params['Key']}?signature=fake"
+        signature = f"fake-{len(self.presign_calls)}"
+        if operation == "upload_part":
+            return (
+                f"https://minio.example/{params['Bucket']}/{params['Key']}"
+                f"?uploadId={params['UploadId']}&partNumber={params['PartNumber']}"
+                f"&signature={signature}"
+            )
+        return f"https://minio.example/{params['Bucket']}/{params['Key']}?signature={signature}"
 
     def head_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
         self.head_calls.append({"Bucket": Bucket, "Key": Key})
@@ -97,6 +111,31 @@ class FakeS3Client:
             return self.objects[(Bucket, Key)]
         except KeyError as exc:
             raise FakeS3NotFound() from exc
+
+    def create_multipart_upload(self, **kwargs: object) -> dict[str, object]:
+        self._upload_counter += 1
+        upload_id = f"multipart-{self._upload_counter}"
+        self.create_multipart_calls.append({**kwargs, "UploadId": upload_id})
+        return {"UploadId": upload_id}
+
+    def list_parts(self, **kwargs: object) -> dict[str, object]:
+        self.list_parts_calls.append(dict(kwargs))
+        key = (str(kwargs["Bucket"]), str(kwargs["Key"]), str(kwargs["UploadId"]))
+        return {"Parts": self.uploaded_parts.get(key, [])}
+
+    def complete_multipart_upload(self, **kwargs: object) -> dict[str, object]:
+        self.complete_multipart_calls.append(dict(kwargs))
+        bucket = str(kwargs["Bucket"])
+        key = str(kwargs["Key"])
+        upload_id = str(kwargs["UploadId"])
+        completed_object = self.complete_objects.get((bucket, key, upload_id))
+        if completed_object is not None:
+            self.objects[(bucket, key)] = completed_object
+        return {"Bucket": bucket, "Key": key, "UploadId": upload_id}
+
+    def abort_multipart_upload(self, **kwargs: str) -> dict[str, object]:
+        self.abort_multipart_calls.append(dict(kwargs))
+        return {}
 
 
 async def _authenticated_client(
@@ -802,6 +841,250 @@ async def test_s3_upload_complete_uses_head_object_and_presigned_url() -> None:
     assert completed is not None
     assert completed.completed is True
     assert completed.sha256 == expected_sha
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_s3_multipart_upload_start_returns_plan_and_persists_metadata() -> None:
+    fake_s3 = FakeS3Client()
+    client, store, _ = await _authenticated_client(
+        Settings(
+            object_store_backend="minio",
+            s3_endpoint="http://minio:9000",
+            s3_bucket="logan",
+            s3_access_key="access",
+            s3_secret_key="secret",
+            s3_presign_expires_seconds=321,
+            s3_multipart_threshold_bytes=10,
+            s3_multipart_part_size_bytes=5,
+        ),
+        s3_client_factory=lambda _: fake_s3,
+    )
+    case_id = await _create_case(client)
+
+    upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "../incident.log", "content_type": "text/plain", "size_bytes": 12},
+    )
+
+    assert upload.status_code == 200, upload.text
+    payload = upload.json()
+    file_id = payload["file_id"]
+    assert payload["upload_backend"] == "minio"
+    assert payload["upload_mode"] == "multipart"
+    assert "object_uri" not in payload
+    assert payload["multipart_upload_id"] == "multipart-1"
+    assert payload["part_size_bytes"] == 5
+    assert payload["part_count"] == 3
+    assert payload["expires_in"] == 321
+    assert [part["part_number"] for part in payload["parts"]] == [1, 2, 3]
+    assert payload["parts"][0]["upload_headers"] == {}
+    assert "partNumber=1" in payload["parts"][0]["upload_url"]
+
+    key = f"cases/{case_id}/uploads/{file_id}/incident.log"
+    assert fake_s3.create_multipart_calls == [
+        {
+            "Bucket": "logan",
+            "Key": key,
+            "ContentType": "text/plain",
+            "UploadId": "multipart-1",
+        }
+    ]
+    persisted = store.get_upload(file_id)
+    assert persisted is not None
+    assert persisted.upload_metadata == {
+        "upload_mode": "multipart",
+        "multipart_upload_id": "multipart-1",
+        "part_size_bytes": 5,
+        "part_count": 3,
+    }
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_s3_multipart_upload_start_rejects_excessive_part_count() -> None:
+    fake_s3 = FakeS3Client()
+    client, _, _ = await _authenticated_client(
+        Settings(
+            object_store_backend="s3",
+            s3_bucket="logan",
+            s3_access_key="access",
+            s3_secret_key="secret",
+            s3_multipart_threshold_bytes=1,
+            s3_multipart_part_size_bytes=5,
+            s3_multipart_max_parts=2,
+        ),
+        s3_client_factory=lambda _: fake_s3,
+    )
+    case_id = await _create_case(client)
+
+    upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "incident.log", "content_type": "text/plain", "size_bytes": 11},
+    )
+
+    assert upload.status_code == 400
+    assert "exceeding the maximum of 2" in upload.json()["detail"]
+    assert fake_s3.create_multipart_calls == []
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_s3_multipart_refresh_returns_fresh_urls_and_uploaded_parts() -> None:
+    fake_s3 = FakeS3Client()
+    client, store, _ = await _authenticated_client(
+        Settings(
+            object_store_backend="s3",
+            s3_bucket="logan",
+            s3_access_key="access",
+            s3_secret_key="secret",
+            s3_multipart_threshold_bytes=10,
+            s3_multipart_part_size_bytes=5,
+        ),
+        s3_client_factory=lambda _: fake_s3,
+    )
+    case_id = await _create_case(client)
+    upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "incident.log", "content_type": "text/plain", "size_bytes": 12},
+    )
+    assert upload.status_code == 200, upload.text
+    started = upload.json()
+    file_id = started["file_id"]
+    initial_url = started["parts"][0]["upload_url"]
+    persisted = store.get_upload(file_id)
+    assert persisted is not None
+    upload_id = persisted.upload_metadata["multipart_upload_id"]
+    key = f"cases/{case_id}/uploads/{file_id}/incident.log"
+    fake_s3.uploaded_parts[("logan", key, upload_id)] = [
+        {"PartNumber": 1, "ETag": '"etag-1"', "Size": 5}
+    ]
+
+    refreshed = await client.get(f"/api/cases/{case_id}/uploads/{file_id}/multipart")
+
+    assert refreshed.status_code == 200, refreshed.text
+    payload = refreshed.json()
+    assert payload["upload_mode"] == "multipart"
+    assert payload["multipart_upload_id"] == upload_id
+    assert len(payload["parts"]) == 3
+    assert payload["parts"][0]["upload_url"] != initial_url
+    assert payload["uploaded_parts"] == [
+        {"part_number": 1, "etag": '"etag-1"', "size_bytes": 5}
+    ]
+    assert fake_s3.list_parts_calls == [
+        {"Bucket": "logan", "Key": key, "UploadId": upload_id}
+    ]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_s3_multipart_complete_finishes_s3_upload_and_marks_complete() -> None:
+    fake_s3 = FakeS3Client()
+    client, store, _ = await _authenticated_client(
+        Settings(
+            object_store_backend="s3",
+            s3_bucket="logan",
+            s3_access_key="access",
+            s3_secret_key="secret",
+            s3_multipart_threshold_bytes=10,
+            s3_multipart_part_size_bytes=5,
+        ),
+        s3_client_factory=lambda _: fake_s3,
+    )
+    case_id = await _create_case(client)
+    content = b"hello world!"
+    expected_sha = hashlib.sha256(content).hexdigest()
+    upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "incident.log", "content_type": "text/plain", "size_bytes": len(content)},
+    )
+    assert upload.status_code == 200, upload.text
+    file_id = upload.json()["file_id"]
+    persisted = store.get_upload(file_id)
+    assert persisted is not None
+    upload_id = persisted.upload_metadata["multipart_upload_id"]
+    key = f"cases/{case_id}/uploads/{file_id}/incident.log"
+    fake_s3.complete_objects[("logan", key, upload_id)] = {
+        "ContentLength": len(content),
+        "Metadata": {},
+    }
+
+    complete = await client.post(
+        f"/api/cases/{case_id}/uploads/{file_id}/complete",
+        json={
+            "sha256": expected_sha,
+            "multipart_upload_id": upload_id,
+            "parts": [
+                {"part_number": 3, "etag": '"etag-3"'},
+                {"part_number": 1, "etag": '"etag-1"'},
+                {"part_number": 2, "etag": '"etag-2"'},
+            ],
+        },
+    )
+
+    assert complete.status_code == 200, complete.text
+    assert complete.json()["sha256"] == expected_sha
+    assert fake_s3.complete_multipart_calls == [
+        {
+            "Bucket": "logan",
+            "Key": key,
+            "UploadId": upload_id,
+            "MultipartUpload": {
+                "Parts": [
+                    {"PartNumber": 1, "ETag": '"etag-1"'},
+                    {"PartNumber": 2, "ETag": '"etag-2"'},
+                    {"PartNumber": 3, "ETag": '"etag-3"'},
+                ]
+            },
+        }
+    ]
+    assert fake_s3.head_calls == [{"Bucket": "logan", "Key": key}]
+    completed = store.get_upload(file_id)
+    assert completed is not None
+    assert completed.completed is True
+    assert completed.sha256 == expected_sha
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_s3_multipart_abort_marks_metadata_and_is_idempotent() -> None:
+    fake_s3 = FakeS3Client()
+    client, store, _ = await _authenticated_client(
+        Settings(
+            object_store_backend="minio",
+            s3_endpoint="http://minio:9000",
+            s3_bucket="logan",
+            s3_access_key="access",
+            s3_secret_key="secret",
+            s3_multipart_threshold_bytes=10,
+            s3_multipart_part_size_bytes=5,
+        ),
+        s3_client_factory=lambda _: fake_s3,
+    )
+    case_id = await _create_case(client)
+    upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "incident.log", "content_type": "text/plain", "size_bytes": 12},
+    )
+    assert upload.status_code == 200, upload.text
+    file_id = upload.json()["file_id"]
+    persisted = store.get_upload(file_id)
+    assert persisted is not None
+    upload_id = persisted.upload_metadata["multipart_upload_id"]
+    key = f"cases/{case_id}/uploads/{file_id}/incident.log"
+
+    aborted = await client.delete(f"/api/cases/{case_id}/uploads/{file_id}/multipart")
+    second_abort = await client.delete(f"/api/cases/{case_id}/uploads/{file_id}/multipart")
+
+    assert aborted.status_code == 200, aborted.text
+    assert second_abort.status_code == 200, second_abort.text
+    assert aborted.json()["status"] == "aborted"
+    assert fake_s3.abort_multipart_calls == [
+        {"Bucket": "logan", "Key": key, "UploadId": upload_id}
+    ]
+    updated = store.get_upload(file_id)
+    assert updated is not None
+    assert updated.upload_metadata["aborted_at"]
     await client.aclose()
 
 

@@ -138,6 +138,7 @@ CREATE TABLE raw_files (
   size_bytes BIGINT NOT NULL,
   sha256 TEXT,
   upload_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  upload_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   detected_format TEXT,
   file_role TEXT DEFAULT 'log',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()

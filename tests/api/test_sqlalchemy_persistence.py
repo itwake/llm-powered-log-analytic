@@ -270,6 +270,64 @@ def test_sqlalchemy_store_records_s3_upload_object_uri(tmp_path: Path) -> None:
     assert upload.object_uri == f"s3://logan/cases/{case.id}/uploads/{upload.id}/incident.log"
 
 
+def test_sqlalchemy_store_persists_upload_metadata(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(
+        database_url=database_url,
+        store_backend="sqlalchemy",
+        object_store_backend="s3",
+        s3_bucket="logan",
+        s3_access_key="access",
+        s3_secret_key="secret",
+    )
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    user = store.register_user(
+        email="multipart-persistence@example.com",
+        username="multipart-persistence",
+        full_name=None,
+        password="password123",
+    )
+    case = store.create_case(
+        user_id=user.id,
+        data={
+            "title": "Multipart upload persistence",
+            "issue_description": None,
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "test",
+            "incident_start": None,
+            "incident_end": None,
+            "timezone": "UTC",
+        },
+    )
+    upload = store.create_upload(
+        case_id=case.id,
+        filename="incident.log",
+        content_type="text/plain",
+        size_bytes=12,
+    )
+
+    store.update_upload_metadata(
+        upload_id=upload.id,
+        metadata={
+            "upload_mode": "multipart",
+            "multipart_upload_id": "multipart-1",
+            "part_size_bytes": 5,
+            "part_count": 3,
+        },
+    )
+    recreated = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    persisted = recreated.get_upload(upload.id)
+
+    assert persisted is not None
+    assert persisted.upload_metadata == {
+        "upload_mode": "multipart",
+        "multipart_upload_id": "multipart-1",
+        "part_size_bytes": 5,
+        "part_count": 3,
+    }
+
+
 @pytest.mark.asyncio
 async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"

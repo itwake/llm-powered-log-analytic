@@ -30,7 +30,16 @@ run advances. Event metadata is count-only, such as files, raw lines, templates,
 annotations, windows, causal nodes/edges, and export types; raw log text, prompt payloads,
 model inputs, source tokens, and credential material are not stored in event metadata.
 
-Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services, and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy. Uploaded bytes use a local disk object store by default, so tests can still inject the deterministic in-memory store, fake device-code client, mock model gateway, and fake S3 client with no Docker services or external model network required. Production uploads can switch to S3/MinIO presigned `PUT` URLs with `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio`; completion verifies object existence and size with `head_object` without reading full object bytes.
+Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services,
+and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy.
+Uploaded bytes use a local disk object store by default, so tests can still inject the
+deterministic in-memory store, fake device-code client, mock model gateway, and fake S3 client
+with no Docker services or external model network required. Production raw uploads can switch to
+S3/MinIO with `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio`. Smaller files use the existing single
+presigned `PUT` path. Large files use S3 multipart sessions with durable upload metadata for the
+safe resume fields: upload mode, multipart upload id, part size, part count, and abort timestamp.
+Completion verifies object existence and size with `head_object` without reading full object bytes.
+The local object-store backend remains a direct authenticated API `PUT`.
 
 `LOGAN_ANALYSIS_ORCHESTRATOR=local` is the default and keeps the API path synchronous. The
 optional `temporal` setting starts `AnalyzeCaseWorkflow` through a lazy Temporal client facade
@@ -62,6 +71,8 @@ The API owns runtime injection points on app state:
 
 - `copilot_auth_client` defaults to the real GitHub device-code client.
 - `model_gateway` defaults to the real GitHub Copilot `/responses` gateway.
+- `s3_client_factory` can inject fake S3/MinIO clients for presign, multipart, and `head_object`
+  tests.
 - tests pass deterministic fakes through `create_app(...)`.
 
 The Copilot gateway resolves stored plugin credentials, stored GitHub source OAuth credentials, and optional server-side environment tokens. Stored source tokens are exchanged for Copilot plugin tokens, cached with `expires_at`, and revoked with the user disconnect flow; no token material crosses the frontend boundary.
@@ -84,7 +95,6 @@ Causal edges are candidate relationships only. API and worker fields use `candid
 
 - Replace `StableDrainAdapter` with `drain3` behind the same `cluster()` interface.
 - Add S3 object storage adapters for report artifacts.
-- Add resumable/multipart S3 uploads for large files and interrupted browser sessions.
 - Replace the Temporal facade placeholder with replay-safe workflow activities and durable retry
   state.
 - Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.

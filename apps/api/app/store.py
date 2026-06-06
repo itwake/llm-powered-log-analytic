@@ -192,6 +192,7 @@ class UploadRecord:
     object_uri: str
     sha256: str | None = None
     completed: bool = False
+    upload_metadata: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -401,6 +402,10 @@ class MetadataStore(Protocol):
     ) -> UploadRecord: ...
 
     def get_upload(self, upload_id: str) -> UploadRecord | None: ...
+
+    def update_upload_metadata(
+        self, *, upload_id: str, metadata: dict[str, Any]
+    ) -> UploadRecord: ...
 
     def complete_upload(self, *, upload_id: str, sha256: str) -> UploadRecord: ...
 
@@ -692,6 +697,13 @@ class InMemoryStore:
 
     def get_upload(self, upload_id: str) -> UploadRecord | None:
         return self.uploads.get(upload_id)
+
+    def update_upload_metadata(
+        self, *, upload_id: str, metadata: dict[str, Any]
+    ) -> UploadRecord:
+        record = self.uploads[upload_id]
+        record.upload_metadata = dict(metadata)
+        return record
 
     def complete_upload(self, *, upload_id: str, sha256: str) -> UploadRecord:
         record = self.uploads[upload_id]
