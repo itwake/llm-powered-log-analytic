@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Request, status
 
-from app.store import InMemoryStore, UserRecord
+from app.store import MetadataStore, UserRecord
 
 
-def get_store(request: Request) -> InMemoryStore:
+def get_store(request: Request) -> MetadataStore:
     return request.app.state.store
 
 

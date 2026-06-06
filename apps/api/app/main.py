@@ -4,10 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth, capabilities, cases, chat, copilot_auth
-from app.store import InMemoryStore, create_store
+from app.store import MetadataStore, create_store
 
 
-def create_app(store: InMemoryStore | None = None) -> FastAPI:
+def create_app(store: MetadataStore | None = None) -> FastAPI:
     app = FastAPI(title="LogAn Platform API", version="0.1.0")
     app.state.store = store or create_store()
     app.add_middleware(

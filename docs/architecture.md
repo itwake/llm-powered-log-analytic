@@ -23,7 +23,7 @@ case files
   -> Markdown, HTML, JSON exports
 ```
 
-Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services, and Kubernetes manifests. The local path uses a deterministic in-memory store so tests require no Docker services.
+Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services, and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy; tests can still inject the deterministic in-memory store so no Docker services are required.
 
 ## Traceability
 
@@ -42,7 +42,7 @@ Causal edges are candidate relationships only. API and worker fields use `candid
 ## Extension Seams
 
 - Replace `StableDrainAdapter` with `drain3` behind the same `cluster()` interface.
-- Replace local store with PostgreSQL, ClickHouse, OpenSearch, and S3 adapters.
+- Fan out metadata-backed analysis results into ClickHouse, OpenSearch, and S3 object storage adapters.
 - Replace synchronous orchestration with Temporal workflow activities.
 - Replace mock Copilot gateway with source-token to Copilot-plugin token exchange and `/responses` calls.
 - Extend causal methods with PGEM and Granger implementations while retaining bin-size sensitivity checks.

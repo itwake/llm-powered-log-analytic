@@ -5,13 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from app.config import settings
 from app.dependencies import current_user, get_store
 from app.schemas.auth import AuthUserResponse, LoginRequest, RegisterRequest, UserOut
-from app.store import InMemoryStore, UserRecord
+from app.store import MetadataStore, UserRecord
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def to_user_out(store: InMemoryStore, user: UserRecord) -> UserOut:
+def to_user_out(store: MetadataStore, user: UserRecord) -> UserOut:
     return UserOut(
         id=user.id,
         email=user.email,
@@ -22,7 +22,7 @@ def to_user_out(store: InMemoryStore, user: UserRecord) -> UserOut:
 
 
 @router.post("/register", response_model=AuthUserResponse)
-def register(payload: RegisterRequest, store: InMemoryStore = Depends(get_store)) -> AuthUserResponse:
+def register(payload: RegisterRequest, store: MetadataStore = Depends(get_store)) -> AuthUserResponse:
     try:
         user = store.register_user(
             email=str(payload.email),
@@ -37,7 +37,7 @@ def register(payload: RegisterRequest, store: InMemoryStore = Depends(get_store)
 
 @router.post("/login", response_model=AuthUserResponse)
 def login(
-    payload: LoginRequest, response: Response, store: InMemoryStore = Depends(get_store)
+    payload: LoginRequest, response: Response, store: MetadataStore = Depends(get_store)
 ) -> AuthUserResponse:
     user = store.authenticate(payload.email_or_username, payload.password)
     if not user:
@@ -49,15 +49,13 @@ def login(
         httponly=True,
         secure=settings.secure_cookies,
         samesite="lax",
-        max_age=int((session.expires_at - session.created_at).total_seconds())
-        if hasattr(session, "created_at")
-        else 31536000,
+        max_age=int((session.expires_at - session.created_at).total_seconds()),
     )
     return AuthUserResponse(user=to_user_out(store, user))
 
 
 @router.post("/logout")
-def logout(request: Request, response: Response, store: InMemoryStore = Depends(get_store)) -> dict[str, str]:
+def logout(request: Request, response: Response, store: MetadataStore = Depends(get_store)) -> dict[str, str]:
     store.revoke_session(request.cookies.get("logan_session"))
     response.delete_cookie("logan_session")
     return {"status": "ok"}
@@ -65,6 +63,6 @@ def logout(request: Request, response: Response, store: InMemoryStore = Depends(
 
 @router.get("/me", response_model=AuthUserResponse)
 def me(
-    user: UserRecord = Depends(current_user), store: InMemoryStore = Depends(get_store)
+    user: UserRecord = Depends(current_user), store: MetadataStore = Depends(get_store)
 ) -> AuthUserResponse:
     return AuthUserResponse(user=to_user_out(store, user))

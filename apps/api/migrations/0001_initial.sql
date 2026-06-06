@@ -32,6 +32,21 @@ CREATE TABLE copilot_credentials (
   revoked_at TIMESTAMPTZ
 );
 
+CREATE TABLE copilot_device_auth (
+  auth_id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id),
+  device_code TEXT NOT NULL,
+  user_code TEXT NOT NULL,
+  verification_uri TEXT NOT NULL,
+  verification_uri_complete TEXT NOT NULL,
+  expires_in INT NOT NULL,
+  interval INT NOT NULL,
+  poll_count INT NOT NULL DEFAULT 0,
+  github_base_url TEXT NOT NULL DEFAULT 'https://github.com',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE cases (
   id UUID PRIMARY KEY,
   case_key TEXT UNIQUE NOT NULL,
@@ -62,6 +77,8 @@ CREATE TABLE analysis_runs (
   prompt_version TEXT NOT NULL,
   drain_config_json JSONB NOT NULL DEFAULT '{}',
   causal_config_json JSONB NOT NULL DEFAULT '{}',
+  progress_json JSONB NOT NULL DEFAULT '{}',
+  result_json JSONB,
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
   failed_at TIMESTAMPTZ,
@@ -79,7 +96,8 @@ CREATE TABLE raw_files (
   object_uri TEXT NOT NULL,
   content_type TEXT,
   size_bytes BIGINT NOT NULL,
-  sha256 TEXT NOT NULL,
+  sha256 TEXT,
+  upload_completed BOOLEAN NOT NULL DEFAULT FALSE,
   detected_format TEXT,
   file_role TEXT DEFAULT 'log',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -241,7 +259,7 @@ CREATE TABLE feedback (
   analysis_run_id UUID REFERENCES analysis_runs(id),
   user_id UUID NOT NULL REFERENCES users(id),
   target_type TEXT NOT NULL,
-  target_id UUID,
+  target_id TEXT,
   feedback_type TEXT NOT NULL,
   rating INT,
   comment TEXT,
@@ -265,7 +283,7 @@ CREATE TABLE audit_logs (
   action TEXT NOT NULL,
   target_type TEXT,
   target_id TEXT,
-  case_id UUID,
+  case_id UUID REFERENCES cases(id),
   ip_address TEXT,
   user_agent TEXT,
   metadata JSONB NOT NULL DEFAULT '{}',

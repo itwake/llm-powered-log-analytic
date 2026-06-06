@@ -4,7 +4,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from logan_workers.models import OFFENDING_SIGNALS
 
@@ -18,7 +18,7 @@ from app.schemas.case import (
     UploadCompleteRequest,
     UploadRequest,
 )
-from app.store import FeedbackRecord, InMemoryStore, UserRecord
+from app.store import MetadataStore, UserRecord
 
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
@@ -49,7 +49,7 @@ def _parse_dt(value: str | None) -> datetime | None:
 def create_case(
     payload: CaseCreateRequest,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> CaseResponse:
     record = store.create_case(user_id=user.id, data=payload.model_dump())
     return _case_response(record)
@@ -62,18 +62,14 @@ def list_cases(
     page: int = 1,
     page_size: int = 25,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
     del user
-    items = list(store.cases.values())
-    if status:
-        items = [item for item in items if item.status == status]
-    if product:
-        items = [item for item in items if item.product == product]
     offset = max(0, page - 1) * page_size
+    items, total = store.list_cases(status=status, product=product, offset=offset, limit=page_size)
     return {
-        "items": [_case_response(item).model_dump(mode="json") for item in items[offset : offset + page_size]],
-        "total": len(items),
+        "items": [_case_response(item).model_dump(mode="json") for item in items],
+        "total": total,
         "page": page,
         "page_size": page_size,
     }
@@ -83,12 +79,13 @@ def list_cases(
 def get_case(
     case_id: str,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> CaseResponse:
     del user
-    if case_id not in store.cases:
+    case = store.get_case(case_id)
+    if not case:
         raise HTTPException(status_code=404, detail="case not found")
-    return _case_response(store.cases[case_id])
+    return _case_response(case)
 
 
 @router.post("/{case_id}/uploads")
@@ -96,10 +93,10 @@ def request_upload(
     case_id: str,
     payload: UploadRequest,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
     del user
-    if case_id not in store.cases:
+    if not store.get_case(case_id):
         raise HTTPException(status_code=404, detail="case not found")
     upload = store.create_upload(
         case_id=case_id,
@@ -121,10 +118,11 @@ def complete_upload(
     file_id: str,
     payload: UploadCompleteRequest,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
     del user
-    if case_id not in store.cases or file_id not in store.uploads:
+    upload_record = store.get_upload(file_id)
+    if not upload_record or upload_record.case_id != case_id:
         raise HTTPException(status_code=404, detail="upload not found")
     upload = store.complete_upload(upload_id=file_id, sha256=payload.sha256)
     return {"file_id": upload.id, "status": "completed", "sha256": upload.sha256}
@@ -135,13 +133,13 @@ async def start_analysis(
     case_id: str,
     payload: AnalysisRunRequest,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    if case_id not in store.cases:
+    if not store.get_case(case_id):
         raise HTTPException(status_code=404, detail="case not found")
     input_paths = list(payload.input_paths)
     for file_id in payload.input_file_ids:
-        upload = store.uploads.get(file_id)
+        upload = store.get_upload(file_id)
         if upload and upload.object_uri.startswith("file://"):
             input_paths.append(upload.object_uri.removeprefix("file://"))
     run = await store.start_analysis(
@@ -158,28 +156,28 @@ def get_analysis_run(
     case_id: str,
     run_id: str,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
     del user
-    run = store.runs.get(run_id)
+    run = store.get_analysis_run(run_id)
     if not run or run.case_id != case_id:
         raise HTTPException(status_code=404, detail="analysis run not found")
     return {
         "analysis_run_id": run.id,
         "status": run.status,
         "current_step": "completed" if run.status == "completed" else run.status,
-        "progress": run.result.progress if run.result else {},
+        "progress": run.progress or (run.result.progress if run.result else {}),
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         "error_message": run.error_message,
     }
 
 
-def _require_result(store: InMemoryStore, case_id: str, run_id: str):
-    run = store.runs.get(run_id)
-    if not run or run.case_id != case_id or not run.result:
+def _require_result(store: MetadataStore, case_id: str, run_id: str):
+    result = store.get_analysis_result(case_id, run_id)
+    if not result:
         raise HTTPException(status_code=404, detail="analysis result not found")
-    return run.result
+    return result
 
 
 @router.get("/{case_id}/analysis-runs/{run_id}/summary")
@@ -190,7 +188,7 @@ def data_summary(
     limit: int = 100,
     offset: int = 0,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
     del user
     result = _require_result(store, case_id, run_id)
@@ -245,7 +243,7 @@ def temporal(
     window_size_seconds: int = 60,
     group_by: str = "golden_signal",
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
     del user, window_size_seconds
     result = _require_result(store, case_id, run_id)
@@ -277,6 +275,7 @@ def temporal(
 
 @router.get("/{case_id}/analysis-runs/{run_id}/logs")
 def logs(
+    request: Request,
     case_id: str,
     run_id: str,
     window_start: str | None = None,
@@ -286,10 +285,26 @@ def logs(
     limit: int = 200,
     offset: int = 0,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
     result = _require_result(store, case_id, run_id)
+    store.record_audit(
+        action="raw_log.search",
+        user_id=user.id,
+        target_type="analysis_run",
+        target_id=run_id,
+        case_id=case_id,
+        metadata={
+            "window_start": window_start,
+            "window_end": window_end,
+            "q": q,
+            "service": service,
+            "limit": limit,
+            "offset": offset,
+        },
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
     start = _parse_dt(window_start)
     end = _parse_dt(window_end)
     rows = result.normalized_logs
@@ -353,7 +368,7 @@ def causal_graph(
     max_nodes: int = 100,
     min_confidence: float = Query(0.0, ge=0, le=1),
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
     del user
     result = _require_result(store, case_id, run_id)
@@ -378,7 +393,7 @@ def causal_summary(
     case_id: str,
     run_id: str,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
     del user
     result = _require_result(store, case_id, run_id)
@@ -391,13 +406,20 @@ def create_export(
     run_id: str,
     payload: ExportRequest,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    del user
     result = _require_result(store, case_id, run_id)
     artifact = result.exports.get(payload.export_type)
     if not artifact:
         raise HTTPException(status_code=400, detail="unsupported export type")
+    store.create_export(
+        export_id=artifact.export_id,
+        case_id=case_id,
+        analysis_run_id=run_id,
+        export_type=payload.export_type,
+        object_uri=artifact.object_uri,
+        user_id=user.id,
+    )
     return {
         "export_id": artifact.export_id,
         "download_url": artifact.object_uri,
@@ -410,12 +432,11 @@ def feedback(
     case_id: str,
     payload: FeedbackRequest,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
-    if case_id not in store.cases:
+    if not store.get_case(case_id):
         raise HTTPException(status_code=404, detail="case not found")
-    record = FeedbackRecord(
-        id=__import__("uuid").uuid4().hex,
+    record = store.record_feedback(
         case_id=case_id,
         analysis_run_id=payload.analysis_run_id,
         user_id=user.id,
@@ -426,5 +447,4 @@ def feedback(
         comment=payload.comment,
         corrected_value=payload.corrected_value,
     )
-    store.feedback[record.id] = record
     return {"feedback_id": record.id}

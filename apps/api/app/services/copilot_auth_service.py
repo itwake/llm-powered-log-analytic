@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from app.store import CopilotAuthRecord, InMemoryStore, UserRecord
+from app.store import CopilotAuthRecord, MetadataStore, UserRecord
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class MockGitHubDeviceClient:
 
 
 class CopilotAuthService:
-    def __init__(self, store: InMemoryStore, client: MockGitHubDeviceClient | None = None) -> None:
+    def __init__(self, store: MetadataStore, client: MockGitHubDeviceClient | None = None) -> None:
         self.store = store
         self.client = client or MockGitHubDeviceClient()
 
@@ -51,15 +51,15 @@ class CopilotAuthService:
             interval=response.interval,
             github_base_url=github_base_url,
         )
-        self.store.copilot_auth[auth_id] = record
-        return record
+        return self.store.create_copilot_auth(record)
 
     def check(self, *, user: UserRecord, auth_id: str) -> dict[str, object]:
-        record = self.store.copilot_auth.get(auth_id)
+        record = self.store.get_copilot_auth(auth_id)
         if not record or record.user_id != user.id:
             return {"status": "not_found", "message": "auth_id not found"}
         status, token = self.client.check(record)
         record.poll_count += 1
+        self.store.update_copilot_auth(record)
         if status != "authorized" or token is None:
             return {
                 "status": "pending",

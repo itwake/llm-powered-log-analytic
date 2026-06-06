@@ -7,7 +7,7 @@ The production metadata model follows the final specification and is represented
 
 Core tables:
 
-- `users`, `sessions`, `copilot_credentials`
+- `users`, `sessions`, `copilot_credentials`, `copilot_device_auth`
 - `cases`, `case_collaborators`
 - `analysis_runs`
 - `raw_files`, `raw_log_lines`, `normalized_log_lines`
@@ -16,7 +16,11 @@ Core tables:
 - `causal_nodes`, `causal_edges`, `causal_summaries`
 - `feedback`, `exports`, `audit_logs`
 
-The stage store is in-memory for testability, but the same identifiers and evidence references are used by API responses and exports.
+The API now has a durable SQLAlchemy metadata store for auth/session, Copilot credentials,
+device-auth polling state, cases, uploads, analysis runs, serialized results, exports,
+feedback, and audit logs. The in-memory store remains available as an explicit lightweight
+test option. This stage intentionally keeps full `AnalysisResult` report data serialized on
+`analysis_runs.result_json`; later stages can fan it out into the normalized analytics tables.
 
 ## Analytics Shape
 

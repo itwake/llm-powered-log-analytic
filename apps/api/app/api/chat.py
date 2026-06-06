@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.dependencies import current_user, get_store
 from app.schemas.chat import ChatRequest, TaskExecuteRequest
-from app.store import InMemoryStore, UserRecord
+from app.store import MetadataStore, UserRecord
 
 
 router = APIRouter(prefix="/api", tags=["runtime"])
@@ -14,11 +14,11 @@ router = APIRouter(prefix="/api", tags=["runtime"])
 def chat(
     payload: ChatRequest,
     user: UserRecord = Depends(current_user),
-    store: InMemoryStore = Depends(get_store),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
     del user
-    if payload.analysis_run_id and payload.analysis_run_id in store.runs:
-        result = store.runs[payload.analysis_run_id].result
+    if payload.case_id and payload.analysis_run_id:
+        result = store.get_analysis_result(payload.case_id, payload.analysis_run_id)
         if result:
             refs = [ref.model_dump(mode="json") for ref in result.causal_summary.evidence_refs[:3]]
             return {

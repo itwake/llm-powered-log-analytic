@@ -15,6 +15,8 @@ class Settings:
     copilot_model: str = os.getenv("LOGAN_COPILOT_MODEL", "gpt-5.4")
     copilot_reasoning_effort: str = os.getenv("LOGAN_COPILOT_REASONING_EFFORT", "high")
     copilot_base_url: str | None = os.getenv("LOGAN_COPILOT_BASE_URL") or None
+    database_url: str | None = os.getenv("LOGAN_DATABASE_URL") or None
+    store_backend: str = os.getenv("LOGAN_STORE_BACKEND", "auto")
     secure_cookies: bool = os.getenv("LOGAN_ENV", "development") == "production"
     raw_log_retention_days: int = int(os.getenv("LOGAN_RAW_LOG_RETENTION_DAYS", "30"))
     report_retention_days: int = int(os.getenv("LOGAN_REPORT_RETENTION_DAYS", "365"))

@@ -2,7 +2,7 @@
 
 ## Credentials
 
-GitHub source OAuth and Copilot plugin tokens are never returned to frontend responses. The local store saves encrypted or mock-encrypted token material and only exposes status fields such as `authorized` and `has_copilot_credential`.
+GitHub source OAuth and Copilot plugin tokens are never returned to frontend responses. The metadata store saves encrypted or mock-encrypted token material and only exposes status fields such as `authorized` and `has_copilot_credential`.
 
 Production must replace local encryption key handling with KMS-backed keys and add credential revocation endpoints.
 
@@ -28,4 +28,4 @@ Causal graph edges are candidates, not facts. Summaries must use cautious langua
 
 ## Audit and Retention
 
-The API has audit-log model shape and export/feedback capture. Production stages must persist audit events for raw-log access, export generation, feedback, and model invocation metadata. Retention defaults are declared in `.env.example`.
+The API persists audit events for case creation, analysis start/complete/fail, raw-log search access, export creation, and feedback submission when the SQLAlchemy store is enabled. Production stages still need admin/UI access, retention jobs, and expanded model-invocation metadata. Retention defaults are declared in `.env.example`.
