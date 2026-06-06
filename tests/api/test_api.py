@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 from app.main import create_app
 from app.store import InMemoryStore
@@ -15,7 +15,8 @@ FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 async def _authenticated_client() -> tuple[AsyncClient, str]:
     store = InMemoryStore()
     app = create_app(store=store)
-    client = AsyncClient(app=app, base_url="http://testserver")
+    transport = ASGITransport(app=app)
+    client = AsyncClient(transport=transport, base_url="http://testserver")
     await client.post(
         "/api/auth/register",
         json={
