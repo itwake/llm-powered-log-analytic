@@ -27,7 +27,12 @@ def is_local_backend(app_settings: Settings = settings) -> bool:
 
 def safe_filename(filename: str | None) -> str:
     name = Path((filename or "").replace("\\", "/")).name.strip()
-    return name or "upload.bin"
+    name = "".join(
+        character for character in name if ord(character) >= 32 and ord(character) != 127
+    )
+    if name in {"", ".", ".."}:
+        return "upload.bin"
+    return name
 
 
 def local_upload_path(
