@@ -27,8 +27,9 @@ the normalized analytics tables listed above. Worker file IDs are source-path de
 so persisted `raw_files.id` values are generated per analysis run before raw log rows are
 inserted. If `LOGAN_ANALYTICS_SINKS_ENABLED=true` and a ClickHouse or OpenSearch URL is
 configured, SQLAlchemy completion can also publish redacted external analytics payloads after
-the SQL fan-out. Existing report API endpoints continue to read from `result_json` for this
-stage.
+the SQL fan-out. SQLAlchemy-backed report endpoints read summary, temporal, log table,
+causal graph, and causal summary views from normalized fan-out tables, with in-memory and
+missing fan-out rows falling back to `analysis_runs.result_json`.
 
 `job_events` stores the append-only workflow progress stream for each analysis run. Events are
 run-scoped by `analysis_run_id` and deduplicated by `(analysis_run_id, idempotency_key,
@@ -57,4 +58,4 @@ Remaining production data-model work:
 - Managed ClickHouse table lifecycle and migrations.
 - Managed OpenSearch index templates, mappings, aliases, and retention.
 - External sink retry/idempotency records.
-- Service-backed query paths that can read from the normalized and external analytics stores.
+- Query paths over external ClickHouse/OpenSearch analytics stores.
