@@ -1,0 +1,9 @@
+{
+  "name": "logan-platform",
+  "private": true,
+  "packageManager": "pnpm@10.13.1",
+  "scripts": {
+    "test": "pnpm --filter @logan/web test",
+    "lint": "pnpm --filter @logan/web lint"
+  }
+}

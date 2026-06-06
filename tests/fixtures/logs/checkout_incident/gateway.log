@@ -1,0 +1,3 @@
+2026-06-06T10:12:00Z INFO gateway request_id=req-1 POST /checkout started
+2026-06-06T10:12:31Z ERROR gateway request_id=req-1 POST /checkout failed status=500 duration_ms=31000
+2026-06-06T10:13:31Z ERROR gateway request_id=req-2 POST /checkout failed status=500 duration_ms=30500
