@@ -288,6 +288,7 @@ async def test_raw_byte_upload_complete_idempotent_and_analysis_by_input_file_id
     assert upload_record is not None
     assert upload_record.object_uri.startswith("file://")
     assert upload_record.object_uri.endswith("/incident.log")
+    assert "\\" not in upload_record.object_uri
 
     complete = await client.post(
         f"/api/cases/{case_id}/uploads/{file_id}/complete",

@@ -26,7 +26,7 @@ def is_local_backend(app_settings: Settings = settings) -> bool:
 
 
 def safe_filename(filename: str | None) -> str:
-    name = Path(filename or "").name.strip()
+    name = Path((filename or "").replace("\\", "/")).name.strip()
     return name or "upload.bin"
 
 
@@ -59,13 +59,20 @@ def local_upload_object_uri(
 
 
 def path_to_file_uri(path: Path) -> str:
-    return f"file://{path.resolve()}"
+    return f"file://{path.resolve().as_posix()}"
 
 
 def file_uri_to_path(object_uri: str) -> Path:
     if not object_uri.startswith("file://"):
         raise ValueError("object URI is not file-backed")
-    return Path(object_uri.removeprefix("file://"))
+    path_text = object_uri.removeprefix("file://")
+    if os.name == "nt" and path_text.startswith("/") and _has_windows_drive(path_text[1:]):
+        path_text = path_text[1:]
+    return Path(path_text)
+
+
+def _has_windows_drive(path_text: str) -> bool:
+    return len(path_text) >= 2 and path_text[0].isalpha() and path_text[1] == ":"
 
 
 def digest_bytes(content: bytes) -> tuple[str, int]:
