@@ -684,6 +684,45 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
     assert audit_logs.json()["items"][0]["metadata"] == {"safe": "ok"}
     assert "raw log line" not in audit_logs.text
     assert "gho_should_not_leave" not in audit_logs.text
+    store.record_audit(
+        action="model.invocation",
+        user_id=engineer_id,
+        metadata={
+            "analysis_run_id": "run-safe",
+            "model_provider": "github_copilot",
+            "model_name": "gpt-5.4",
+            "model_reasoning_effort": "high",
+            "prompt_version": "annotation_v1",
+            "model_inputs": [{"raw_text": "raw log line should not leave admin API"}],
+            "prompt": "classify the raw log line",
+            "input_path": "tests/fixtures/logs/checkout_incident/auth.log",
+            "representative_lines": [{"message": "secret token"}],
+            "template_count": 2,
+            "annotation_count": 2,
+            "representative_sample_count": 3,
+            "model_input_count": 2,
+            "redacted": True,
+        },
+    )
+    model_audit_logs = await admin.get(
+        "/api/admin/audit-logs", params={"action": "model.invocation"}
+    )
+    assert model_audit_logs.status_code == 200, model_audit_logs.text
+    assert model_audit_logs.json()["items"][0]["metadata"] == {
+        "analysis_run_id": "run-safe",
+        "model_provider": "github_copilot",
+        "model_name": "gpt-5.4",
+        "model_reasoning_effort": "high",
+        "prompt_version": "annotation_v1",
+        "template_count": 2,
+        "annotation_count": 2,
+        "representative_sample_count": 3,
+        "model_input_count": 2,
+        "redacted": True,
+    }
+    assert "classify the raw log line" not in model_audit_logs.text
+    assert "tests/fixtures" not in model_audit_logs.text
+    assert "secret token" not in model_audit_logs.text
 
     retention = await admin.post("/api/admin/retention/run")
     assert retention.status_code == 200, retention.text
@@ -837,6 +876,44 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     status = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")
     assert status.json()["status"] == "completed"
     assert status.json()["progress"]["templates"] > 0
+    analysis_result = store.get_analysis_result(case_id, run_id)
+    assert analysis_result is not None
+    model_invocations = store.list_audit_logs(case_id=case_id, action="model.invocation")
+    assert len(model_invocations) == 1
+    model_invocation_metadata = model_invocations[0].metadata
+    assert model_invocation_metadata == {
+        "analysis_run_id": run_id,
+        "model_provider": "github_copilot",
+        "model_name": status.json()["model_name"],
+        "model_reasoning_effort": store.settings.copilot_reasoning_effort,
+        "prompt_version": "annotation_v1",
+        "representative_sample_count": len(analysis_result.samples),
+        "model_input_count": len(analysis_result.model_inputs),
+        "annotation_count": len(analysis_result.annotations),
+        "template_count": len(analysis_result.templates),
+        "redacted": True,
+    }
+    store.complete_analysis_run(
+        run_id=run_id,
+        result=analysis_result,
+        user_id=store.users_by_username["engineer"],
+    )
+    assert len(store.list_audit_logs(case_id=case_id, action="model.invocation")) == 1
+    serialized_model_invocation = json.dumps(model_invocation_metadata, sort_keys=True)
+    for forbidden in (
+        "raw_text",
+        "raw_message",
+        "model_inputs",
+        '"prompt"',
+        "representative_lines",
+        "tests/fixtures",
+        "auth.log",
+        "payment.log",
+        "gateway.log",
+        "secret",
+        "token",
+    ):
+        assert forbidden not in serialized_model_invocation
     events = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/events")
     assert events.status_code == 200, events.text
     events_body = events.json()

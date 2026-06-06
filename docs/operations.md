@@ -127,6 +127,13 @@ Admin-only routes live under `/api/admin`:
 - `GET /api/admin/settings`
 - `POST /api/admin/retention/run`
 
+Audit logs include case access, raw log search, export creation, feedback submission, analysis
+completion, and `model.invocation`. Model invocation audit metadata is intentionally limited to
+the analysis run id, model provider/name/reasoning effort, prompt version, representative sample
+or model-input counts, annotation/template counts, and `redacted: true`. Raw or redacted log
+lines, prompt bodies, model input payloads, representative line text, tokens, credentials, secrets,
+and local or fixture file paths must not be stored in audit metadata.
+
 Admin settings intentionally return only safe runtime shape: environment, selected store/object
 backends, orchestrator, retention days, rate-limit settings, and analytics toggles. They do not
 return database URLs, access keys, tokens, passwords, credential hints, or raw log text. The web app

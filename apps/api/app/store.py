@@ -38,6 +38,7 @@ CASE_PERMISSION_ROLES: dict[str, frozenset[str]] = {
     "owner": frozenset({"owner"}),
 }
 RAW_LOG_RETAINED_MARKER = "[raw log text scrubbed by retention policy]"
+MODEL_INVOCATION_AUDIT_ACTION = "model.invocation"
 
 
 _SENSITIVE_ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -141,6 +142,23 @@ def sanitize_error_message(error: object, *, max_length: int = 500) -> str:
     if len(message) > max_length:
         message = f"{message[: max_length - 3]}..."
     return message
+
+
+def model_invocation_audit_metadata(
+    *, run: AnalysisRunRecord | Any, result: AnalysisResult
+) -> dict[str, Any]:
+    return {
+        "analysis_run_id": getattr(run, "id", result.analysis_run_id),
+        "model_provider": getattr(run, "model_provider", ""),
+        "model_name": getattr(run, "model_name", ""),
+        "model_reasoning_effort": getattr(run, "model_reasoning_effort", ""),
+        "prompt_version": getattr(run, "prompt_version", "annotation_v1"),
+        "representative_sample_count": len(result.samples),
+        "model_input_count": len(result.model_inputs),
+        "annotation_count": len(result.annotations),
+        "template_count": len(result.templates),
+        "redacted": True,
+    }
 
 
 def _is_sensitive_metadata_key(key: str) -> bool:
@@ -1301,7 +1319,7 @@ class InMemoryStore:
                 )
                 run.progress = apply_job_event_progress(run.progress, job_event)
 
-            run.result = await AnalyzeCasePipeline().run(
+            result = await AnalyzeCasePipeline().run(
                 case_id=case_id,
                 analysis_run_id=run.id,
                 paths=input_paths,
@@ -1316,18 +1334,7 @@ class InMemoryStore:
                 gateway=gateway,
                 progress_callback=record_progress,
             )
-            run.progress = run.result.progress
-            run.status = "completed"
-            run.completed_at = datetime.now(UTC)
-            case.status = "ready"
-            self.record_audit(
-                action="analysis.complete",
-                user_id=user_id,
-                target_type="analysis_run",
-                target_id=run.id,
-                case_id=case_id,
-                metadata={"progress": run.progress},
-            )
+            run = self.complete_analysis_run(run_id=run.id, result=result, user_id=user_id)
         except Exception as exc:
             error_message = sanitize_error_message(exc)
             run.status = "failed"
@@ -1435,6 +1442,20 @@ class InMemoryStore:
         run.error_message = None
         if case is not None:
             case.status = "ready"
+        if not any(
+            record.action == MODEL_INVOCATION_AUDIT_ACTION
+            and record.target_type == "analysis_run"
+            and record.target_id == run.id
+            for record in self.audit_logs.values()
+        ):
+            self.record_audit(
+                action=MODEL_INVOCATION_AUDIT_ACTION,
+                user_id=user_id,
+                target_type="analysis_run",
+                target_id=run.id,
+                case_id=run.case_id,
+                metadata=model_invocation_audit_metadata(run=run, result=result),
+            )
         self.record_audit(
             action="analysis.complete",
             user_id=user_id,

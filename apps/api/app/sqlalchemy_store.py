@@ -61,6 +61,7 @@ from app.store import (
     ExportRecord,
     FeedbackRecord,
     JobEventRecord,
+    MODEL_INVOCATION_AUDIT_ACTION,
     RAW_LOG_RETAINED_MARKER,
     RetentionResultRecord,
     SessionRecord,
@@ -70,6 +71,7 @@ from app.store import (
     _case_role_allows,
     _validate_case_role,
     _validate_global_role,
+    model_invocation_audit_metadata,
     sanitize_error_message,
     sanitize_artifact_metadata,
     sanitize_job_metadata,
@@ -2277,6 +2279,13 @@ class SQLAlchemyStore:
     def _complete_analysis_run(
         self, *, run_id: str, result: AnalysisResult, user_id: str
     ) -> AnalysisRunRecord:
+        with self._session() as session:
+            existing_run = session.get(tables.AnalysisRun, run_id)
+            if existing_run is None:
+                raise KeyError(run_id)
+            if existing_run.status == "completed" and existing_run.result_json is not None:
+                return self._analysis_run_record(existing_run)
+
         result_json = result.model_dump(mode="json")
         result_json["model_inputs"] = []
         with self._session() as session:
@@ -2287,6 +2296,28 @@ class SQLAlchemyStore:
             run.progress_json = result.progress
             run.result_json = result_json
             self._fan_out_analysis_result(session=session, run=run, result=result)
+            model_invocation_audit_count = (
+                session.scalar(
+                    select(func.count())
+                    .select_from(tables.AuditLog)
+                    .where(
+                        tables.AuditLog.action == MODEL_INVOCATION_AUDIT_ACTION,
+                        tables.AuditLog.target_type == "analysis_run",
+                        tables.AuditLog.target_id == run.id,
+                    )
+                )
+                or 0
+            )
+            if model_invocation_audit_count == 0:
+                self._add_audit(
+                    session,
+                    action=MODEL_INVOCATION_AUDIT_ACTION,
+                    user_id=user_id,
+                    target_type="analysis_run",
+                    target_id=run.id,
+                    case_id=run.case_id,
+                    metadata=model_invocation_audit_metadata(run=run, result=result),
+                )
 
         self._publish_analytics_sinks(
             run_id=run_id,

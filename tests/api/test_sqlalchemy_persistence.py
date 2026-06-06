@@ -665,6 +665,39 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
         user_id=case_record.created_by,
     )
     assert _analytics_counts(recreated_store, run_id) == analytics_counts
+    model_invocations = recreated_store.list_audit_logs(
+        case_id=case_id,
+        action="model.invocation",
+    )
+    assert len(model_invocations) == 1
+    model_invocation_metadata = model_invocations[0].metadata
+    assert model_invocation_metadata == {
+        "analysis_run_id": run_id,
+        "model_provider": "github_copilot",
+        "model_name": "gpt-5.4",
+        "model_reasoning_effort": app_settings.copilot_reasoning_effort,
+        "prompt_version": "annotation_v1",
+        "representative_sample_count": progress["representative_samples"],
+        "model_input_count": progress["templates"],
+        "annotation_count": progress["annotated_templates"],
+        "template_count": progress["templates"],
+        "redacted": True,
+    }
+    serialized_model_invocation = json.dumps(model_invocation_metadata, sort_keys=True)
+    for forbidden in (
+        "raw_text",
+        "raw_message",
+        "model_inputs",
+        '"prompt"',
+        "representative_lines",
+        "tests/fixtures",
+        "auth.log",
+        "payment.log",
+        "gateway.log",
+        "secret",
+        "token",
+    ):
+        assert forbidden not in serialized_model_invocation
 
     run_list = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs")
     assert run_list.status_code == 200, run_list.text
@@ -695,6 +728,7 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
         "case.create",
         "analysis.start",
         "analysis.complete",
+        "model.invocation",
         "export.create",
         "feedback.submit",
         "raw_log.search",

@@ -26,12 +26,30 @@ _SENSITIVE_AUDIT_METADATA_PARTS = {
     "content",
     "credential",
     "database_url",
+    "file_path",
+    "filepath",
+    "input_path",
     "log_content",
+    "model_input",
     "password",
+    "prompt",
     "raw",
+    "representative_line",
     "secret",
     "source_token",
     "token",
+}
+_SAFE_AUDIT_METADATA_KEYS = {
+    "analysis_run_id",
+    "annotation_count",
+    "model_input_count",
+    "model_name",
+    "model_provider",
+    "model_reasoning_effort",
+    "prompt_version",
+    "redacted",
+    "representative_sample_count",
+    "template_count",
 }
 
 
@@ -68,7 +86,10 @@ def _safe_audit_metadata(value: Any) -> Any:
         for key, item in value.items():
             key_text = str(key)
             lowered = key_text.lower()
-            if any(part in lowered for part in _SENSITIVE_AUDIT_METADATA_PARTS):
+            if (
+                lowered not in _SAFE_AUDIT_METADATA_KEYS
+                and any(part in lowered for part in _SENSITIVE_AUDIT_METADATA_PARTS)
+            ):
                 continue
             sanitized_item = _safe_audit_metadata(item)
             if sanitized_item is not None:

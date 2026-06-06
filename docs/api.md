@@ -200,7 +200,12 @@ fallback when retained report rows exist.
 
 Admin routes require a global `admin` role. User patch accepts `role` and/or `is_active` and
 records audit events. Audit log listing supports `case_id`, `action`, `user_id`, `limit`, and
-`offset`. Settings returns only safe runtime shape: env, store backend, object backend,
+`offset`. Analysis completion records `model.invocation` with only safe model invocation metadata:
+`analysis_run_id`, model provider/name/reasoning effort, `prompt_version`, representative sample
+or model-input counts, annotation/template counts, and `redacted: true`. It never includes raw or
+redacted log lines, prompt bodies, model input payloads, representative line text, tokens,
+credentials, secrets, or file paths. Settings returns only safe runtime shape: env, store backend,
+object backend,
 orchestrator, retention days, rate-limit settings, and analytics toggles. It does not return
 secrets, database URLs, access keys, tokens, credential hints, or raw log text.
 
