@@ -284,12 +284,14 @@ def _normalize_complete_parts(
 def _upload_path_for_analysis(upload: Any) -> str:
     if not upload.completed:
         raise HTTPException(status_code=400, detail=f"upload {upload.id} is not completed")
+    if upload.object_uri.startswith("s3://"):
+        return upload.object_uri
     try:
         path = file_uri_to_path(upload.object_uri)
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail=f"upload {upload.id} is not file-backed and cannot be analyzed locally",
+            detail=f"upload {upload.id} is not file-backed or S3-backed",
         ) from exc
     if not path.is_file():
         raise HTTPException(status_code=400, detail=f"upload {upload.id} content is missing")
@@ -783,6 +785,7 @@ def complete_upload(
 
 @router.post("/{case_id}/analysis-runs")
 async def start_analysis(
+    request: Request,
     case_id: str,
     payload: AnalysisRunRequest,
     user: UserRecord = Depends(current_user),
@@ -807,10 +810,15 @@ async def start_analysis(
             input_paths=input_paths,
             config=payload.config,
             gateway=gateway,
+            s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
         )
     except CopilotCredentialError as exc:
         raise HTTPException(status_code=401, detail=sanitize_error_message(exc)) from exc
     except CopilotGatewayError as exc:
+        raise HTTPException(status_code=502, detail=sanitize_error_message(exc)) from exc
+    except ObjectStoreConfigurationError as exc:
+        raise HTTPException(status_code=500, detail=sanitize_error_message(exc)) from exc
+    except ObjectStoreError as exc:
         raise HTTPException(status_code=502, detail=sanitize_error_message(exc)) from exc
     return {"analysis_run_id": run.id, "status": run.status}
 

@@ -61,8 +61,10 @@ files. Required settings are `LOGAN_S3_BUCKET`, `LOGAN_S3_ACCESS_KEY`, and
 The defaults are `LOGAN_S3_REGION=us-east-1`, `LOGAN_S3_PRESIGN_EXPIRES_SECONDS=900`, and
 `LOGAN_S3_FORCE_PATH_STYLE=true`. The API records `s3://` object URIs and returns presigned
 `PUT` URLs with upload headers, then verifies completion with S3 `head_object` for existence and
-size. S3-backed `input_file_ids` are intentionally rejected by the current local analysis path
-until the worker supports streaming or downloading S3 inputs.
+size. Completed S3-backed `input_file_ids` are accepted for analysis: the local API orchestrator
+or Temporal worker downloads each `s3://` object into `LOGAN_ANALYSIS_INPUT_TMP_DIR` (default
+`.logan/analysis-inputs`) immediately before pipeline ingestion and deletes the temporary files
+after the pipeline call exits.
 
 Large S3/MinIO raw uploads use multipart/resumable sessions when the client asks with
 `multipart=true` or when the declared size reaches `LOGAN_S3_MULTIPART_THRESHOLD_BYTES`
@@ -191,10 +193,11 @@ Analysis orchestration defaults to the current synchronous local path:
 
 The Temporal facade imports the SDK only when temporal orchestration is selected and raises a
 typed configuration/connectivity error if the SDK or server is unavailable. Workflow history
-contains only deterministic analysis inputs: case/run ids, local file paths, non-secret case
-context, sanitized analysis config, and numeric activity retry/timeout settings. Database URLs,
-object-store access keys, Copilot/source tokens, and source log content stay out of workflow
-params.
+contains only deterministic analysis inputs: case/run ids, local file paths or `s3://` object
+URIs, non-secret case context, sanitized analysis config, and numeric activity retry/timeout
+settings. Database URLs, object-store access keys, Copilot/source tokens, and source log content
+stay out of workflow params. S3-backed inputs are materialized inside
+`run_analysis_pipeline_activity`, so the API process does not download objects for Temporal runs.
 
 Run a Temporal analysis worker with:
 
@@ -210,13 +213,13 @@ executes the activity with a stable activity id of
 `{analysis_run_id}:run_analysis_pipeline`, a start-to-close timeout from
 `LOGAN_TEMPORAL_ACTIVITY_START_TO_CLOSE_SECONDS`, and a retry policy from
 `LOGAN_TEMPORAL_ACTIVITY_MAX_ATTEMPTS`. The activity instantiates the SQLAlchemy store from its
-own process settings, loads the existing run/case, records pipeline progress into
-`job_events`, writes/upserts step artifact manifests after completed events, updates
-`analysis_runs.progress_json`, completes through the same SQL fan-out and analytics sink publish
-path as local SQLAlchemy runs, and marks failures with sanitized error text before re-raising for
-Temporal retry/failure handling. If Temporal retries after the database commit succeeded but
-before the workflow observed the result, the activity returns the existing completed summary
-without rerunning the pipeline.
+own process settings, loads the existing run/case, materializes any `s3://` input objects with the
+worker's S3/MinIO credentials, records pipeline progress into `job_events`, writes/upserts step
+artifact manifests after completed events, updates `analysis_runs.progress_json`, completes through
+the same SQL fan-out and analytics sink publish path as local SQLAlchemy runs, and marks failures
+with sanitized error text before re-raising for Temporal retry/failure handling. If Temporal
+retries after the database commit succeeded but before the workflow observed the result, the
+activity returns the existing completed summary without rerunning the pipeline.
 
 External analytics sinks can be enabled for SQLAlchemy-backed runs with:
 

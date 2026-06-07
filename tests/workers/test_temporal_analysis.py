@@ -23,6 +23,16 @@ from app.sqlalchemy_store import SQLAlchemyStore
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 
 
+class FakeS3Client:
+    def __init__(self) -> None:
+        self.objects: dict[tuple[str, str], bytes] = {}
+        self.download_calls: list[dict[str, str]] = []
+
+    def download_file(self, *, Bucket: str, Key: str, Filename: str) -> None:
+        self.download_calls.append({"Bucket": Bucket, "Key": Key, "Filename": Filename})
+        Path(Filename).write_bytes(self.objects[(Bucket, Key)])
+
+
 def _store(tmp_path: Path) -> tuple[SQLAlchemyStore, str, str]:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
     app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
@@ -170,3 +180,75 @@ async def test_analysis_activity_persists_completion_and_is_idempotent(
     assert second == first
     assert len(store.list_job_events(case_id=case_id, analysis_run_id=run_id)) == len(events)
     assert _fanout_counts(store, run_id) == counts
+
+
+@pytest.mark.asyncio
+async def test_analysis_activity_materializes_s3_inputs_in_worker(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(
+        database_url=database_url,
+        store_backend="sqlalchemy",
+        object_store_backend="s3",
+        analysis_input_tmp_dir=str(tmp_path / "analysis-inputs"),
+        s3_bucket="logan",
+        s3_access_key="access",
+        s3_secret_key="secret",
+    )
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    user = store.register_user(
+        email="temporal-s3@example.com",
+        username="temporal-s3",
+        full_name=None,
+        password="password123",
+    )
+    case = store.create_case(
+        user_id=user.id,
+        data={
+            "title": "Temporal S3 analysis",
+            "issue_description": "Worker should materialize S3 inputs.",
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "production",
+            "timezone": "UTC",
+        },
+    )
+    run = store._create_analysis_run(
+        case_id=case.id,
+        user_id=user.id,
+        config={"default_window_size_seconds": 60},
+    )
+    fake_s3 = FakeS3Client()
+    key = "cases/case-1/uploads/file-1/gateway.log"
+    fake_s3.objects[("logan", key)] = (
+        b"2026-06-06T10:00:00Z ERROR gateway-service failed checkout request\n"
+    )
+    monkeypatch.setattr(analysis_activity, "STORE_FACTORY", lambda: store)
+    monkeypatch.setattr(analysis_activity, "S3_CLIENT_FACTORY", lambda _: fake_s3)
+    params = AnalyzeCaseParams(
+        case_id=case.id,
+        analysis_run_id=run.id,
+        paths=[f"s3://logan/{key}"],
+        case_context={"title": "Temporal S3 analysis", "user_id": user.id},
+        config={"default_window_size_seconds": 60},
+    )
+
+    result = await analysis_activity.run_analysis_pipeline_activity(params)
+
+    assert result.status == "completed"
+    assert _fanout_counts(store, run.id)["raw_files"] == 1
+    assert fake_s3.download_calls
+    assert not Path(fake_s3.download_calls[0]["Filename"]).exists()
+    materialize_events = store.list_job_events(
+        analysis_run_id=run.id,
+        step_name="materialize_inputs",
+    )
+    assert [event.metadata for event in materialize_events] == [
+        {
+            "source_count": 1,
+            "materialized_count": 1,
+            "storage_backend_counts": {"s3": 1},
+        }
+    ]

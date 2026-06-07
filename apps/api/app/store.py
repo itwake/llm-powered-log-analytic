@@ -21,7 +21,12 @@ from app.core.security import (
     token_hint,
     verify_password,
 )
+from app.services.analysis_inputs import (
+    analysis_input_backend_counts,
+    materialize_analysis_inputs,
+)
 from app.services.object_store import (
+    S3ClientFactory,
     is_local_backend,
     is_s3_backend,
     local_upload_object_uri,
@@ -260,6 +265,21 @@ def sanitize_workflow_payload(value: Any) -> Any:
             sanitized[key_text] = sanitize_workflow_payload(item)
         return sanitized
     return None
+
+
+def merge_recorded_progress(
+    result_progress: dict[str, Any],
+    recorded_progress: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if not isinstance(recorded_progress, dict):
+        return result_progress
+    recorded_steps = recorded_progress.get("steps")
+    if not isinstance(recorded_steps, dict):
+        return result_progress
+    merged = dict(result_progress)
+    result_steps = merged.get("steps") if isinstance(merged.get("steps"), dict) else {}
+    merged["steps"] = {**recorded_steps, **result_steps}
+    return merged
 
 
 @dataclass
@@ -664,6 +684,7 @@ class MetadataStore(Protocol):
         input_paths: list[str],
         config: dict[str, Any],
         gateway: Any | None = None,
+        s3_client_factory: S3ClientFactory | None = None,
     ) -> AnalysisRunRecord: ...
 
     def get_analysis_run(self, run_id: str) -> AnalysisRunRecord | None: ...
@@ -1237,6 +1258,7 @@ class InMemoryStore:
         input_paths: list[str],
         config: dict[str, Any],
         gateway: Any | None = None,
+        s3_client_factory: S3ClientFactory | None = None,
     ) -> AnalysisRunRecord:
         case = self.cases[case_id]
         run_number = 1 + len([run for run in self.runs.values() if run.case_id == case_id])
@@ -1314,25 +1336,54 @@ class InMemoryStore:
                     status=str(event["status"]),
                     attempt=int(event.get("attempt", 1)),
                     idempotency_key=str(event["idempotency_key"]),
-                    metadata=event.get("metadata") if isinstance(event.get("metadata"), dict) else {},
+                    metadata=(
+                        event.get("metadata")
+                        if isinstance(event.get("metadata"), dict)
+                        else {}
+                    ),
                     error_message=event.get("error_message"),
                 )
                 run.progress = apply_job_event_progress(run.progress, job_event)
 
-            result = await AnalyzeCasePipeline().run(
-                case_id=case_id,
-                analysis_run_id=run.id,
-                paths=input_paths,
-                case_context={
-                    "title": case.title,
-                    "issue_description": case.issue_description,
-                    "product": case.product,
-                    "environment": case.environment,
-                    "user_id": user_id,
-                },
-                config=config,
-                gateway=gateway,
-                progress_callback=record_progress,
+            with materialize_analysis_inputs(
+                input_paths,
+                self.settings,
+                run_id=run.id,
+                s3_client_factory=s3_client_factory,
+            ) as materialized_paths:
+                record_progress(
+                    {
+                        "step_name": "materialize_inputs",
+                        "event_type": "completed",
+                        "status": "completed",
+                        "attempt": 1,
+                        "idempotency_key": "materialize_inputs:attempt:1",
+                        "metadata": {
+                            "source_count": len(input_paths),
+                            "materialized_count": len(materialized_paths),
+                            "storage_backend_counts": analysis_input_backend_counts(
+                                input_paths
+                            ),
+                        },
+                    }
+                )
+                result = await AnalyzeCasePipeline().run(
+                    case_id=case_id,
+                    analysis_run_id=run.id,
+                    paths=materialized_paths,
+                    case_context={
+                        "title": case.title,
+                        "issue_description": case.issue_description,
+                        "product": case.product,
+                        "environment": case.environment,
+                        "user_id": user_id,
+                    },
+                    config=config,
+                    gateway=gateway,
+                    progress_callback=record_progress,
+                )
+            result = result.model_copy(
+                update={"progress": merge_recorded_progress(result.progress, run.progress)}
             )
             run = self.complete_analysis_run(run_id=run.id, result=result, user_id=user_id)
         except Exception as exc:

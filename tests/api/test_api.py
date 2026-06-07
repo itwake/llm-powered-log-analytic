@@ -86,6 +86,8 @@ class FakeS3Client:
         self.uploaded_parts: dict[tuple[str, str, str], list[dict[str, object]]] = {}
         self.presign_calls: list[dict[str, object]] = []
         self.head_calls: list[dict[str, str]] = []
+        self.download_calls: list[dict[str, str]] = []
+        self.get_object_calls: list[dict[str, str]] = []
         self.create_multipart_calls: list[dict[str, object]] = []
         self.complete_multipart_calls: list[dict[str, object]] = []
         self.abort_multipart_calls: list[dict[str, str]] = []
@@ -111,6 +113,25 @@ class FakeS3Client:
             return self.objects[(Bucket, Key)]
         except KeyError as exc:
             raise FakeS3NotFound() from exc
+
+    def _object_body(self, *, Bucket: str, Key: str) -> bytes:
+        body = self.objects[(Bucket, Key)].get("Body", b"")
+        if isinstance(body, bytes):
+            return body
+        if isinstance(body, bytearray):
+            return bytes(body)
+        if hasattr(body, "read"):
+            content = body.read()
+            return bytes(content)
+        return bytes(str(body), encoding="utf-8")
+
+    def download_file(self, *, Bucket: str, Key: str, Filename: str) -> None:
+        self.download_calls.append({"Bucket": Bucket, "Key": Key, "Filename": Filename})
+        Path(Filename).write_bytes(self._object_body(Bucket=Bucket, Key=Key))
+
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+        self.get_object_calls.append({"Bucket": Bucket, "Key": Key})
+        return {"Body": io.BytesIO(self._object_body(Bucket=Bucket, Key=Key))}
 
     def create_multipart_upload(self, **kwargs: object) -> dict[str, object]:
         self._upload_counter += 1
@@ -927,7 +948,7 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     completed_steps = [
         item["step_name"] for item in event_items if item["event_type"] == "completed"
     ]
-    assert completed_steps == PIPELINE_STEPS
+    assert completed_steps == ["materialize_inputs", *PIPELINE_STEPS]
     event_metadata = json.dumps([item["metadata"] for item in event_items], sort_keys=True)
     assert "model_inputs" not in event_metadata
     assert "representative_lines" not in event_metadata
@@ -935,9 +956,16 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     artifacts = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")
     assert artifacts.status_code == 200, artifacts.text
     artifacts_body = artifacts.json()
-    assert artifacts_body["total"] == len(PIPELINE_STEPS)
+    assert artifacts_body["total"] == len(PIPELINE_STEPS) + 1
+    assert [item["step_name"] for item in artifacts_body["items"]] == [
+        "materialize_inputs",
+        *PIPELINE_STEPS,
+    ]
     artifact_items = artifacts_body["items"]
-    assert [item["step_name"] for item in artifact_items] == PIPELINE_STEPS
+    assert [item["step_name"] for item in artifact_items] == [
+        "materialize_inputs",
+        *PIPELINE_STEPS,
+    ]
     assert {item["artifact_type"] for item in artifact_items} == {"step_manifest"}
     assert all(item["object_uri"] for item in artifact_items)
     assert all(len(item["sha256"]) == 64 for item in artifact_items)
@@ -1709,14 +1737,99 @@ async def test_s3_upload_complete_rejects_missing_object_or_size_mismatch() -> N
 
 
 @pytest.mark.asyncio
-async def test_s3_input_file_ids_analysis_returns_clear_non_file_backed_error() -> None:
+async def test_s3_input_file_ids_analysis_materializes_completed_upload() -> None:
     fake_s3 = FakeS3Client()
-    client, _, _ = await _authenticated_client(
+    app_settings = Settings(
+        object_store_backend="s3",
+        s3_bucket="logan",
+        s3_access_key="access",
+        s3_secret_key="secret",
+    )
+    client, store, _ = await _authenticated_client(
+        app_settings,
+        s3_client_factory=lambda _: fake_s3,
+    )
+    case_id = await _create_case(client)
+    content = (
+        b"2026-06-06T10:00:00Z ERROR gateway-service failed checkout request\n"
+    )
+    expected_sha = hashlib.sha256(content).hexdigest()
+    upload = await client.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "gateway.log", "content_type": "text/plain", "size_bytes": len(content)},
+    )
+    file_id = upload.json()["file_id"]
+    key = f"cases/{case_id}/uploads/{file_id}/gateway.log"
+    fake_s3.objects[("logan", key)] = {
+        "ContentLength": len(content),
+        "Metadata": {},
+        "Body": content,
+    }
+    complete = await client.post(
+        f"/api/cases/{case_id}/uploads/{file_id}/complete",
+        json={"sha256": expected_sha},
+    )
+    assert complete.status_code == 200, complete.text
+
+    run = await client.post(
+        f"/api/cases/{case_id}/analysis-runs",
+        json={"input_file_ids": [file_id], "config": {"default_window_size_seconds": 60}},
+    )
+
+    assert run.status_code == 200, run.text
+    run_id = run.json()["analysis_run_id"]
+    status = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")
+    assert status.status_code == 200, status.text
+    assert status.json()["status"] == "completed"
+    assert status.json()["progress"]["files_processed"] == 1
+    logs = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/logs")
+    assert logs.status_code == 200, logs.text
+    assert [item["file_path"] for item in logs.json()["items"]] == ["gateway.log"]
+    summary = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
+    assert summary.status_code == 200, summary.text
+    assert fake_s3.download_calls
+    downloaded_path = Path(fake_s3.download_calls[0]["Filename"])
+    assert not downloaded_path.exists()
+    materialize_events = store.list_job_events(
+        analysis_run_id=run_id,
+        step_name="materialize_inputs",
+    )
+    assert [event.metadata for event in materialize_events] == [
+        {
+            "source_count": 1,
+            "materialized_count": 1,
+            "storage_backend_counts": {"s3": 1},
+        }
+    ]
+    serialized_metadata = json.dumps(materialize_events[0].metadata, sort_keys=True)
+    assert key not in serialized_metadata
+    assert "secret" not in serialized_metadata.lower()
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_s3_temporal_input_file_ids_pass_object_uri_to_workflow(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_start_analyze_case_workflow(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        "logan_workers.temporal_client.start_analyze_case_workflow",
+        fake_start_analyze_case_workflow,
+    )
+    fake_s3 = FakeS3Client()
+    client, store, _ = await _authenticated_client(
         Settings(
+            analysis_orchestrator="temporal",
             object_store_backend="s3",
             s3_bucket="logan",
             s3_access_key="access",
             s3_secret_key="secret",
+            database_url="postgresql+psycopg://logan:secret@postgres/logan",
         ),
         s3_client_factory=lambda _: fake_s3,
     )
@@ -1731,6 +1844,7 @@ async def test_s3_input_file_ids_analysis_returns_clear_non_file_backed_error() 
     fake_s3.objects[("logan", f"cases/{case_id}/uploads/{file_id}/gateway.log")] = {
         "ContentLength": len(content),
         "Metadata": {},
+        "Body": content,
     }
     complete = await client.post(
         f"/api/cases/{case_id}/uploads/{file_id}/complete",
@@ -1743,6 +1857,10 @@ async def test_s3_input_file_ids_analysis_returns_clear_non_file_backed_error() 
         json={"input_file_ids": [file_id], "config": {"default_window_size_seconds": 60}},
     )
 
-    assert run.status_code == 400
-    assert run.json()["detail"] == f"upload {file_id} is not file-backed and cannot be analyzed locally"
+    assert run.status_code == 200, run.text
+    persisted_run = store.get_analysis_run(run.json()["analysis_run_id"])
+    assert persisted_run is not None
+    assert persisted_run.status == "processing"
+    assert captured["paths"] == [f"s3://logan/cases/{case_id}/uploads/{file_id}/gateway.log"]
+    assert fake_s3.download_calls == []
     await client.aclose()

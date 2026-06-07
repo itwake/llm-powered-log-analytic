@@ -36,6 +36,16 @@ PIPELINE_STEPS = [
 ]
 
 
+class FakeS3Client:
+    def __init__(self) -> None:
+        self.objects: dict[tuple[str, str], bytes] = {}
+        self.download_calls: list[dict[str, str]] = []
+
+    def download_file(self, *, Bucket: str, Key: str, Filename: str) -> None:
+        self.download_calls.append({"Bucket": Bucket, "Key": Key, "Filename": Filename})
+        Path(Filename).write_bytes(self.objects[(Bucket, Key)])
+
+
 async def _client(store: SQLAlchemyStore) -> AsyncClient:
     app = create_app(
         store=store,
@@ -548,7 +558,10 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     assert progress["templates"] > 0
     events = recreated_store.list_job_events(case_id=case_id, analysis_run_id=run_id)
     assert [event.created_at for event in events] == sorted(event.created_at for event in events)
-    assert [event.step_name for event in events if event.event_type == "completed"] == PIPELINE_STEPS
+    assert [event.step_name for event in events if event.event_type == "completed"] == [
+        "materialize_inputs",
+        *PIPELINE_STEPS,
+    ]
     assert all(event.case_id == case_id for event in events)
     assert all(event.analysis_run_id == run_id for event in events)
     serialized_event_metadata = json.dumps(
@@ -561,7 +574,10 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
         case_id=case_id,
         analysis_run_id=run_id,
     )
-    assert [artifact.step_name for artifact in artifacts] == PIPELINE_STEPS
+    assert [artifact.step_name for artifact in artifacts] == [
+        "materialize_inputs",
+        *PIPELINE_STEPS,
+    ]
     assert {artifact.artifact_type for artifact in artifacts} == {"step_manifest"}
     assert all(artifact.object_uri.startswith("file://") for artifact in artifacts)
     assert all(len(artifact.sha256) == 64 for artifact in artifacts)
@@ -784,6 +800,72 @@ async def test_sqlalchemy_fanout_scopes_raw_file_ids_per_run(tmp_path: Path) -> 
     assert first_counts["normalized_log_lines"] > 0
     assert second_counts["normalized_log_lines"] > 0
     assert _run_raw_file_ids(store, first.id).isdisjoint(_run_raw_file_ids(store, second.id))
+
+
+@pytest.mark.asyncio
+async def test_sqlalchemy_local_analysis_materializes_s3_input_uri(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(
+        database_url=database_url,
+        store_backend="sqlalchemy",
+        object_store_backend="s3",
+        analysis_input_tmp_dir=str(tmp_path / "analysis-inputs"),
+        s3_bucket="logan",
+        s3_access_key="access",
+        s3_secret_key="secret",
+    )
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    user = store.register_user(
+        email="s3-local@example.com",
+        username="s3-local",
+        full_name=None,
+        password="password123",
+    )
+    case = store.create_case(
+        user_id=user.id,
+        data={
+            "title": "S3 input analysis",
+            "issue_description": "Local store should materialize S3 inputs.",
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "test",
+            "timezone": "UTC",
+        },
+    )
+    fake_s3 = FakeS3Client()
+    key = "cases/case-1/uploads/file-1/gateway.log"
+    fake_s3.objects[("logan", key)] = (
+        b"2026-06-06T10:00:00Z ERROR gateway-service failed checkout request\n"
+    )
+
+    run = await store.start_analysis(
+        case_id=case.id,
+        user_id=user.id,
+        input_paths=[f"s3://logan/{key}"],
+        config={"default_window_size_seconds": 60},
+        gateway=MockCopilotAnnotationGateway(),
+        s3_client_factory=lambda _: fake_s3,
+    )
+
+    assert run.status == "completed"
+    assert run.progress["files_processed"] == 1
+    assert _analytics_counts(store, run.id)["raw_files"] == 1
+    assert fake_s3.download_calls
+    assert not Path(fake_s3.download_calls[0]["Filename"]).exists()
+    materialize_events = store.list_job_events(
+        analysis_run_id=run.id,
+        step_name="materialize_inputs",
+    )
+    assert [event.metadata for event in materialize_events] == [
+        {
+            "source_count": 1,
+            "materialized_count": 1,
+            "storage_backend_counts": {"s3": 1},
+        }
+    ]
+    assert key not in json.dumps(materialize_events[0].metadata, sort_keys=True)
 
 
 @pytest.mark.asyncio
@@ -1026,7 +1108,7 @@ async def test_sqlalchemy_retention_scrubs_raw_text_and_preserves_reports(
         )
         assert raw_count and raw_count > 0
         assert normalized_count and normalized_count > 0
-        assert artifact_count == len(PIPELINE_STEPS)
+        assert artifact_count == len(PIPELINE_STEPS) + 1
         session.execute(delete(tables.AuditLog))
         session.add_all(
             [

@@ -48,6 +48,9 @@ class Settings:
     local_object_store_dir: str = os.getenv(
         "LOGAN_LOCAL_OBJECT_STORE_DIR", str(Path.cwd() / ".logan" / "object-store")
     )
+    analysis_input_tmp_dir: str = os.getenv(
+        "LOGAN_ANALYSIS_INPUT_TMP_DIR", str(Path.cwd() / ".logan" / "analysis-inputs")
+    )
     s3_endpoint: str | None = os.getenv("LOGAN_S3_ENDPOINT") or None
     s3_bucket: str | None = os.getenv("LOGAN_S3_BUCKET") or None
     s3_access_key: str | None = os.getenv("LOGAN_S3_ACCESS_KEY") or None

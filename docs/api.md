@@ -152,13 +152,16 @@ completion.
 sha256 values.
 
 `POST /api/cases/{case_id}/analysis-runs` accepts `input_file_ids` for completed uploads and
-converts local `file://` object URIs to filesystem paths before invoking the synchronous worker
-pipeline. S3-backed completed uploads currently return `400` for `input_file_ids` because the
-local analysis path cannot read non-file-backed uploads until worker-side S3 streaming/download is
-implemented. Missing uploads, wrong-case uploads, incomplete uploads, non-file-backed uploads, and
-missing local content return explicit `404` or `400` responses. For local tests, the route also
-accepts `input_paths`. When no paths or file ids are provided, the local synchronous store path
-uses the checkout incident fixture files for deterministic development and tests.
+converts local `file://` object URIs to filesystem paths. S3/MinIO-backed completed uploads pass
+their internal `s3://` object URI into the selected orchestrator. The local API orchestrator and
+Temporal worker materialize S3 objects into `LOGAN_ANALYSIS_INPUT_TMP_DIR` before invoking
+`AnalyzeCasePipeline`, then remove those temporary files when the pipeline call exits. Missing
+uploads, wrong-case uploads, incomplete uploads, unsupported object URI schemes, and missing local
+content return explicit `404` or `400` responses. For local tests, the route also accepts
+`input_paths`; plain paths are passed through, `file://` values are converted to filesystem paths,
+and `s3://` values are materialized the same way as completed upload ids. When no paths or file ids
+are provided, the local synchronous store path uses the checkout incident fixture files for
+deterministic development and tests.
 `GET /api/cases/{case_id}/analysis-runs` returns `items` with `analysis_run_id`, `run_number`, `status`, `current_step`, `progress`, `started_at`, `completed_at`, `error_message`, `model_provider`, and `model_name`.
 `GET /api/cases/{case_id}/analysis-runs/{run_id}/artifacts` requires case view permission and
 returns step artifact rows with `object_uri`, `sha256`, `size_bytes`, and safe metadata only. It

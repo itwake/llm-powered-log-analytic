@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 
+import pytest
+
 from app.config import Settings
 from app.services import analysis_artifacts
 from app.services.analysis_artifacts import write_step_manifest
+from app.services.analysis_inputs import materialize_analysis_inputs
 from app.services.object_store import (
+    ObjectStoreError,
     create_multipart_upload_plan,
     create_presigned_upload,
     file_uri_to_path,
@@ -23,6 +28,9 @@ from app.store import JobEventRecord
 
 class FakeS3Client:
     def __init__(self) -> None:
+        self.objects: dict[tuple[str, str], bytes] = {}
+        self.download_calls: list[dict[str, str]] = []
+        self.get_object_calls: list[dict[str, str]] = []
         self.presign_calls: list[dict[str, object]] = []
         self.put_object_calls: list[dict[str, object]] = []
 
@@ -33,6 +41,24 @@ class FakeS3Client:
     def put_object(self, **kwargs: object) -> dict[str, object]:
         self.put_object_calls.append(dict(kwargs))
         return {"ETag": '"fake-etag"'}
+
+    def download_file(self, *, Bucket: str, Key: str, Filename: str) -> None:
+        self.download_calls.append({"Bucket": Bucket, "Key": Key, "Filename": Filename})
+        Path(Filename).write_bytes(self.objects[(Bucket, Key)])
+
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+        self.get_object_calls.append({"Bucket": Bucket, "Key": Key})
+        return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
+
+
+class GetObjectOnlyFakeS3Client:
+    def __init__(self, content: bytes) -> None:
+        self.content = content
+        self.get_object_calls: list[dict[str, str]] = []
+
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+        self.get_object_calls.append({"Bucket": Bucket, "Key": Key})
+        return {"Body": io.BytesIO(self.content)}
 
 
 def test_safe_filename_sanitizes_posix_and_windows_path_separators() -> None:
@@ -105,6 +131,117 @@ def test_s3_upload_object_uri_round_trips_bucket_and_key() -> None:
         "logan",
         "cases/case-1/uploads/file-1/incident #1.log",
     )
+
+
+def test_materialize_analysis_inputs_preserves_path_and_file_uri(tmp_path: Path) -> None:
+    plain_path = tmp_path / "plain.log"
+    file_uri_path = tmp_path / "file-uri.log"
+    plain_path.write_text("plain\n", encoding="utf-8")
+    file_uri_path.write_text("file-uri\n", encoding="utf-8")
+    app_settings = Settings(analysis_input_tmp_dir=str(tmp_path / "analysis-inputs"))
+
+    with materialize_analysis_inputs(
+        [str(plain_path), path_to_file_uri(file_uri_path)],
+        app_settings,
+        run_id="run-1",
+    ) as paths:
+        assert paths == [str(plain_path), str(file_uri_path)]
+
+
+def test_materialize_analysis_inputs_downloads_s3_and_cleans_temp_dir(
+    tmp_path: Path,
+) -> None:
+    app_settings = Settings(
+        object_store_backend="minio",
+        analysis_input_tmp_dir=str(tmp_path / "analysis-inputs"),
+        s3_endpoint="http://minio:9000",
+        s3_bucket="logan",
+        s3_access_key="access",
+        s3_secret_key="secret",
+    )
+    fake_client = FakeS3Client()
+    key = "cases/case-1/uploads/file-1/incident.log"
+    fake_client.objects[("logan", key)] = b"2026-06-06T10:00:00Z ERROR gateway failed\n"
+    materialized_path: Path | None = None
+
+    with materialize_analysis_inputs(
+        [f"s3://logan/{key}"],
+        app_settings,
+        run_id="run-1",
+        s3_client_factory=lambda _: fake_client,
+    ) as paths:
+        assert len(paths) == 1
+        materialized_path = Path(paths[0])
+        assert materialized_path.read_bytes() == fake_client.objects[("logan", key)]
+        assert materialized_path.name == "incident.log"
+        assert materialized_path.parent.parent.parent == Path(
+            app_settings.analysis_input_tmp_dir
+        )
+
+    assert materialized_path is not None
+    assert not materialized_path.exists()
+    assert fake_client.download_calls == [
+        {
+            "Bucket": "logan",
+            "Key": key,
+            "Filename": str(materialized_path),
+        }
+    ]
+
+
+def test_materialize_analysis_inputs_supports_get_object_body_fakes(
+    tmp_path: Path,
+) -> None:
+    app_settings = Settings(
+        object_store_backend="s3",
+        analysis_input_tmp_dir=str(tmp_path / "analysis-inputs"),
+        s3_bucket="logan",
+        s3_access_key="access",
+        s3_secret_key="secret",
+    )
+    fake_client = GetObjectOnlyFakeS3Client(b"gateway failed\n")
+    key = "cases/case-1/uploads/file-1/gateway.log"
+
+    with materialize_analysis_inputs(
+        [f"s3://logan/{key}"],
+        app_settings,
+        s3_client_factory=lambda _: fake_client,
+    ) as paths:
+        assert Path(paths[0]).read_bytes() == b"gateway failed\n"
+
+    assert fake_client.get_object_calls == [{"Bucket": "logan", "Key": key}]
+
+
+def test_materialize_analysis_inputs_sanitizes_s3_download_errors(
+    tmp_path: Path,
+) -> None:
+    class FailingFakeS3Client:
+        def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+            raise RuntimeError(
+                f"download failed for {Bucket}/{Key} secret=logan-secret-token"
+            )
+
+    app_settings = Settings(
+        object_store_backend="s3",
+        analysis_input_tmp_dir=str(tmp_path / "analysis-inputs"),
+        s3_bucket="logan",
+        s3_access_key="access",
+        s3_secret_key="secret",
+    )
+    key = "cases/case-1/uploads/file-1/secret.log"
+
+    with pytest.raises(ObjectStoreError) as exc_info:
+        with materialize_analysis_inputs(
+            [f"s3://logan/{key}"],
+            app_settings,
+            s3_client_factory=lambda _: FailingFakeS3Client(),
+        ):
+            pass
+
+    message = str(exc_info.value)
+    assert message == "S3 download failed"
+    assert key not in message
+    assert "secret" not in message.lower()
 
 
 def test_presigned_upload_uses_fake_s3_client_without_network() -> None:
