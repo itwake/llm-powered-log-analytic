@@ -61,9 +61,12 @@ known but the role is insufficient. Cross-organization user, collaborator, group
 are rejected.
 
 SCIM 2.0 style `/api/scim/v2/Users` and `/api/scim/v2/Groups` endpoints accept either an admin
-session or a bearer token configured with `LOGAN_SCIM_BEARER_TOKEN`. SCIM responses never include
-passwords, credential tokens, token hints, or secret material. SCIM create, update, patch,
-deactivate, and group membership sync operations write security audit events.
+session or a bearer token configured with `LOGAN_SCIM_BEARER_TOKEN`. Admin-session requests are
+scoped to the admin user's own organization. Bearer-token requests are scoped to
+`LOGAN_SCIM_ORGANIZATION_ID`, which defaults to `default`; the API creates that organization on
+first SCIM bearer use if it does not already exist. SCIM responses never include passwords,
+credential tokens, token hints, or secret material. SCIM create, update, patch, deactivate, and
+group membership sync operations write security audit events.
 
 ## Audit and Retention
 

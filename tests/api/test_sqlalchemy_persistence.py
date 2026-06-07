@@ -240,6 +240,37 @@ def test_sqlalchemy_credentials_persist_expiration_and_revocation(tmp_path: Path
     assert store.has_credential(user.id) is False
 
 
+@pytest.mark.asyncio
+async def test_sqlalchemy_scim_bearer_uses_configured_organization(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(
+        database_url=database_url,
+        store_backend="sqlalchemy",
+        scim_bearer_token="sql-scim-secret",
+        scim_organization_id="sql-scim-org",
+    )
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    client = await _client(store)
+
+    created = await client.post(
+        "/api/scim/v2/Users",
+        headers={"authorization": "Bearer sql-scim-secret"},
+        json={"userName": "sql.scim@example.com"},
+    )
+
+    assert created.status_code == 201, created.text
+    created_user = store.get_user(created.json()["id"])
+    assert created_user is not None
+    assert created_user.organization_id == "sql-scim-org"
+    organization = store.get_organization("sql-scim-org")
+    assert organization is not None
+    assert organization.slug == "sql-scim-org"
+
+    await client.aclose()
+
+
 def test_sqlalchemy_store_records_s3_upload_object_uri(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
     app_settings = Settings(

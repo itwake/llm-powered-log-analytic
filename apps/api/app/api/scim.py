@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 from dataclasses import dataclass
 from typing import Any
@@ -9,6 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from app.dependencies import current_user, get_store, require_admin
 from app.store import (
     DEFAULT_ORGANIZATION_ID,
+    DEFAULT_ORGANIZATION_NAME,
+    DEFAULT_ORGANIZATION_SLUG,
     MetadataStore,
     PolicyGroupRecord,
     UserRecord,
@@ -30,6 +33,45 @@ class ScimActor:
     auth_type: str
 
 
+def _organization_slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "scim"
+
+
+def _scim_bearer_organization_id(store: MetadataStore) -> str:
+    configured_organization_id = (
+        getattr(store.settings, "scim_organization_id", DEFAULT_ORGANIZATION_ID)
+        or DEFAULT_ORGANIZATION_ID
+    )
+    organization_id = str(configured_organization_id).strip() or DEFAULT_ORGANIZATION_ID
+    if organization_id == DEFAULT_ORGANIZATION_ID:
+        store.ensure_organization(
+            organization_id=DEFAULT_ORGANIZATION_ID,
+            name=DEFAULT_ORGANIZATION_NAME,
+            slug=DEFAULT_ORGANIZATION_SLUG,
+            is_default=True,
+        )
+        return DEFAULT_ORGANIZATION_ID
+    if store.get_organization(organization_id) is not None:
+        return organization_id
+
+    slug = _organization_slug(organization_id)
+    used_slugs = {organization.slug for organization in store.list_organizations()}
+    if slug in used_slugs:
+        base_slug = _organization_slug(f"scim-{organization_id}")
+        slug = base_slug
+        suffix = 2
+        while slug in used_slugs:
+            slug = f"{base_slug}-{suffix}"
+            suffix += 1
+    store.ensure_organization(
+        organization_id=organization_id,
+        name=organization_id,
+        slug=slug,
+    )
+    return organization_id
+
+
 def _scim_actor(request: Request, store: MetadataStore = Depends(get_store)) -> ScimActor:
     authorization = request.headers.get("authorization") or ""
     scheme, _, token = authorization.partition(" ")
@@ -38,7 +80,7 @@ def _scim_actor(request: Request, store: MetadataStore = Depends(get_store)) -> 
         if configured_token and secrets.compare_digest(token, configured_token):
             return ScimActor(
                 user_id=None,
-                organization_id=DEFAULT_ORGANIZATION_ID,
+                organization_id=_scim_bearer_organization_id(store),
                 auth_type="bearer",
             )
         raise HTTPException(

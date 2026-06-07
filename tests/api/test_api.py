@@ -22,7 +22,7 @@ from app.services.copilot_model_gateway import (
     CopilotTransportError,
 )
 from app.services.copilot_auth_service import DeviceCodePollResult, MockGitHubDeviceClient
-from app.store import InMemoryStore, merge_analysis_result_progress
+from app.store import DEFAULT_ORGANIZATION_ID, InMemoryStore, merge_analysis_result_progress
 
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
@@ -933,7 +933,9 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
 
 @pytest.mark.asyncio
 async def test_scim_users_and_groups_support_bearer_and_admin_session() -> None:
-    store = InMemoryStore(Settings(scim_bearer_token="scim-secret"))
+    store = InMemoryStore(
+        Settings(scim_bearer_token="scim-secret", scim_organization_id="scim-org")
+    )
     app = create_app(
         store=store,
         copilot_auth_client=MockGitHubDeviceClient(),
@@ -976,9 +978,21 @@ async def test_scim_users_and_groups_support_bearer_and_admin_session() -> None:
     scim_user_id = user_body["id"]
     assert user_body["userName"] == "scim.user@example.com"
     assert user_body["active"] is True
+    assert store.get_user(scim_user_id).organization_id == "scim-org"
     assert "password" not in created.text.lower()
     assert "token" not in created.text.lower()
     assert "secret" not in created.text.lower()
+
+    bearer_users = await scim.get("/api/scim/v2/Users")
+    assert bearer_users.status_code == 200, bearer_users.text
+    assert {item["id"] for item in bearer_users.json()["Resources"]} == {scim_user_id}
+
+    admin_users = await admin.get("/api/scim/v2/Users")
+    assert admin_users.status_code == 200, admin_users.text
+    assert scim_user_id not in {item["id"] for item in admin_users.json()["Resources"]}
+    assert admin_id in {item["id"] for item in admin_users.json()["Resources"]}
+    assert (await admin.get(f"/api/scim/v2/Users/{scim_user_id}")).status_code == 404
+    assert (await scim.get(f"/api/scim/v2/Users/{admin_id}")).status_code == 404
 
     patched = await scim.patch(
         f"/api/scim/v2/Users/{scim_user_id}",
@@ -1013,8 +1027,12 @@ async def test_scim_users_and_groups_support_bearer_and_admin_session() -> None:
     )
     assert group.status_code == 201, group.text
     group_id = group.json()["id"]
+    assert store.get_policy_group(group_id).organization_id == "scim-org"
     assert [member["value"] for member in group.json()["members"]] == [scim_user_id]
     assert store.list_policy_group_members(group_id)[0].user_id == scim_user_id
+
+    admin_group = await admin.get(f"/api/scim/v2/Groups/{group_id}")
+    assert admin_group.status_code == 404
 
     removed = await scim.patch(
         f"/api/scim/v2/Groups/{group_id}",
@@ -1051,6 +1069,31 @@ async def test_scim_users_and_groups_support_bearer_and_admin_session() -> None:
     await scim.aclose()
     await admin.aclose()
     await anonymous.aclose()
+
+
+@pytest.mark.asyncio
+async def test_scim_bearer_defaults_to_default_organization() -> None:
+    store = InMemoryStore(Settings(scim_bearer_token="default-scim-secret"))
+    app = create_app(
+        store=store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    scim = AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        headers={"authorization": "Bearer default-scim-secret"},
+    )
+
+    created = await scim.post(
+        "/api/scim/v2/Users",
+        json={"userName": "default.scim@example.com"},
+    )
+
+    assert created.status_code == 201, created.text
+    assert store.get_user(created.json()["id"]).organization_id == DEFAULT_ORGANIZATION_ID
+
+    await scim.aclose()
 
 
 @pytest.mark.asyncio

@@ -108,6 +108,9 @@ class Settings:
         "LOGAN_ANALYTICS_SINK_FAILURE_MODE", "warn"
     ).lower()
     scim_bearer_token: str | None = os.getenv("LOGAN_SCIM_BEARER_TOKEN") or None
+    scim_organization_id: str = (
+        os.getenv("LOGAN_SCIM_ORGANIZATION_ID", "default").strip() or "default"
+    )
 
 
 settings = Settings()
