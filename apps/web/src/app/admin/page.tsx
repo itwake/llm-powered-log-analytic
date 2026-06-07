@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   AdminAuditLog,
+  AdminPolicyGroup,
   AdminSettingsResponse,
   AdminUser,
   RetentionRunResponse,
@@ -23,11 +24,16 @@ function metadataPreview(log: AdminAuditLog): string {
 export default function AdminPage() {
   const [settings, setSettings] = useState<AdminSettingsResponse | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [policyGroups, setPolicyGroups] = useState<AdminPolicyGroup[]>([]);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
   const [retention, setRetention] = useState<RetentionRunResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [runningRetention, setRunningRetention] = useState(false);
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [auditExportFormat, setAuditExportFormat] = useState<"json" | "ndjson" | "csv">("json");
+  const [exportingAudit, setExportingAudit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -35,14 +41,16 @@ export default function AdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const [settingsResponse, usersResponse, auditResponse] = await Promise.all([
+      const [settingsResponse, usersResponse, auditResponse, groupsResponse] = await Promise.all([
         adminApi.settings(),
         adminApi.users({limit: 100}),
         adminApi.auditLogs({limit: 50}),
+        adminApi.policyGroups(),
       ]);
       setSettings(settingsResponse);
       setUsers(usersResponse.items);
       setAuditLogs(auditResponse.items);
+      setPolicyGroups(groupsResponse.items);
     } catch (caught) {
       setError(apiErrorMessage(caught));
     } finally {
@@ -107,6 +115,51 @@ export default function AdminPage() {
     }
   }
 
+  async function createPolicyGroup() {
+    const name = newGroupName.trim();
+    if (!name) {
+      return;
+    }
+    setCreatingGroup(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const group = await adminApi.createPolicyGroup({name});
+      setPolicyGroups((current) => [...current, group].sort((left, right) => left.name.localeCompare(right.name)));
+      setNewGroupName("");
+      setNotice("Policy group created");
+      void refreshAuditLogs();
+    } catch (caught) {
+      setError(apiErrorMessage(caught));
+    } finally {
+      setCreatingGroup(false);
+    }
+  }
+
+  async function exportAuditLogs() {
+    setExportingAudit(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const content = await adminApi.exportAuditLogs({format: auditExportFormat, limit: 1000});
+      const blob = new Blob([content], {
+        type: auditExportFormat === "csv" ? "text/csv" : "application/octet-stream",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `logan-audit.${auditExportFormat}`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice("Audit export ready");
+      void refreshAuditLogs();
+    } catch (caught) {
+      setError(apiErrorMessage(caught));
+    } finally {
+      setExportingAudit(false);
+    }
+  }
+
   return (
     <Shell caseTitle="Admin">
       <div className="toolbar">
@@ -135,7 +188,6 @@ export default function AdminPage() {
                 <tbody>
                   <tr><td>Configured store</td><td>{settings.configured_store_backend}</td></tr>
                   <tr><td>Orchestrator</td><td>{settings.orchestrator}</td></tr>
-                  <tr><td>Retention days</td><td>{JSON.stringify(settings.retention_days)}</td></tr>
                   <tr><td>Rate limit</td><td>{settings.rate_limit.enabled ? `${settings.rate_limit.requests_per_minute}/min` : "disabled"}</td></tr>
                   <tr><td>Analytics</td><td>{JSON.stringify(settings.analytics)}</td></tr>
                 </tbody>
@@ -155,13 +207,79 @@ export default function AdminPage() {
                 {runningRetention ? "Running" : "Run retention"}
               </button>
             </div>
-            <section className="grid five">
-              <Metric label="Audits deleted" value={retentionValue(retention, "audit_logs_deleted")} />
-              <Metric label="Raw lines scrubbed" value={retentionValue(retention, "raw_log_lines_scrubbed")} />
-              <Metric label="Exports deleted" value={retentionValue(retention, "exports_deleted")} />
-              <Metric label="Results cleared" value={retentionValue(retention, "analysis_results_cleared")} />
-              <Metric label="Step artifacts deleted" value={retentionValue(retention, "step_artifacts_deleted")} />
+            <section className="grid two">
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Policy</th>
+                      <th>Days</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Audit</td><td>{settings.retention_days.audit}</td></tr>
+                    <tr><td>Raw logs</td><td>{settings.retention_days.raw_log}</td></tr>
+                    <tr><td>Reports</td><td>{settings.retention_days.report}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <section className="grid three">
+                <Metric label="Audits deleted" value={retentionValue(retention, "audit_logs_deleted")} />
+                <Metric label="Raw lines scrubbed" value={retentionValue(retention, "raw_log_lines_scrubbed")} />
+                <Metric label="Exports deleted" value={retentionValue(retention, "exports_deleted")} />
+                <Metric label="Results cleared" value={retentionValue(retention, "analysis_results_cleared")} />
+                <Metric label="Step artifacts deleted" value={retentionValue(retention, "step_artifacts_deleted")} />
+              </section>
             </section>
+          </section>
+
+          <section className="panel" style={{marginTop: 14}}>
+            <div className="toolbar">
+              <h2>Policy Groups</h2>
+              <input
+                aria-label="Policy group name"
+                disabled={creatingGroup}
+                placeholder="Group name"
+                value={newGroupName}
+                onChange={(event) => setNewGroupName(event.target.value)}
+              />
+              <button
+                className="button"
+                disabled={creatingGroup || !newGroupName.trim()}
+                type="button"
+                onClick={() => void createPolicyGroup()}
+              >
+                {creatingGroup ? "Creating" : "Create group"}
+              </button>
+            </div>
+            {policyGroups.length === 0 && <div className="empty">No policy groups</div>}
+            {policyGroups.length > 0 && (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Slug</th>
+                      <th>Members</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {policyGroups.map((group) => (
+                      <tr key={group.id}>
+                        <td>
+                          <strong>{group.name}</strong><br />
+                          <span className="muted">{group.id}</span>
+                        </td>
+                        <td>{group.slug}</td>
+                        <td>{group.member_count}</td>
+                        <td>{formatDateTime(group.updated_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
 
           <section className="panel" style={{marginTop: 14}}>
@@ -215,7 +333,27 @@ export default function AdminPage() {
           </section>
 
           <section className="panel" style={{marginTop: 14}}>
-            <h2>Audit Logs</h2>
+            <div className="toolbar">
+              <h2>Audit Logs</h2>
+              <select
+                aria-label="Audit export format"
+                disabled={exportingAudit}
+                value={auditExportFormat}
+                onChange={(event) => setAuditExportFormat(event.target.value as "json" | "ndjson" | "csv")}
+              >
+                <option value="json">json</option>
+                <option value="ndjson">ndjson</option>
+                <option value="csv">csv</option>
+              </select>
+              <button
+                className="button secondary"
+                disabled={exportingAudit}
+                type="button"
+                onClick={() => void exportAuditLogs()}
+              >
+                {exportingAudit ? "Exporting" : "Export"}
+              </button>
+            </div>
             {auditLogs.length === 0 && <div className="empty">No audit logs</div>}
             {auditLogs.length > 0 && (
               <div className="table-wrap">
