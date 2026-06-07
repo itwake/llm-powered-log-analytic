@@ -1,5 +1,5 @@
 COMPOSE ?= docker compose
-PYTHON ?= python3.11
+PYTHON ?= python3
 SCALE_PROFILE ?= quick
 SCALE_TARGET_BYTES ?=
 
