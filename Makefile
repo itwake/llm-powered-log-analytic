@@ -1,4 +1,6 @@
-.PHONY: setup up migrate test e2e lint api worker web
+COMPOSE ?= docker compose
+
+.PHONY: setup up migrate test e2e lint api worker web full-stack-up full-stack-smoke full-stack-down copilot-staging-smoke temporal-retry-smoke
 
 setup:
 	corepack enable
@@ -7,7 +9,7 @@ setup:
 	python3 -m pip install -e .
 
 up:
-	docker compose up --build
+	$(COMPOSE) up --build
 
 migrate:
 	cd apps/api && alembic upgrade head
@@ -16,7 +18,7 @@ test:
 	python3 -m pytest tests
 
 e2e:
-	pnpm --filter @logan/web playwright test
+	corepack pnpm e2e
 
 lint:
 	python3 -m compileall apps/api apps/workers
@@ -30,3 +32,18 @@ worker:
 
 web:
 	pnpm --filter @logan/web dev
+
+full-stack-up:
+	$(COMPOSE) up -d --build postgres redis minio minio-init clickhouse opensearch temporal api worker
+
+full-stack-smoke: full-stack-up
+	$(COMPOSE) run --rm --build smoke
+
+full-stack-down:
+	$(COMPOSE) down --remove-orphans
+
+copilot-staging-smoke:
+	LOGAN_RUN_COPILOT_STAGING_SMOKE=true python3 -m pytest -q tests/staging/test_copilot_smoke.py
+
+temporal-retry-smoke:
+	LOGAN_RUN_TEMPORAL_INTEGRATION=true python3 -m pytest -q tests/integration/test_temporal_retry.py

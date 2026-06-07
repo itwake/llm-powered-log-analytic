@@ -31,6 +31,11 @@ def create_app(
     s3_client_factory: object | None = None,
 ) -> FastAPI:
     app = FastAPI(title="LogAn Platform API", version="0.1.0")
+
+    @app.get("/healthz", include_in_schema=False)
+    def healthz() -> dict[str, str]:
+        return {"status": "ok"}
+
     app.state.store = store or create_store()
     app.state.s3_client_factory = s3_client_factory
     app.state.copilot_auth_client = copilot_auth_client or GitHubDeviceCodeClient(

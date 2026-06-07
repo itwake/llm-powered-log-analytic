@@ -451,6 +451,10 @@ def test_sqlalchemy_external_queries_require_opt_in_urls_and_succeeded_writes(
     )
     assert len(query_client.temporal_calls) == 1
     assert len(query_client.log_calls) == 1
+    success_audits = store.list_audit_logs(case_id=case_id, action="analytics_query.external")
+    assert {
+        (audit.metadata["report"], audit.metadata["sink_name"]) for audit in success_audits
+    } == {("temporal", "clickhouse"), ("logs", "opensearch")}
 
     missing_write_client = RecordingQueryClient()
     missing_write_store = _store(

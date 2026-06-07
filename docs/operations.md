@@ -38,6 +38,76 @@ Logs, Causal Graph, and Causal Summary without external databases, MinIO, ClickH
 OpenSearch, Temporal, or real Copilot credentials. The memory store is process-local and clears
 when the API server exits.
 
+## Full-Stack Docker Smoke
+
+Use the compose stack when validating the production-shaped path:
+
+```bash
+docker compose config
+make full-stack-smoke
+make full-stack-down
+```
+
+`make full-stack-smoke` first runs `make full-stack-up`, then executes the profiled `smoke`
+service. The stack starts PostgreSQL, MinIO plus a bucket-init container, ClickHouse,
+OpenSearch, Temporal, the FastAPI API, and the Temporal worker. API and worker share the same
+SQLAlchemy/PostgreSQL store, use `LOGAN_OBJECT_STORE_BACKEND=minio`, start analysis through
+`LOGAN_ANALYSIS_ORCHESTRATOR=temporal`, publish external analytics with
+`LOGAN_ANALYTICS_SINKS_ENABLED=true`, read temporal/log reports with
+`LOGAN_EXTERNAL_ANALYTICS_QUERIES_ENABLED=true`, and set `LOGAN_LLM_PROVIDER=mock` so the smoke
+never needs Copilot credentials.
+
+The runner in `scripts/full_stack_smoke.py` validates the following:
+
+- API health, user registration/login, and case creation.
+- MinIO presigned single-part upload for all checkout incident fixture logs.
+- MinIO `head_object` confirms object existence and size before upload completion.
+- Analysis starts with `input_file_ids`, then a Temporal worker materializes `s3://` inputs,
+  runs the pipeline, and cleans temporary materialized files.
+- Summary, temporal, logs, causal graph, and causal summary report endpoints return non-empty
+  results.
+- Job events include `materialize_inputs` and every pipeline step, with sanitized metadata only.
+- Step artifact manifests are created without raw logs, local materialized paths, presigned query
+  strings, credentials, tokens, prompts, or model inputs.
+- ClickHouse contains run rows in `logan.enriched_log_lines` and `logan.window_aggregates`.
+- OpenSearch contains run documents in the run-scoped `logan-logs-{case_id}-{run_id}` index.
+- PostgreSQL `analytics_sink_writes` has succeeded ClickHouse/OpenSearch writes, and
+  `analytics_query.external` audit rows confirm the API report calls used external stores.
+
+From the host, the script defaults to `localhost` service ports. Inside compose, the `smoke`
+service uses container DNS names. If you run the script manually from the host while the API is
+configured with `LOGAN_S3_ENDPOINT=http://minio:9000`, set:
+
+```bash
+LOGAN_FULL_STACK_S3_PUBLIC_ENDPOINT=http://localhost:9000 python3 scripts/full_stack_smoke.py
+```
+
+The default exposed ports are API `8000`, web `3000`, PostgreSQL `5432`, MinIO `9000/9001`,
+ClickHouse `8123/9002`, OpenSearch `9200`, Redis `6379`, and Temporal `7233`. Override with the
+`LOGAN_*_PORT` variables in `docker-compose.yml` if a VM already uses those ports.
+
+OpenSearch is capped at `-Xms512m -Xmx512m` in compose. On small VMs, leave several GiB free for
+Docker or lower other local workloads before running the smoke. The compose credentials are local
+development placeholders only. Do not put real Copilot, GitHub, S3, database, or customer
+credentials into `.env`, compose files, or committed docs.
+
+The pytest wrapper is opt-in:
+
+```bash
+LOGAN_RUN_FULL_STACK_SMOKE=true python3 -m pytest -q tests/integration/test_full_stack_smoke.py
+```
+
+`make temporal-retry-smoke` runs an opt-in Temporal test-server smoke. It starts a real Temporal
+test environment, registers `AnalyzeCaseWorkflow`, intentionally fails the first
+`run_analysis_pipeline_activity` attempt, verifies Temporal retries and completes the real Logan
+activity on the second attempt, then invokes the activity again to confirm idempotent completion
+does not duplicate job events or fan-out rows. It is skipped in normal pytest runs unless
+`LOGAN_RUN_TEMPORAL_INTEGRATION=true` is set.
+
+`make copilot-staging-smoke` runs the real Copilot `/responses` annotation smoke. It is skipped
+unless `LOGAN_RUN_COPILOT_STAGING_SMOKE=true` and either `LOGAN_GITHUB_COPILOT_TOKEN` or
+`LOGAN_GITHUB_SOURCE_TOKEN` is present. Full-stack smoke always uses the mock provider instead.
+
 Run the API locally:
 
 ```bash
@@ -250,8 +320,9 @@ a succeeded `analytics_sink_writes` row exists for that case/run and destination
 reports first query the run-scoped OpenSearch index only if `LOGAN_OPENSEARCH_URL` is configured
 and a succeeded write exists for `{index}/_bulk`. External query failures are audited as
 `analytics_query.failed` with the report name, sink name, case/run, and a sanitized error, then
-the API falls back to SQL fan-out. Summary, causal graph, and causal summary reports continue
-to use SQL fan-out intentionally.
+the API falls back to SQL fan-out. Successful external query reads are audited as
+`analytics_query.external` with only the report name, sink name, case id, and run id. Summary,
+causal graph, and causal summary reports continue to use SQL fan-out intentionally.
 
 Causal summaries are editable by case owners, editors, and global engineer/admin users through
 `PATCH /api/cases/{case_id}/analysis-runs/{run_id}/causal-summary`. The edit updates only the

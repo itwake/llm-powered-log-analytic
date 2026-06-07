@@ -1,43 +1,136 @@
+name: logan-full-stack
+
+x-logan-env: &logan-env
+  LOGAN_ENV: ${LOGAN_ENV:-development}
+  LOGAN_SECRET_KEY: ${LOGAN_SECRET_KEY:-logan-local-dev-secret}
+  LOGAN_CREDENTIAL_ENCRYPTION_KEY: ${LOGAN_CREDENTIAL_ENCRYPTION_KEY:-logan-local-dev-credential-key}
+  LOGAN_STORE_BACKEND: sqlalchemy
+  LOGAN_DATABASE_URL: ${LOGAN_DATABASE_URL:-postgresql+psycopg://logan:logan@postgres:5432/logan}
+  LOGAN_OBJECT_STORE_BACKEND: minio
+  LOGAN_LOCAL_OBJECT_STORE_DIR: /data/object-store
+  LOGAN_ANALYSIS_INPUT_TMP_DIR: /tmp/logan-analysis-inputs
+  LOGAN_S3_ENDPOINT: ${LOGAN_S3_ENDPOINT:-http://minio:9000}
+  LOGAN_S3_BUCKET: ${LOGAN_S3_BUCKET:-logan}
+  LOGAN_S3_ACCESS_KEY: ${LOGAN_S3_ACCESS_KEY:-logan}
+  LOGAN_S3_SECRET_KEY: ${LOGAN_S3_SECRET_KEY:-logan-secret}
+  LOGAN_S3_REGION: ${LOGAN_S3_REGION:-us-east-1}
+  LOGAN_S3_FORCE_PATH_STYLE: "true"
+  LOGAN_STEP_ARTIFACTS_ENABLED: "true"
+  LOGAN_STEP_ARTIFACT_FAILURE_MODE: fail
+  LOGAN_ANALYSIS_ORCHESTRATOR: temporal
+  LOGAN_TEMPORAL_ADDRESS: temporal:7233
+  LOGAN_TEMPORAL_NAMESPACE: default
+  LOGAN_TEMPORAL_TASK_QUEUE: logan-analysis
+  LOGAN_TEMPORAL_ACTIVITY_START_TO_CLOSE_SECONDS: "900"
+  LOGAN_TEMPORAL_ACTIVITY_MAX_ATTEMPTS: "3"
+  LOGAN_LLM_PROVIDER: mock
+  LOGAN_COPILOT_MODEL: ${LOGAN_COPILOT_MODEL:-gpt-5.4}
+  LOGAN_COPILOT_REASONING_EFFORT: ${LOGAN_COPILOT_REASONING_EFFORT:-high}
+  LOGAN_ANALYTICS_SINKS_ENABLED: "true"
+  LOGAN_CLICKHOUSE_URL: http://clickhouse:8123
+  LOGAN_CLICKHOUSE_DATABASE: ${LOGAN_CLICKHOUSE_DATABASE:-logan}
+  LOGAN_OPENSEARCH_URL: http://opensearch:9200
+  LOGAN_EXTERNAL_ANALYTICS_QUERIES_ENABLED: "true"
+  LOGAN_EXTERNAL_ANALYTICS_QUERY_TIMEOUT_SECONDS: "10"
+  LOGAN_ANALYTICS_SINK_FAILURE_MODE: fail
+  LOGAN_RATE_LIMIT_ENABLED: "false"
+  LOGAN_METRICS_ENABLED: "true"
+  LOGAN_OTEL_ENABLED: "false"
+  PYTHONUNBUFFERED: "1"
+
 services:
   web:
     build:
       context: .
       dockerfile: infra/docker/web.Dockerfile
     ports:
-      - "3000:3000"
+      - "${LOGAN_WEB_PORT:-3000}:3000"
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   api:
     build:
       context: .
       dockerfile: infra/docker/api.Dockerfile
     ports:
-      - "8000:8000"
-    env_file: .env
+      - "${LOGAN_API_PORT:-8000}:8000"
+    environment:
+      <<: *logan-env
     depends_on:
-      - postgres
-      - redis
-      - minio
-      - clickhouse
-      - opensearch
-      - temporal
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).read()\"",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
 
   worker:
     build:
       context: .
       dockerfile: infra/docker/worker.Dockerfile
-    env_file: .env
+    environment:
+      <<: *logan-env
     depends_on:
-      - api
-      - postgres
-      - redis
-      - minio
-      - clickhouse
-      - opensearch
-      - temporal
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    restart: unless-stopped
+
+  smoke:
+    profiles:
+      - smoke
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    working_dir: /app
+    command: ["python", "scripts/full_stack_smoke.py"]
+    volumes:
+      - .:/app:ro
+    environment:
+      LOGAN_FULL_STACK_API_BASE_URL: http://api:8000
+      LOGAN_FULL_STACK_DATABASE_URL: postgresql+psycopg://logan:logan@postgres:5432/logan
+      LOGAN_FULL_STACK_S3_ENDPOINT: http://minio:9000
+      LOGAN_FULL_STACK_S3_BUCKET: ${LOGAN_S3_BUCKET:-logan}
+      LOGAN_FULL_STACK_S3_ACCESS_KEY: ${LOGAN_S3_ACCESS_KEY:-logan}
+      LOGAN_FULL_STACK_S3_SECRET_KEY: ${LOGAN_S3_SECRET_KEY:-logan-secret}
+      LOGAN_FULL_STACK_CLICKHOUSE_URL: http://clickhouse:8123
+      LOGAN_FULL_STACK_CLICKHOUSE_DATABASE: ${LOGAN_CLICKHOUSE_DATABASE:-logan}
+      LOGAN_FULL_STACK_OPENSEARCH_URL: http://opensearch:9200
+    depends_on:
+      api:
+        condition: service_healthy
+      worker:
+        condition: service_started
+      clickhouse:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
 
   postgres:
     image: postgres:16
@@ -46,45 +139,88 @@ services:
       POSTGRES_PASSWORD: logan
       POSTGRES_DB: logan
     ports:
-      - "5432:5432"
+      - "${LOGAN_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
 
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "${LOGAN_REDIS_PORT:-6379}:6379"
 
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: logan
-      MINIO_ROOT_PASSWORD: logan-secret
+      MINIO_ROOT_USER: ${LOGAN_S3_ACCESS_KEY:-logan}
+      MINIO_ROOT_PASSWORD: ${LOGAN_S3_SECRET_KEY:-logan-secret}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${LOGAN_MINIO_PORT:-9000}:9000"
+      - "${LOGAN_MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  minio-init:
+    image: minio/mc:latest
+    environment:
+      MINIO_ROOT_USER: ${LOGAN_S3_ACCESS_KEY:-logan}
+      MINIO_ROOT_PASSWORD: ${LOGAN_S3_SECRET_KEY:-logan-secret}
+      LOGAN_S3_BUCKET: ${LOGAN_S3_BUCKET:-logan}
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-ec"]
+    command: >
+      mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD";
+      mc mb --ignore-existing "local/$$LOGAN_S3_BUCKET";
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     ports:
-      - "8123:8123"
-      - "9002:9000"
+      - "${LOGAN_CLICKHOUSE_PORT:-8123}:8123"
+      - "${LOGAN_CLICKHOUSE_NATIVE_PORT:-9002}:9000"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 
   opensearch:
     image: opensearchproject/opensearch:latest
     environment:
       discovery.type: single-node
       plugins.security.disabled: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
       OPENSEARCH_INITIAL_ADMIN_PASSWORD: LoganLocalDev1!
+      bootstrap.memory_lock: "false"
     ports:
-      - "9200:9200"
+      - "${LOGAN_OPENSEARCH_PORT:-9200}:9200"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS 'http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=1s'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 40s
 
   temporal:
     image: temporalio/auto-setup:latest
@@ -95,9 +231,10 @@ services:
       POSTGRES_PWD: logan
       POSTGRES_SEEDS: postgres
     ports:
-      - "7233:7233"
+      - "${LOGAN_TEMPORAL_PORT:-7233}:7233"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres-data:

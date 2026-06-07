@@ -1281,6 +1281,27 @@ class SQLAlchemyStore:
             },
         )
 
+    def _record_analytics_query_success(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        report_name: str,
+        sink_name: str,
+    ) -> None:
+        self.record_audit(
+            action="analytics_query.external",
+            target_type="analysis_run",
+            target_id=run_id,
+            case_id=case_id,
+            metadata={
+                "analysis_run_id": run_id,
+                "case_id": case_id,
+                "report": report_name,
+                "sink_name": sink_name,
+            },
+        )
+
     def _external_analytics_query_client(self) -> Any:
         if self.analytics_query_client is None:
             self.analytics_query_client = AnalyticsQueryClient.from_settings(self.settings)
@@ -1307,11 +1328,19 @@ class SQLAlchemyStore:
             return None
 
         try:
-            return self._external_analytics_query_client().query_temporal(
+            report = self._external_analytics_query_client().query_temporal(
                 case_id=case_id,
                 run_id=run_id,
                 group_by=group_by,
             )
+            if report is not None:
+                self._record_analytics_query_success(
+                    case_id=case_id,
+                    run_id=run_id,
+                    report_name="temporal",
+                    sink_name="clickhouse",
+                )
+            return report
         except AnalyticsQueryError as exc:
             self._record_analytics_query_failure(
                 case_id=case_id,
@@ -1348,7 +1377,7 @@ class SQLAlchemyStore:
             return None
 
         try:
-            return self._external_analytics_query_client().query_logs(
+            report = self._external_analytics_query_client().query_logs(
                 case_id=case_id,
                 run_id=run_id,
                 window_start=window_start,
@@ -1358,6 +1387,14 @@ class SQLAlchemyStore:
                 limit=limit,
                 offset=offset,
             )
+            if report is not None:
+                self._record_analytics_query_success(
+                    case_id=case_id,
+                    run_id=run_id,
+                    report_name="logs",
+                    sink_name="opensearch",
+                )
+            return report
         except AnalyticsQueryError as exc:
             self._record_analytics_query_failure(
                 case_id=case_id,

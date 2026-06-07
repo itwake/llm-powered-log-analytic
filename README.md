@@ -59,6 +59,29 @@ behavior. E2E uses `LOGAN_STORE_BACKEND=memory`, `LOGAN_OBJECT_STORE_BACKEND=loc
 Docker, GitHub Copilot credentials, MinIO, ClickHouse, OpenSearch, Temporal, or an external
 database.
 
+Run the full-stack Docker smoke when Docker resources are available:
+
+```bash
+make full-stack-smoke
+make full-stack-down
+```
+
+The smoke stack starts PostgreSQL, MinIO, ClickHouse, OpenSearch, Temporal, the API, and the
+worker. It uses durable SQLAlchemy/PostgreSQL metadata, MinIO presigned uploads, Temporal
+orchestration, mock LLM annotation, and real ClickHouse/OpenSearch sink/query paths. It does not
+use or require Copilot credentials.
+
+Run the real Copilot staging smoke only when explicitly opted in:
+
+```bash
+LOGAN_GITHUB_COPILOT_TOKEN=... make copilot-staging-smoke
+# or
+LOGAN_GITHUB_SOURCE_TOKEN=... make copilot-staging-smoke
+```
+
+The staging smoke is skipped by default and never writes tokens to fixtures, compose files, or
+logs.
+
 ## Run API and Web Together
 
 Start the FastAPI backend from the repository root:
@@ -170,6 +193,18 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_EXTERNAL_ANALYTICS_QUERY_TIMEOUT_SECONDS=10`
 - `LOGAN_ANALYTICS_SINK_FAILURE_MODE=warn`; use `fail` to make sink publish errors fail the analysis run. SQLAlchemy-backed sink writes are tracked per external target in `analytics_sink_writes`, so succeeded targets are skipped on re-publish and failed targets are retried on the next completion attempt.
 - `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` for the web workspace API base URL.
+
+Full-stack smoke helper variables are optional and used only by `scripts/full_stack_smoke.py` or
+`tests/integration/test_full_stack_smoke.py`:
+
+- `LOGAN_RUN_FULL_STACK_SMOKE=true` enables the pytest wrapper.
+- `LOGAN_FULL_STACK_API_BASE_URL=http://localhost:8000`
+- `LOGAN_FULL_STACK_S3_ENDPOINT=http://localhost:9000`
+- `LOGAN_FULL_STACK_S3_PUBLIC_ENDPOINT=http://localhost:9000` rewrites container presigned URLs
+  when running the script from the host.
+- `LOGAN_FULL_STACK_DATABASE_URL=postgresql+psycopg://logan:logan@localhost:5432/logan`
+- `LOGAN_FULL_STACK_CLICKHOUSE_URL=http://localhost:8123`
+- `LOGAN_FULL_STACK_OPENSEARCH_URL=http://localhost:9200`
 
 ## Roadmap
 

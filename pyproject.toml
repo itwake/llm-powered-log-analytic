@@ -31,6 +31,10 @@ where = ["apps/api", "apps/workers"]
 pythonpath = ["apps/api", "apps/workers"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+  "integration: tests that require explicitly started service dependencies",
+  "staging: opt-in tests that call real external staging services",
+]
 
 [tool.ruff]
 line-length = 100
