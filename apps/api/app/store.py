@@ -74,9 +74,9 @@ _SENSITIVE_ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     (
         re.compile(r"(?<![A-Za-z0-9_])/(?:root|home|var|tmp|etc|opt|srv|workspace|Users)(?:/[^\s,;:)]+)+"),
-        "<REDACTED_PATH>",
+        "<PATH>",
     ),
-    (re.compile(r"\b[A-Za-z]:\\(?:[^\\\s,;:]+\\?)+"), "<REDACTED_PATH>"),
+    (re.compile(r"\b[A-Za-z]:\\(?:[^\\\s,;:]+\\?)+"), "<PATH>"),
     (re.compile(r"\b[A-Za-z0-9_-]{40,}\b"), "<REDACTED>"),
 )
 _SENSITIVE_METADATA_KEY_PARTS = {

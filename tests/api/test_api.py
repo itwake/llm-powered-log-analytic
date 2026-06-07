@@ -1147,7 +1147,7 @@ async def test_audit_export_and_metadata_redaction_block_adversarial_payloads() 
     assert "prompt" not in serialized_event_metadata
     assert "raw_log" not in serialized_artifact_metadata
     assert "<REDACTED>" in serialized_artifact_metadata
-    assert "<REDACTED_PATH>" in serialized_artifact_metadata
+    assert "<PATH>" in serialized_artifact_metadata
 
     for export_format in ("json", "ndjson", "csv"):
         exported = await admin.get(
@@ -1167,7 +1167,7 @@ async def test_audit_export_and_metadata_redaction_block_adversarial_payloads() 
         assert "abc123secret" not in body
         assert "/root/workspace" not in body
         assert "<REDACTED>" in body
-        assert "<REDACTED_PATH>" in body
+        assert "<PATH>" in body
 
     await admin.aclose()
 
