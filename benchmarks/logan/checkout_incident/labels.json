@@ -1,0 +1,230 @@
+{
+  "expected_offending_template_patterns": [
+    "auth-service.*connection pool exhausted",
+    "auth-service.*failed to acquire db connection",
+    "payment-service.*connection pool usage high",
+    "payment-service.*timeout calling auth-service",
+    "gateway.*post /checkout failed.*status="
+  ],
+  "expected_root_cause": {
+    "candidate_patterns": [
+      "auth-service.*connection pool exhausted",
+      "auth-service.*failed to acquire db connection"
+    ],
+    "top_k": 3
+  },
+  "expected_templates": [
+    {
+      "entities": {
+        "database": [
+          "db"
+        ],
+        "service": [
+          "auth-service"
+        ]
+      },
+      "fault_categories": [
+        "resource",
+        "database"
+      ],
+      "golden_signal": "saturation",
+      "id": "auth_pool_exhausted",
+      "offending": true,
+      "template_pattern": "auth-service.*connection pool exhausted"
+    },
+    {
+      "entities": {
+        "database": [
+          "db"
+        ],
+        "duration_ms": [
+          "5000"
+        ],
+        "service": [
+          "auth-service"
+        ]
+      },
+      "fault_categories": [
+        "database",
+        "timeout",
+        "resource"
+      ],
+      "golden_signal": "availability",
+      "id": "auth_db_acquire_timeout",
+      "offending": true,
+      "template_pattern": "auth-service.*failed to acquire db connection"
+    },
+    {
+      "entities": {
+        "service": [
+          "payment-service"
+        ]
+      },
+      "fault_categories": [
+        "resource",
+        "database"
+      ],
+      "golden_signal": "saturation",
+      "id": "payment_pool_usage_high",
+      "offending": true,
+      "template_pattern": "payment-service.*connection pool usage high"
+    },
+    {
+      "entities": {},
+      "fault_categories": [],
+      "golden_signal": "information",
+      "id": "gateway_checkout_started",
+      "offending": false,
+      "template_pattern": "gateway.*post /checkout started"
+    },
+    {
+      "entities": {
+        "duration_ms": [
+          "30000"
+        ],
+        "source_service": [
+          "payment-service"
+        ],
+        "target_service": [
+          "auth-service"
+        ]
+      },
+      "fault_categories": [
+        "dependency",
+        "timeout"
+      ],
+      "golden_signal": "availability",
+      "id": "payment_auth_timeout",
+      "offending": true,
+      "template_pattern": "payment-service.*timeout calling auth-service"
+    },
+    {
+      "entities": {
+        "service": [
+          "gateway"
+        ],
+        "status_code": [
+          "500"
+        ],
+        "url_path": [
+          "/checkout"
+        ]
+      },
+      "fault_categories": [
+        "application"
+      ],
+      "golden_signal": "error",
+      "id": "gateway_checkout_500",
+      "offending": true,
+      "template_pattern": "gateway.*post /checkout failed.*status="
+    }
+  ],
+  "expected_useful_causal_edges": [
+    {
+      "description": "Auth database acquisition failures precede payment auth timeouts.",
+      "id": "auth_db_timeout_to_payment_timeout",
+      "source_pattern": "auth-service.*failed to acquire db connection",
+      "target_pattern": "payment-service.*timeout calling auth-service"
+    },
+    {
+      "description": "Payment auth timeouts precede gateway checkout failures.",
+      "id": "payment_timeout_to_gateway_500",
+      "source_pattern": "payment-service.*timeout calling auth-service",
+      "target_pattern": "gateway.*post /checkout failed.*status="
+    },
+    {
+      "description": "Auth pool exhaustion precedes auth database acquisition failures.",
+      "id": "auth_pool_to_auth_db_timeout",
+      "source_pattern": "auth-service.*connection pool exhausted",
+      "target_pattern": "auth-service.*failed to acquire db connection"
+    }
+  ],
+  "fault_categories": [
+    "application",
+    "database",
+    "dependency",
+    "resource",
+    "timeout"
+  ],
+  "golden_signal": [
+    "saturation",
+    "availability",
+    "error",
+    "information"
+  ],
+  "key_entities": {
+    "database": [
+      "db"
+    ],
+    "duration_ms": [
+      "5000",
+      "30000"
+    ],
+    "service": [
+      "auth-service",
+      "payment-service",
+      "gateway"
+    ],
+    "source_service": [
+      "payment-service"
+    ],
+    "status_code": [
+      "500"
+    ],
+    "target_service": [
+      "auth-service"
+    ],
+    "url_path": [
+      "/checkout"
+    ]
+  },
+  "summary_rubric": [
+    {
+      "description": "Names the finding as a candidate root cause rather than a definitive claim.",
+      "key": "candidate",
+      "required_terms": [
+        "candidate",
+        "root cause"
+      ],
+      "weight": 1.0
+    },
+    {
+      "description": "States that the finding needs validation.",
+      "key": "needs_validation",
+      "required_terms": [
+        "needs validation"
+      ],
+      "weight": 1.0
+    },
+    {
+      "description": "Includes evidence framing tied to canonical templates.",
+      "key": "evidence",
+      "required_terms": [
+        "evidence",
+        "template"
+      ],
+      "weight": 1.0
+    },
+    {
+      "description": "Includes operator-facing validation actions.",
+      "key": "next_actions",
+      "required_terms": [
+        "validate",
+        "confirm"
+      ],
+      "weight": 1.0
+    }
+  ],
+  "thresholds": {
+    "entity_f1": 0.95,
+    "entity_precision": 0.95,
+    "entity_recall": 0.95,
+    "fault_category_macro_f1": 0.95,
+    "fault_category_micro_f1": 0.95,
+    "golden_signal_macro_f1": 0.95,
+    "review_load_reduction": 0.25,
+    "root_cause_hit_at_3": 1.0,
+    "summary_rubric_score": 0.95,
+    "useful_causal_edge_recall": 0.95
+  }
+}

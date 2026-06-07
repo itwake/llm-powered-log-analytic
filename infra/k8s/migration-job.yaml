@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: logan-migration
+  namespace: logan
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: ghcr.io/itwake/logan-api:latest
+          command: ["python", "scripts/run_migrations.py"]
+          workingDir: /app
+          envFrom:
+            - configMapRef:
+                name: logan-config
+            - secretRef:
+                name: logan-secrets

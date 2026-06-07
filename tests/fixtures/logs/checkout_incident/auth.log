@@ -1,0 +1,3 @@
+2026-06-06T10:11:30Z WARN auth-service db connection pool exhausted active=50 max=50
+2026-06-06T10:11:45Z ERROR auth-service failed to acquire db connection timeout_ms=5000
+2026-06-06T10:12:45Z ERROR auth-service failed to acquire db connection timeout_ms=5000

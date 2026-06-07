@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logan-api
+  namespace: logan
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: logan-api
+  template:
+    metadata:
+      labels:
+        app: logan-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/itwake/logan-api:latest
+          envFrom:
+            - configMapRef:
+                name: logan-config
+            - secretRef:
+                name: logan-secrets
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logan-api
+  namespace: logan
+spec:
+  selector:
+    app: logan-api
+  ports:
+    - port: 8000
+      targetPort: 8000

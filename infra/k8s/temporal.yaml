@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+  namespace: logan
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal
+  template:
+    metadata:
+      labels:
+        app: temporal
+    spec:
+      containers:
+        - name: temporal
+          image: temporalio/auto-setup:latest
+          env:
+            - name: DB
+              value: postgresql
+            - name: DB_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: logan
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: logan-secrets
+                  key: LOGAN_SECRET_KEY
+            - name: POSTGRES_SEEDS
+              value: postgres
+          ports:
+            - containerPort: 7233
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+  namespace: logan
+spec:
+  selector:
+    app: temporal
+  ports:
+    - port: 7233
+      targetPort: 7233

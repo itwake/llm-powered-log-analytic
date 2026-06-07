@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logan-worker
+  namespace: logan
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: logan-worker
+  template:
+    metadata:
+      labels:
+        app: logan-worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/itwake/logan-worker:latest
+          command: ["python", "-m", "logan_workers.temporal_worker"]
+          envFrom:
+            - configMapRef:
+                name: logan-config
+            - secretRef:
+                name: logan-secrets

@@ -1,0 +1,1 @@
+"""LogAn FastAPI application package."""

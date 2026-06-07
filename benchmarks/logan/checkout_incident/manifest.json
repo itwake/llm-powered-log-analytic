@@ -1,0 +1,34 @@
+{
+  "analysis_run_id": "benchmark-checkout-incident-run",
+  "benchmark_id": "logan.checkout_incident",
+  "case_context": {
+    "environment": "production",
+    "issue_description": "Customers report intermittent 500 during checkout.",
+    "product": "commerce-platform",
+    "title": "Checkout API intermittent 500 errors"
+  },
+  "case_id": "benchmark-checkout-incident",
+  "config": {
+    "causal": {
+      "granger_max_lag_bins": 10,
+      "max_lag_seconds": 600,
+      "methods": [
+        "temporal_precedence",
+        "lagged_correlation",
+        "lift",
+        "pgem",
+        "granger_linear"
+      ],
+      "time_bin_seconds": 60
+    },
+    "default_window_size_seconds": 60
+  },
+  "description": "Synthetic checkout outage where auth-service database pool saturation precedes payment timeouts and gateway 500 responses.",
+  "input_paths": [
+    "../../../tests/fixtures/logs/checkout_incident/auth.log",
+    "../../../tests/fixtures/logs/checkout_incident/payment.log",
+    "../../../tests/fixtures/logs/checkout_incident/gateway.log"
+  ],
+  "labels_path": "labels.json",
+  "name": "Checkout incident synthetic benchmark"
+}
