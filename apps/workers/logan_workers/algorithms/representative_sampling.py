@@ -4,7 +4,7 @@ import hashlib
 import uuid
 from collections import Counter, defaultdict
 
-from logan_workers.models import EvidenceRef, LogTemplate, NormalizedLogLine, RepresentativeSample
+from logan_workers.models import LogTemplate, NormalizedLogLine, RepresentativeSample
 
 
 LEVEL_SCORE = {
