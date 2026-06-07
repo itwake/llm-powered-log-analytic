@@ -205,6 +205,9 @@ class CausalSummary(BaseModel):
     customer_update_markdown: str
     next_actions: list[dict[str, Any]]
     evidence_refs: list[EvidenceRef]
+    evidence_claims: list[dict[str, Any]] = Field(default_factory=list)
+    uncertainties: list[str] = Field(default_factory=list)
+    details: dict[str, Any] = Field(default_factory=dict)
     confidence: float
     edited: bool = False
 

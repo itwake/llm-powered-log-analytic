@@ -112,6 +112,7 @@ class AnalyzeCasePipeline:
             "analysis_run_id": analysis_run_id,
             **(case_context or {}),
         }
+        gateway = gateway or MockCopilotAnnotationGateway()
         progress: dict[str, Any] = {"current_step": "queued", "steps": {}}
 
         async def emit(
@@ -258,10 +259,13 @@ class AnalyzeCasePipeline:
                 causal_graph=causal_graph,
                 templates=templates,
                 logs=enriched,
+                case_context=case_context,
+                gateway=gateway,
             ),
             lambda value: {
                 "next_actions": len(value.next_actions),
                 "evidence_refs": len(value.evidence_refs),
+                "summary_source": value.details.get("source"),
             },
         )
         placeholder = AnalysisResult(

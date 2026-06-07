@@ -453,6 +453,9 @@ export interface CausalSummaryResponse {
   customer_update_markdown: string;
   next_actions: Record<string, unknown>[];
   evidence_refs: EvidenceRef[];
+  evidence_claims?: Record<string, unknown>[];
+  uncertainties?: string[];
+  details?: Record<string, unknown>;
   confidence: number;
   edited: boolean;
 }

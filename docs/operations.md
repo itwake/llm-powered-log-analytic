@@ -373,15 +373,28 @@ the API falls back to SQL fan-out. Successful external query reads are audited a
 `analytics_query.external` with only the report name, sink name, case id, and run id. Summary,
 causal graph, and causal summary reports continue to use SQL fan-out intentionally.
 
+Causal summaries are evidence-first and LLM-backed. The worker builds a structured evidence packet
+from the causal graph, redacted normalized logs, template text, and safe case context, then calls
+the model gateway with `metadata.purpose=causal_summary`. Summary packets do not include raw log
+text, model input history, prompt payloads, tokens, passwords, API keys, or secret material. The
+allowed log evidence surface is redacted message text, template text, line number, log id,
+template id, service, time, confidence, and method. Generated summaries include internal RCA
+markdown, customer-safe markdown, evidence claims, evidence refs, next validation steps,
+uncertainties, confidence, and structured details. If the gateway is unavailable or the model
+output fails schema/evidence validation, the worker emits a cautious evidence-based fallback that
+uses candidate and needs-validation language for source signals, downstream symptoms, affected
+services, and dependency/resource signals present in the packet.
+
 Causal summaries are editable by case owners, editors, and global engineer/admin users through
 `PATCH /api/cases/{case_id}/analysis-runs/{run_id}/causal-summary`. The edit updates only the
-summary markdown and customer-safe update; graph evidence refs, confidence, and next actions stay
-attached to the generated evidence. SQLAlchemy stores the edit in `causal_summaries` and, when
-available, mirrors it into `analysis_runs.result_json.causal_summary` and regenerated export
-content. Audit events use `causal_summary.edit` and include only lengths/counts plus ids, not raw
-logs, prompts, token material, or secrets. Markdown, HTML, and JSON causal-summary exports are
-generated from the current edited summary; when retention has cleared `result_json`, the API uses
-the retained SQL fan-out summary row for causal-summary-only exports.
+summary markdown and customer-safe update; graph evidence refs, evidence claims, uncertainties,
+confidence, and next actions stay attached to the generated evidence. SQLAlchemy stores the edit in
+`causal_summaries` and, when available, mirrors it into
+`analysis_runs.result_json.causal_summary` and regenerated export content. Audit events use
+`causal_summary.edit` and include only lengths/counts plus ids, not raw logs, prompts, token
+material, or secrets. Markdown, HTML, and JSON causal-summary exports are generated from the
+current edited summary; when retention has cleared `result_json`, the API uses the retained SQL
+fan-out summary row for causal-summary-only exports.
 
 Retention execution is built into both stores and can be invoked through
 `POST /api/admin/retention/run`. It deletes audit logs older than

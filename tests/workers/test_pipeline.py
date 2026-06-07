@@ -17,13 +17,70 @@ from logan_workers.pipeline import AnalyzeCasePipeline
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 
 
+def _write_scheduler_fixture(tmp_path: Path) -> list[str]:
+    log_file = tmp_path / "scheduler_incident.log"
+    log_file.write_text(
+        "\n".join(
+            [
+                (
+                    "2026-06-06T10:00:00Z WARN cache-service connection pool exhausted "
+                    "active=40 max=40"
+                ),
+                (
+                    "2026-06-06T10:00:30Z ERROR scheduler-service timeout calling "
+                    "cache-service after 5000ms job_id=job-1"
+                ),
+                (
+                    "2026-06-06T10:01:00Z ERROR kafka-consumer failed processing schedule "
+                    "event due scheduler-service timeout topic=schedules"
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return [str(log_file)]
+
+
 class FailingAnnotationGateway(MockCopilotAnnotationGateway):
     async def responses(self, **kwargs):
         raise RuntimeError("annotation failed token=gho_pipeline_secret_token password=hunter2")
 
 
+class FailingSummaryGateway(MockCopilotAnnotationGateway):
+    async def responses(self, **kwargs):
+        metadata = kwargs.get("metadata") if isinstance(kwargs.get("metadata"), dict) else {}
+        if metadata.get("purpose") == "causal_summary":
+            self.calls.append(kwargs)
+            raise RuntimeError("summary failed token=gho_summary_secret password=hunter2")
+        return await super().responses(**kwargs)
+
+
+class InvalidSummaryGateway(MockCopilotAnnotationGateway):
+    async def responses(self, **kwargs):
+        metadata = kwargs.get("metadata") if isinstance(kwargs.get("metadata"), dict) else {}
+        if metadata.get("purpose") == "causal_summary":
+            self.calls.append(kwargs)
+            return {"output_json": {"summary": "not the required schema"}}
+        return await super().responses(**kwargs)
+
+
+def _summary_gateway_payload(gateway: MockCopilotAnnotationGateway) -> tuple[dict, str]:
+    summary_calls = [
+        call
+        for call in gateway.calls
+        if isinstance(call.get("metadata"), dict)
+        and call["metadata"].get("purpose") == "causal_summary"
+    ]
+    assert len(summary_calls) == 1
+    call = summary_calls[0]
+    text = call["input"][0]["content"][0]["text"]
+    return call, text
+
+
 @pytest.mark.asyncio
 async def test_pipeline_checkout_incident_end_to_end() -> None:
+    gateway = MockCopilotAnnotationGateway()
     result = await AnalyzeCasePipeline().run(
         case_id="case-1",
         analysis_run_id="run-1",
@@ -34,6 +91,7 @@ async def test_pipeline_checkout_incident_end_to_end() -> None:
             "product": "commerce-platform",
             "environment": "production",
         },
+        gateway=gateway,
     )
 
     raw_lines = sum(len(file.lines) for file in result.files)
@@ -65,7 +123,9 @@ async def test_pipeline_checkout_incident_end_to_end() -> None:
     assert offending_templates
 
     assert any(point.golden_signal == "error" and point.count > 0 for point in result.temporal)
-    assert any(point.golden_signal == "availability" and point.count > 0 for point in result.temporal)
+    assert any(
+        point.golden_signal == "availability" and point.count > 0 for point in result.temporal
+    )
 
     edges = result.causal_graph.edges
     assert edges
@@ -104,11 +164,122 @@ async def test_pipeline_checkout_incident_end_to_end() -> None:
     assert "candidate" in markdown
     assert "needs validation" in markdown
     assert result.causal_summary.evidence_refs
+    assert result.causal_summary.evidence_claims
+    assert result.causal_summary.uncertainties
+    assert result.causal_summary.details["source"] == "llm"
+
+    call, summary_packet = _summary_gateway_payload(gateway)
+    assert call["metadata"]["purpose"] == "causal_summary"
+    assert call["metadata"]["prompt_version"] == "causal_summary_v1"
+    assert "auth-service" in summary_packet
+    assert "payment-service" in summary_packet
+    assert "gateway" in summary_packet
+    assert "raw_message" not in summary_packet
+    assert "raw_text" not in summary_packet
+    assert "model_inputs" not in summary_packet
+    assert "prompt" not in summary_packet
+    assert "password" not in summary_packet
+    assert "api_key" not in summary_packet
+    assert "authorization" not in summary_packet
 
     assert result.exports["markdown"].content.startswith("# Incident Diagnosis Summary")
     assert result.exports["html"].content.startswith("<!doctype html>")
     parsed_export = json.loads(result.exports["json"].content)
     assert parsed_export["causal_graph"]["edges"]
+
+
+@pytest.mark.asyncio
+async def test_mock_causal_summary_uses_packet_terms_for_non_checkout_fixture(
+    tmp_path: Path,
+) -> None:
+    gateway = MockCopilotAnnotationGateway()
+    result = await AnalyzeCasePipeline().run(
+        case_id="case-scheduler",
+        analysis_run_id="run-scheduler",
+        paths=_write_scheduler_fixture(tmp_path),
+        gateway=gateway,
+    )
+
+    markdown = result.causal_summary.summary_markdown.lower()
+    assert result.causal_summary.details["source"] == "llm"
+    assert "candidate source signal" in markdown
+    assert "downstream symptom" in markdown
+    assert "cache-service" in markdown
+    assert "scheduler-service" in markdown
+    assert result.causal_summary.evidence_claims[0]["evidence_refs"]
+    for leaked_term in ("checkout", "auth-service", "payment-service", "/checkout"):
+        assert leaked_term not in markdown
+
+    _, summary_packet = _summary_gateway_payload(gateway)
+    packet = json.loads(summary_packet)
+    packet_log_ids = {line["log_id"] for line in packet["evidence_lines"]}
+    claim_refs = set(result.causal_summary.evidence_claims[0]["evidence_refs"])
+    assert claim_refs <= packet_log_ids
+    assert packet["root_cause_candidates"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("gateway_cls", [FailingSummaryGateway, InvalidSummaryGateway])
+async def test_causal_summary_falls_back_to_evidence_when_gateway_unavailable_or_invalid(
+    gateway_cls,
+) -> None:
+    gateway = gateway_cls()
+    result = await AnalyzeCasePipeline().run(
+        case_id="case-summary-fallback",
+        analysis_run_id="run-summary-fallback",
+        paths=[str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
+        gateway=gateway,
+    )
+
+    markdown = result.causal_summary.summary_markdown.lower()
+    assert result.causal_summary.details["source"] == "fallback"
+    assert (
+        "gateway_unavailable_or_invalid_model_output"
+        in result.causal_summary.details["fallback_reason"]
+    )
+    assert "candidate" in markdown
+    assert "needs validation" in markdown
+    assert "auth-service" in markdown
+    assert "payment-service" in markdown
+    assert "gateway" in markdown
+    assert result.causal_summary.evidence_refs
+    assert result.causal_summary.evidence_claims
+    assert result.causal_summary.uncertainties
+    _summary_gateway_payload(gateway)
+
+
+@pytest.mark.asyncio
+async def test_causal_summary_fallback_is_domain_neutral_for_scheduler_incident(
+    tmp_path: Path,
+) -> None:
+    gateway = FailingSummaryGateway()
+    result = await AnalyzeCasePipeline().run(
+        case_id="case-scheduler-fallback",
+        analysis_run_id="run-scheduler-fallback",
+        paths=_write_scheduler_fixture(tmp_path),
+        gateway=gateway,
+    )
+
+    assert result.causal_summary.details["source"] == "fallback"
+    rendered_actions = json.dumps(result.causal_summary.next_actions).lower()
+    rendered_claims = json.dumps(result.causal_summary.evidence_claims).lower()
+    combined = " ".join(
+        [
+            result.causal_summary.summary_markdown.lower(),
+            result.causal_summary.customer_update_markdown.lower(),
+            rendered_actions,
+            rendered_claims,
+        ]
+    )
+    assert "candidate source signal" in combined
+    assert "downstream symptom" in combined
+    assert "affected service" in combined
+    assert "dependency/resource signal" in combined
+    assert "cache-service" in combined
+    assert "scheduler-service" in combined
+    for leaked_term in ("checkout", "auth-service", "payment-service", "/checkout"):
+        assert leaked_term not in combined
+    _summary_gateway_payload(gateway)
 
 
 def test_multiline_merge_keeps_original_line_refs(tmp_path: Path) -> None:
@@ -160,7 +331,9 @@ async def test_pipeline_emits_step_progress_events() -> None:
         "causal_summary",
         "export_artifacts",
     ]
-    assert [event["step_name"] for event in events if event["event_type"] == "completed"] == expected_steps
+    assert [
+        event["step_name"] for event in events if event["event_type"] == "completed"
+    ] == expected_steps
     assert all(event["analysis_run_id"] == "run-events" for event in events)
     assert result.progress["current_step"] == "completed"
     assert result.progress["steps"]["copilot_annotation"]["metadata"]["annotations"] > 0
@@ -205,10 +378,12 @@ async def test_redaction_happens_before_model_input(tmp_path: Path) -> None:
         "tenant_id=customer-123\n",
         encoding="utf-8",
     )
+    gateway = MockCopilotAnnotationGateway()
     result = await AnalyzeCasePipeline().run(
         case_id="case-redaction",
         analysis_run_id="run-redaction",
         paths=[str(log_file)],
+        gateway=gateway,
     )
     model_payload = json.dumps(result.model_inputs)
     assert "alice@example.com" not in model_payload
@@ -219,6 +394,18 @@ async def test_redaction_happens_before_model_input(tmp_path: Path) -> None:
     assert "<IP>" in model_payload
     assert "<SECRET>" in model_payload
     assert "<TENANT_ID>" in model_payload
+    _, summary_packet = _summary_gateway_payload(gateway)
+    assert "alice@example.com" not in summary_packet
+    assert "192.168.1.10" not in summary_packet
+    assert "hunter2" not in summary_packet
+    assert "customer-123" not in summary_packet
+    assert "raw_message" not in summary_packet
+    assert "raw_text" not in summary_packet
+    assert "model_inputs" not in summary_packet
+    assert "password" not in summary_packet
+    assert "token" not in summary_packet
+    assert "api_key" not in summary_packet
+    assert "redacted_message" in summary_packet
 
 
 def test_redactor_masks_url_query_and_tokens() -> None:

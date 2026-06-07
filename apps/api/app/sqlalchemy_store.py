@@ -1933,7 +1933,11 @@ class SQLAlchemyStore:
                     model_provider=run.model_provider,
                     model_name=run.model_name,
                     prompt_version=run.prompt_version,
-                    raw_model_response={},
+                    raw_model_response={
+                        "details": summary.details,
+                        "evidence_claims": summary.evidence_claims,
+                        "uncertainties": summary.uncertainties,
+                    },
                     edited_by=user_id,
                     edited_at=now,
                     created_at=now,
@@ -1965,6 +1969,16 @@ class SQLAlchemyStore:
                 "customer_update_markdown": row.customer_update_markdown,
                 "next_actions": list(row.next_actions_json or []),
                 "evidence_refs": list(row.evidence_refs_json or []),
+                "evidence_claims": list(
+                    (row.raw_model_response or {}).get("evidence_claims") or []
+                ),
+                "uncertainties": list((row.raw_model_response or {}).get("uncertainties") or []),
+                "details": {
+                    **dict((row.raw_model_response or {}).get("details") or {}),
+                    "model_provider": row.model_provider,
+                    "model_name": row.model_name,
+                    "prompt_version": row.prompt_version,
+                },
                 "confidence": row.confidence,
                 "edited": True,
             }
@@ -2441,11 +2455,21 @@ class SQLAlchemyStore:
             )
             if not row:
                 return None
+            summary_details = (
+                row.raw_model_response if isinstance(row.raw_model_response, dict) else {}
+            )
+            details = dict(summary_details.get("details") or {})
+            details.setdefault("model_provider", row.model_provider)
+            details.setdefault("model_name", row.model_name)
+            details.setdefault("prompt_version", row.prompt_version)
             return {
                 "summary_markdown": row.summary_markdown,
                 "customer_update_markdown": row.customer_update_markdown,
                 "next_actions": list(row.next_actions_json or []),
                 "evidence_refs": list(row.evidence_refs_json or []),
+                "evidence_claims": list(summary_details.get("evidence_claims") or []),
+                "uncertainties": list(summary_details.get("uncertainties") or []),
+                "details": details,
                 "confidence": row.confidence,
                 "edited": bool(row.edited_by or row.edited_at),
             }
@@ -3352,7 +3376,11 @@ class SQLAlchemyStore:
                 model_provider=run.model_provider,
                 model_name=run.model_name,
                 prompt_version=run.prompt_version,
-                raw_model_response={},
+                raw_model_response={
+                    "details": summary.details,
+                    "evidence_claims": summary.evidence_claims,
+                    "uncertainties": summary.uncertainties,
+                },
                 created_at=created_at,
             )
         )

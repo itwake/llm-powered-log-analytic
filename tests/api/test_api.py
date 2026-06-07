@@ -1478,6 +1478,9 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     original_causal_summary = causal_summary.json()
     assert "candidate" in original_causal_summary["summary_markdown"].lower()
     assert original_causal_summary["evidence_refs"]
+    assert original_causal_summary["evidence_claims"]
+    assert original_causal_summary["uncertainties"]
+    assert original_causal_summary["details"]["source"] in {"llm", "fallback"}
     edited_summary = "# Edited Incident Diagnosis\n\nCandidate evidence has been reviewed."
     edited_customer_update = "Engineering has updated the customer-safe incident summary."
     patched_summary = await client.patch(
@@ -1494,6 +1497,8 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     assert patched_body["edited"] is True
     assert patched_body["evidence_refs"] == original_causal_summary["evidence_refs"]
     assert patched_body["next_actions"] == original_causal_summary["next_actions"]
+    assert patched_body["evidence_claims"] == original_causal_summary["evidence_claims"]
+    assert patched_body["uncertainties"] == original_causal_summary["uncertainties"]
     assert patched_body["confidence"] == original_causal_summary["confidence"]
     fetched_patched_summary = await client.get(
         f"/api/cases/{case_id}/analysis-runs/{run_id}/causal-summary"
