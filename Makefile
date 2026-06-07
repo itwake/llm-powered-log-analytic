@@ -1,12 +1,13 @@
 COMPOSE ?= docker compose
+PYTHON ?= python3
 
-.PHONY: setup up migrate test e2e lint api worker web full-stack-up full-stack-smoke full-stack-down copilot-staging-smoke temporal-retry-smoke
+.PHONY: setup up migrate test evaluate e2e lint api worker web full-stack-up full-stack-smoke full-stack-down copilot-staging-smoke temporal-retry-smoke
 
 setup:
 	corepack enable
 	corepack prepare pnpm@10.13.1 --activate
 	pnpm install
-	python3 -m pip install -e .
+	$(PYTHON) -m pip install -e .
 
 up:
 	$(COMPOSE) up --build
@@ -15,13 +16,19 @@ migrate:
 	cd apps/api && alembic upgrade head
 
 test:
-	python3 -m pytest tests
+	$(PYTHON) -m pytest tests
+
+evaluate:
+	$(PYTHON) -m logan_workers.evaluation.run \
+		--benchmark benchmarks/logan/checkout_incident \
+		--out .logan/evaluation/report.json \
+		--markdown .logan/evaluation/report.md
 
 e2e:
 	corepack pnpm e2e
 
 lint:
-	python3 -m compileall apps/api apps/workers
+	$(PYTHON) -m compileall apps/api apps/workers
 	pnpm --filter @logan/web lint
 
 api:

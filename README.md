@@ -31,6 +31,15 @@ Copy `.env.example` to `.env` for local services. The tests do not require Docke
 python3 -m pytest tests
 ```
 
+Run the deterministic checkout benchmark evaluation:
+
+```bash
+python -m logan_workers.evaluation.run \
+  --benchmark benchmarks/logan/checkout_incident \
+  --out .logan/evaluation/report.json \
+  --markdown .logan/evaluation/report.md
+```
+
 Optional web checks after installing dependencies:
 
 ```bash

@@ -8,6 +8,55 @@ Run Python tests without external services:
 python3 -m pytest tests
 ```
 
+## Offline Benchmark Evaluation
+
+The repository includes a deterministic LogAn-style checkout incident benchmark under
+`benchmarks/logan/checkout_incident`. The benchmark reuses the synthetic fixture logs from
+`tests/fixtures/logs/checkout_incident` and labels expected template patterns, golden signals,
+fault categories, key entities, root-cause candidates, useful causal edges, and summary rubric
+requirements.
+
+Run the benchmark locally with Python 3.11+:
+
+```bash
+python -m logan_workers.evaluation.run \
+  --benchmark benchmarks/logan/checkout_incident \
+  --out .logan/evaluation/report.json \
+  --markdown .logan/evaluation/report.md
+```
+
+The equivalent Make target is:
+
+```bash
+make PYTHON=.venv/bin/python evaluate
+```
+
+The evaluator runs `AnalyzeCasePipeline` with `MockCopilotAnnotationGateway`, so it does not
+require Docker, Temporal, GitHub Copilot credentials, or external network access. It emits
+thresholded metrics for review-load reduction, golden-signal macro F1, fault-category micro and
+macro F1, entity precision/recall/F1, root-cause hit@k, useful causal-edge recall, and summary
+rubric quality.
+
+Benchmark reports are intentionally compact. They include counts, metric details, label pattern
+ids, canonical expected regex patterns, template ids, edge ids, and summary rubric term coverage.
+They do not include source log bodies, raw message fields, model inputs, representative-line text,
+or absolute fixture paths. Report rendering fails closed if sensitive auth terms, prompt/raw fields,
+or absolute paths are detected in the JSON or Markdown output.
+
+For CI or staging, run the benchmark after unit tests and before deploying worker changes:
+
+```bash
+python -m pytest -q
+python -m logan_workers.evaluation.run \
+  --benchmark benchmarks/logan/checkout_incident \
+  --out .logan/evaluation/report.json \
+  --markdown .logan/evaluation/report.md
+```
+
+Treat a non-zero exit code as a release blocker for changes that alter parsing, templating,
+annotation, causal graph ranking, or summary generation. Store the JSON report as a CI artifact
+for score trend review; the Markdown file is intended for quick human inspection in staging.
+
 Run Playwright browser E2E after installing browser dependencies:
 
 ```bash
