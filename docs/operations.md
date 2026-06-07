@@ -57,6 +57,60 @@ Treat a non-zero exit code as a release blocker for changes that alter parsing, 
 annotation, causal graph ranking, or summary generation. Store the JSON report as a CI artifact
 for score trend review; the Markdown file is intended for quick human inspection in staging.
 
+## Synthetic Scale Benchmark
+
+Use the scale benchmark when validating worker ingestion and pipeline behavior on larger generated
+inputs. The runner creates deterministic synthetic checkout incident logs under
+`.logan/scale-fixtures`, which is ignored by git, then runs the real `AnalyzeCasePipeline` with
+`MockCopilotAnnotationGateway`.
+
+The generated fixture mixes:
+
+- plain `.log` input
+- `.jsonl` input
+- `.log.gz` input
+- `.zip` input containing both plain and JSONL members
+- cross-service dependency failures, retries, resource saturation, gateway failures, and multiline
+  stack traces
+
+Run the default quick profile:
+
+```bash
+make PYTHON=.venv/bin/python scale-benchmark
+```
+
+The quick profile targets 64 KiB of logical uncompressed log payload by default. To keep a local run
+smaller or larger while preserving the same mixed-format shape:
+
+```bash
+make PYTHON=.venv/bin/python scale-benchmark SCALE_PROFILE=quick SCALE_TARGET_BYTES=67108864
+```
+
+Run the 1 GiB profile on a worker host with enough memory for the current in-memory pipeline:
+
+```bash
+make PYTHON=.venv/bin/python scale-benchmark SCALE_PROFILE=1gb
+```
+
+Run the 5 GiB profile only on a dedicated benchmark host:
+
+```bash
+make PYTHON=.venv/bin/python scale-benchmark SCALE_PROFILE=5gb
+```
+
+Profile sizes are logical uncompressed payload sizes. The on-disk fixture can be smaller because
+the gzip and zip portions are compressed. The JSON report is written to
+`.logan/evaluation/scale-{profile}.json`; the Markdown summary is written to
+`.logan/evaluation/scale-{profile}.md`.
+
+Scale reports include generated fixture size, input file count, raw line count, ingested file
+count, source entries, normalized logs, templates, representative samples, annotations, time
+windows, causal nodes and edges, wall time, Linux peak RSS when available, model call count,
+review-load reduction, and Causal Summary presence/confidence/counts. They intentionally omit raw
+log bodies, local absolute paths, prompt/model input payloads, credentials, tokens, secrets, and
+passwords. Report rendering fails closed if those leak-shaped fields or terms appear in JSON or
+Markdown.
+
 Run Playwright browser E2E after installing browser dependencies:
 
 ```bash

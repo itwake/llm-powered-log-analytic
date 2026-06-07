@@ -1,7 +1,9 @@
 COMPOSE ?= docker compose
-PYTHON ?= python3
+PYTHON ?= python3.11
+SCALE_PROFILE ?= quick
+SCALE_TARGET_BYTES ?=
 
-.PHONY: setup up migrate test evaluate e2e lint api worker web full-stack-up full-stack-smoke full-stack-down copilot-staging-smoke temporal-retry-smoke
+.PHONY: setup up migrate test evaluate scale-benchmark e2e lint api worker web full-stack-up full-stack-smoke full-stack-down copilot-staging-smoke temporal-retry-smoke
 
 setup:
 	corepack enable
@@ -23,6 +25,14 @@ evaluate:
 		--benchmark benchmarks/logan/checkout_incident \
 		--out .logan/evaluation/report.json \
 		--markdown .logan/evaluation/report.md
+
+scale-benchmark:
+	$(PYTHON) -m logan_workers.evaluation.scale \
+		--profile $(SCALE_PROFILE) \
+		--fixture-dir .logan/scale-fixtures \
+		--out .logan/evaluation/scale-$(SCALE_PROFILE).json \
+		--markdown .logan/evaluation/scale-$(SCALE_PROFILE).md \
+		$(if $(SCALE_TARGET_BYTES),--target-bytes $(SCALE_TARGET_BYTES),)
 
 e2e:
 	corepack pnpm e2e

@@ -15,7 +15,11 @@ ABSOLUTE_PATH_RE = re.compile(
     r"(?:/(?:root|home|tmp|var|etc|workspace|Users)/[^\s\"']+|[A-Za-z]:\\[^\s\"']+)"
 )
 RAW_FIELD_RE = re.compile(
-    r"\b(raw_message|raw_text|raw_line_ids|raw_line_id|model_inputs|representative_lines)\b",
+    r"\b("
+    r"raw_message|raw_text|raw_line_ids|raw_line_id|raw_model_response|"
+    r"model_inputs|representative_lines|template_text|normalized_message|"
+    r"redacted_message|object_uri|file_path|original_filename"
+    r")\b",
     re.IGNORECASE,
 )
 
