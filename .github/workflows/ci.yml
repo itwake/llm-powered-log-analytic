@@ -37,6 +37,7 @@ jobs:
         with:
           node-version: "22"
           cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - name: Enable pnpm
         run: |
           corepack enable
@@ -57,7 +58,9 @@ jobs:
         run: docker compose --profile smoke run --rm -T --build smoke
       - name: Compose logs on failure
         if: failure()
-        run: docker compose logs --no-color api worker postgres minio clickhouse opensearch temporal || true
+        run: |
+          docker compose logs --no-color \
+            api worker postgres minio clickhouse opensearch temporal || true
       - name: Tear down
         if: always()
         run: docker compose down --remove-orphans -v

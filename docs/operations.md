@@ -194,6 +194,12 @@ Docker or lower other local workloads before running the smoke. The compose cred
 development placeholders only. Do not put real Copilot, GitHub, S3, database, or customer
 credentials into `.env`, compose files, or committed docs.
 
+PostgreSQL startup runs idempotent SQL migrations after SQLAlchemy creates the current metadata
+shape. Applied migrations are recorded in `schema_migrations` with version, checksum, status,
+duration, and timestamps, guarded by a PostgreSQL advisory lock so concurrent API replicas do not
+race the same migration. A checksum change or previously failed migration is treated as an
+operator-review condition rather than being retried blindly.
+
 The pytest wrapper is opt-in:
 
 ```bash

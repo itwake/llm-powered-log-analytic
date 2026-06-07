@@ -6,7 +6,7 @@ GitHub source OAuth and Copilot plugin tokens are never returned to frontend res
 
 Credential retrieval is backend-only. Store implementations expose encrypted credential records by type, and only the Copilot model gateway decrypts them immediately before resolving a plugin token. Stored source OAuth tokens are exchanged against GitHub Copilot's internal token endpoint, and returned plugin tokens are cached with nullable `expires_at` metadata. Expired or revoked credentials are not treated as usable Copilot auth.
 
-Users can disconnect GitHub Copilot with `DELETE /api/copilot/auth/credential`, which revokes stored source and plugin credentials and returns no token material or token hints. Production must replace local encryption key handling with KMS-backed keys. Transport and gateway errors redact known GitHub source-token prefixes and exact plugin/source tokens before surfacing messages.
+Users can disconnect GitHub Copilot with `DELETE /api/copilot/auth/credential`, which revokes stored source and plugin credentials and returns no token material or token hints. Production must replace local encryption key handling with KMS-backed keys. The API refuses to start with `LOGAN_ENV=production` when `LOGAN_SECRET_KEY` or `LOGAN_CREDENTIAL_ENCRYPTION_KEY` is still a known local default or shorter than 32 characters. Transport and gateway errors redact known GitHub source-token prefixes and exact plugin/source tokens before surfacing messages.
 
 Credential encryption supports key ids for rotation. New credentials are stored with
 `LOGAN_CREDENTIAL_ENCRYPTION_KEY_ID` and are encrypted with `LOGAN_CREDENTIAL_ENCRYPTION_KEY`.

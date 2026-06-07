@@ -119,7 +119,8 @@ tested directions. These scores are ranking and validation aids, not definitive 
 
 ## Extension Seams
 
-- Replace `StableDrainAdapter` with `drain3` behind the same `cluster()` interface.
+- Tune the Drain3-backed adapter and keep `StableDrainAdapter` as an explicit fallback behind
+  the same `cluster()` interface.
 - Add S3 object storage adapters for report artifacts.
 - Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.
 - Add bin-size sensitivity reporting for causal methods if operators need multi-bin comparisons.

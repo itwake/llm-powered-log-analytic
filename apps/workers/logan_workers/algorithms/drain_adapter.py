@@ -29,7 +29,9 @@ class DrainConfig:
     fallback_to_stable: bool = True
 
     @classmethod
-    def from_mapping(cls, value: dict[str, Any] | None, *, config_hash: str = "default") -> "DrainConfig":
+    def from_mapping(
+        cls, value: dict[str, Any] | None, *, config_hash: str = "default"
+    ) -> "DrainConfig":
         if not value:
             return cls(config_hash=config_hash)
         extra_delimiters = value.get("extra_delimiters", cls.extra_delimiters)
@@ -70,11 +72,17 @@ class StableDrainAdapter:
 
     parser_version = "stable_drain_adapter_v1"
 
-    UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+    UUID_RE = re.compile(
+        r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+        re.I,
+    )
     HEX_RE = re.compile(r"\b0x[0-9a-f]+\b", re.I)
     NUMBER_RE = re.compile(r"(?<![A-Za-z])\b\d+(?:\.\d+)?\b")
     KEY_VALUE_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_-]*=)([A-Za-z0-9_.:/-]+)")
-    REQUEST_RE = re.compile(r"\b(req|trace|span|session|job|tenant|user)-[A-Za-z0-9_.:-]+\b", re.I)
+    REQUEST_RE = re.compile(
+        r"\b(req|trace|span|session|job|tenant|user)-[A-Za-z0-9_.:-]+\b",
+        re.I,
+    )
     PATHISH_RE = re.compile(r"\b/[A-Za-z0-9_./-]{3,}\b")
 
     def __init__(self, *, config_hash: str = "default") -> None:
@@ -149,7 +157,9 @@ class Drain3Adapter(StableDrainAdapter):
 
     parser_version = "drain3_v1"
 
-    def __init__(self, *, config: DrainConfig | None = None, config_hash: str = "default") -> None:
+    def __init__(
+        self, *, config: DrainConfig | None = None, config_hash: str = "default"
+    ) -> None:
         self.config = config or DrainConfig(config_hash=config_hash)
         super().__init__(config_hash=self.config.config_hash)
 
