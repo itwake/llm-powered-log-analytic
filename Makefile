@@ -37,7 +37,7 @@ full-stack-up:
 	$(COMPOSE) up -d --build postgres redis minio minio-init clickhouse opensearch temporal api worker
 
 full-stack-smoke: full-stack-up
-	$(COMPOSE) run --rm --build smoke
+	$(COMPOSE) --profile smoke run --rm -T --build smoke
 
 full-stack-down:
 	$(COMPOSE) down --remove-orphans

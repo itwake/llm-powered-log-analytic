@@ -223,10 +223,14 @@ async def test_redaction_happens_before_model_input(tmp_path: Path) -> None:
 
 def test_redactor_masks_url_query_and_tokens() -> None:
     text = redact_text(
-        "GET /callback?token=abc123&api_key=xyz bearer Bearer secret.jwt.value card 4111111111111111"
+        "GET /callback?token=abc123&api_key=xyz&source_token=query-secret "
+        "source_token=assignment-secret bearer Bearer secret.jwt.value "
+        "card 4111111111111111"
     )
     assert "abc123" not in text
     assert "xyz" not in text
+    assert "query-secret" not in text
+    assert "assignment-secret" not in text
     assert "secret.jwt.value" not in text
     assert "4111111111111111" not in text
     assert "<SECRET>" in text

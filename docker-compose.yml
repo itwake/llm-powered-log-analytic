@@ -28,6 +28,8 @@ x-logan-env: &logan-env
   LOGAN_COPILOT_REASONING_EFFORT: ${LOGAN_COPILOT_REASONING_EFFORT:-high}
   LOGAN_ANALYTICS_SINKS_ENABLED: "true"
   LOGAN_CLICKHOUSE_URL: http://clickhouse:8123
+  LOGAN_CLICKHOUSE_USERNAME: ${LOGAN_CLICKHOUSE_USERNAME:-logan}
+  LOGAN_CLICKHOUSE_PASSWORD: ${LOGAN_CLICKHOUSE_PASSWORD:-logan}
   LOGAN_CLICKHOUSE_DATABASE: ${LOGAN_CLICKHOUSE_DATABASE:-logan}
   LOGAN_OPENSEARCH_URL: http://opensearch:9200
   LOGAN_EXTERNAL_ANALYTICS_QUERIES_ENABLED: "true"
@@ -111,7 +113,7 @@ services:
     working_dir: /app
     command: ["python", "scripts/full_stack_smoke.py"]
     volumes:
-      - .:/app:ro
+      - .:/app:ro,z
     environment:
       LOGAN_FULL_STACK_API_BASE_URL: http://api:8000
       LOGAN_FULL_STACK_DATABASE_URL: postgresql+psycopg://logan:logan@postgres:5432/logan
@@ -120,7 +122,13 @@ services:
       LOGAN_FULL_STACK_S3_ACCESS_KEY: ${LOGAN_S3_ACCESS_KEY:-logan}
       LOGAN_FULL_STACK_S3_SECRET_KEY: ${LOGAN_S3_SECRET_KEY:-logan-secret}
       LOGAN_FULL_STACK_CLICKHOUSE_URL: http://clickhouse:8123
+      LOGAN_FULL_STACK_CLICKHOUSE_USERNAME: ${LOGAN_CLICKHOUSE_USERNAME:-logan}
+      LOGAN_FULL_STACK_CLICKHOUSE_PASSWORD: ${LOGAN_CLICKHOUSE_PASSWORD:-logan}
       LOGAN_FULL_STACK_CLICKHOUSE_DATABASE: ${LOGAN_CLICKHOUSE_DATABASE:-logan}
+      LOGAN_CLICKHOUSE_URL: http://clickhouse:8123
+      LOGAN_CLICKHOUSE_USERNAME: ${LOGAN_CLICKHOUSE_USERNAME:-logan}
+      LOGAN_CLICKHOUSE_PASSWORD: ${LOGAN_CLICKHOUSE_PASSWORD:-logan}
+      LOGAN_CLICKHOUSE_DATABASE: ${LOGAN_CLICKHOUSE_DATABASE:-logan}
       LOGAN_FULL_STACK_OPENSEARCH_URL: http://opensearch:9200
     depends_on:
       api:
@@ -133,7 +141,7 @@ services:
         condition: service_healthy
 
   postgres:
-    image: postgres:16
+    image: mirror.gcr.io/library/postgres:16
     environment:
       POSTGRES_USER: logan
       POSTGRES_PASSWORD: logan
@@ -149,12 +157,12 @@ services:
       retries: 30
 
   redis:
-    image: redis:7
+    image: mirror.gcr.io/library/redis:7
     ports:
       - "${LOGAN_REDIS_PORT:-6379}:6379"
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${LOGAN_S3_ACCESS_KEY:-logan}
@@ -171,7 +179,7 @@ services:
       retries: 30
 
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     environment:
       MINIO_ROOT_USER: ${LOGAN_S3_ACCESS_KEY:-logan}
       MINIO_ROOT_PASSWORD: ${LOGAN_S3_SECRET_KEY:-logan-secret}
@@ -180,26 +188,35 @@ services:
       minio:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-ec"]
-    command: >
-      mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD";
-      mc mb --ignore-existing "local/$$LOGAN_S3_BUCKET";
+    command:
+      - >
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD";
+        mc mb --ignore-existing "local/$$LOGAN_S3_BUCKET";
 
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: mirror.gcr.io/clickhouse/clickhouse-server:latest
+    environment:
+      CLICKHOUSE_USER: ${LOGAN_CLICKHOUSE_USERNAME:-logan}
+      CLICKHOUSE_PASSWORD: ${LOGAN_CLICKHOUSE_PASSWORD:-logan}
+      CLICKHOUSE_DB: ${LOGAN_CLICKHOUSE_DATABASE:-logan}
     ports:
       - "${LOGAN_CLICKHOUSE_PORT:-8123}:8123"
       - "${LOGAN_CLICKHOUSE_NATIVE_PORT:-9002}:9000"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
     healthcheck:
-      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      test:
+        [
+          "CMD-SHELL",
+          "clickhouse-client --user \"$$CLICKHOUSE_USER\" --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'",
+        ]
       interval: 5s
       timeout: 5s
       retries: 30
       start_period: 10s
 
   opensearch:
-    image: opensearchproject/opensearch:latest
+    image: mirror.gcr.io/opensearchproject/opensearch:latest
     environment:
       discovery.type: single-node
       plugins.security.disabled: "true"
@@ -223,9 +240,9 @@ services:
       start_period: 40s
 
   temporal:
-    image: temporalio/auto-setup:latest
+    image: mirror.gcr.io/temporalio/auto-setup:latest
     environment:
-      DB: postgresql
+      DB: postgres12
       DB_PORT: 5432
       POSTGRES_USER: logan
       POSTGRES_PWD: logan

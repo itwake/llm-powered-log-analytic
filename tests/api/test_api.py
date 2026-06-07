@@ -22,7 +22,7 @@ from app.services.copilot_model_gateway import (
     CopilotTransportError,
 )
 from app.services.copilot_auth_service import DeviceCodePollResult, MockGitHubDeviceClient
-from app.store import InMemoryStore
+from app.store import InMemoryStore, merge_analysis_result_progress
 
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
@@ -39,6 +39,17 @@ PIPELINE_STEPS = [
     "causal_summary",
     "export_artifacts",
 ]
+
+
+def test_merge_analysis_result_progress_preserves_orchestrator() -> None:
+    assert merge_analysis_result_progress(
+        {"current_step": "workflow_start", "orchestrator": "temporal"},
+        {"current_step": "completed", "files_processed": 3},
+    ) == {
+        "current_step": "completed",
+        "files_processed": 3,
+        "orchestrator": "temporal",
+    }
 
 
 class FailingAnnotationGateway(MockCopilotAnnotationGateway):

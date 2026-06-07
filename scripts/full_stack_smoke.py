@@ -64,6 +64,14 @@ def _env(name: str, default: str) -> str:
     return os.getenv(name, default).strip()
 
 
+def _env_first(*names: str) -> str | None:
+    for name in names:
+        value = os.getenv(name)
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
 def _log(message: str) -> None:
     print(f"[full-stack-smoke] {message}", flush=True)
 
@@ -72,6 +80,8 @@ def _redact_error(message: object) -> str:
     text_value = str(message)
     for secret in (
         _env("LOGAN_FULL_STACK_S3_SECRET_KEY", ""),
+        os.getenv("LOGAN_FULL_STACK_CLICKHOUSE_PASSWORD", ""),
+        os.getenv("LOGAN_CLICKHOUSE_PASSWORD", ""),
         os.getenv("LOGAN_GITHUB_COPILOT_TOKEN", ""),
         os.getenv("LOGAN_GITHUB_SOURCE_TOKEN", ""),
         FAKE_SECRET_TOKEN,
@@ -117,6 +127,19 @@ def _retry(
             time.sleep(interval_seconds)
     detail = _redact_error(last_error) if last_error else "timed out"
     raise SmokeFailure(f"{name} did not become ready: {detail}")
+
+
+def _clickhouse_credentials() -> tuple[str | None, str | None]:
+    return (
+        _env_first("LOGAN_FULL_STACK_CLICKHOUSE_USERNAME", "LOGAN_CLICKHOUSE_USERNAME"),
+        _env_first("LOGAN_FULL_STACK_CLICKHOUSE_PASSWORD", "LOGAN_CLICKHOUSE_PASSWORD"),
+    )
+
+
+def _basic_auth(username: str | None, password: str | None) -> httpx.BasicAuth | None:
+    if not (username or password):
+        return None
+    return httpx.BasicAuth(username or "", password or "")
 
 
 def _request_json(
@@ -301,7 +324,15 @@ def _upload_fixtures(
     return file_ids
 
 
-def _clickhouse_count(url: str, query: str, *, case_id: str, run_id: str) -> int:
+def _clickhouse_count(
+    url: str,
+    query: str,
+    *,
+    case_id: str,
+    run_id: str,
+    username: str | None,
+    password: str | None,
+) -> int:
     def call() -> int:
         response = httpx.post(
             url,
@@ -310,6 +341,7 @@ def _clickhouse_count(url: str, query: str, *, case_id: str, run_id: str) -> int
                 "param_case_id": case_id,
                 "param_run_id": run_id,
             },
+            auth=_basic_auth(username, password),
             timeout=10,
         )
         response.raise_for_status()
@@ -414,6 +446,7 @@ def main() -> int:
     clickhouse_database = _safe_clickhouse_identifier(
         _env("LOGAN_FULL_STACK_CLICKHOUSE_DATABASE", _env("LOGAN_CLICKHOUSE_DATABASE", "logan"))
     )
+    clickhouse_username, clickhouse_password = _clickhouse_credentials()
     opensearch_url = _env("LOGAN_FULL_STACK_OPENSEARCH_URL", "http://localhost:9200").rstrip("/")
 
     with httpx.Client(base_url=api_base_url, timeout=30) as client:
@@ -556,6 +589,8 @@ def main() -> int:
             ),
             case_id=case_id,
             run_id=run_id,
+            username=clickhouse_username,
+            password=clickhouse_password,
         )
         clickhouse_windows = _clickhouse_count(
             clickhouse_url,
@@ -568,6 +603,8 @@ def main() -> int:
             ),
             case_id=case_id,
             run_id=run_id,
+            username=clickhouse_username,
+            password=clickhouse_password,
         )
         opensearch_docs = _opensearch_count(opensearch_url, case_id=case_id, run_id=run_id)
         _assert(clickhouse_logs > 0, "ClickHouse enriched_log_lines had no rows")

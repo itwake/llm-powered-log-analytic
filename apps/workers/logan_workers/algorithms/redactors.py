@@ -7,7 +7,8 @@ from dataclasses import dataclass
 
 
 URL_SECRET_RE = re.compile(
-    r"([?&](?:token|access_token|password|passwd|secret|api_key|apikey|key)=)([^&\s]+)",
+    r"([?&](?:token|access_token|source_token|password|passwd|secret|api_key|apikey|key)=)"
+    r"([^&\s]+)",
     re.IGNORECASE,
 )
 JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
@@ -16,7 +17,8 @@ EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 IPV6_RE = re.compile(r"\b(?:[A-Fa-f0-9]{1,4}:){2,7}[A-Fa-f0-9]{1,4}\b")
 ASSIGNMENT_SECRET_RE = re.compile(
-    r"\b(password|passwd|secret|api[_-]?key|token|access[_-]?token)=([^\s,&]+)",
+    r"\b(password|passwd|secret|api[_-]?key|token|access[_-]?token|source[_-]?token)="
+    r"([^\s,&]+)",
     re.IGNORECASE,
 )
 TENANT_RE = re.compile(r"\b(?:tenant|customer)[_-]?id=([A-Za-z0-9._:-]+)", re.IGNORECASE)

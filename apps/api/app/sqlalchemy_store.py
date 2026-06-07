@@ -76,6 +76,7 @@ from app.store import (
     _case_role_allows,
     _validate_case_role,
     _validate_global_role,
+    merge_analysis_result_progress,
     model_invocation_audit_metadata,
     merge_recorded_progress,
     sanitize_error_message,
@@ -555,6 +556,7 @@ class SQLAlchemyStore:
                 updated_at=_now(),
             )
             session.add(case)
+            session.flush()
             session.add(
                 tables.CaseCollaborator(
                     id=str(uuid.uuid4()),
@@ -2372,7 +2374,9 @@ class SQLAlchemyStore:
             if run is None:
                 raise KeyError(run_id)
             run.error_message = None
-            run.progress_json = result.progress
+            run.progress_json = merge_analysis_result_progress(
+                run.progress_json, result.progress
+            )
             run.result_json = result_json
             self._fan_out_analysis_result(session=session, run=run, result=result)
             model_invocation_audit_count = (
@@ -2412,7 +2416,9 @@ class SQLAlchemyStore:
             run.status = "completed"
             run.completed_at = _now()
             run.error_message = None
-            run.progress_json = result.progress
+            run.progress_json = merge_analysis_result_progress(
+                run.progress_json, result.progress
+            )
             if case:
                 case.status = "ready"
                 case.updated_at = _now()

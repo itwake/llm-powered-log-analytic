@@ -260,6 +260,10 @@ def test_clickhouse_publisher_manages_database_and_tables_before_inserts() -> No
         "CREATE TABLE IF NOT EXISTS logan.window_aggregates"
     )
     assert "MergeTree" in queries[2]
+    assert (
+        "ORDER BY (case_id, analysis_run_id, window_start, ifNull(template_id, ''))"
+        in queries[2]
+    )
     assert queries[3] == (
         "INSERT INTO logan.enriched_log_lines FORMAT JSONEachRow"
     )

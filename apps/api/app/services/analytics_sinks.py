@@ -88,7 +88,7 @@ _CLICKHOUSE_TABLE_SCHEMAS: dict[str, str] = {
 }
 _CLICKHOUSE_TABLE_ORDER_BY: dict[str, str] = {
     "enriched_log_lines": "(case_id, analysis_run_id, ingestion_order, log_id)",
-    "window_aggregates": "(case_id, analysis_run_id, window_start, template_id)",
+    "window_aggregates": "(case_id, analysis_run_id, window_start, ifNull(template_id, ''))",
 }
 
 _OPENSEARCH_INDEX_BODY: dict[str, Any] = {

@@ -481,6 +481,18 @@ def apply_job_event_progress(
     return next_progress
 
 
+def merge_analysis_result_progress(
+    existing_progress: dict[str, Any] | None,
+    result_progress: dict[str, Any],
+) -> dict[str, Any]:
+    progress = dict(result_progress)
+    if "orchestrator" not in progress and isinstance(existing_progress, dict):
+        orchestrator = existing_progress.get("orchestrator")
+        if orchestrator:
+            progress["orchestrator"] = orchestrator
+    return progress
+
+
 @dataclass
 class FeedbackRecord:
     id: str
@@ -1487,7 +1499,7 @@ class InMemoryStore:
             return run
         case = self.cases.get(run.case_id)
         run.result = result
-        run.progress = result.progress
+        run.progress = merge_analysis_result_progress(run.progress, result.progress)
         run.status = "completed"
         run.completed_at = datetime.now(UTC)
         run.error_message = None
