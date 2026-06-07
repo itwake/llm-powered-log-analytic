@@ -36,6 +36,7 @@ x-logan-env: &logan-env
   LOGAN_EXTERNAL_ANALYTICS_QUERY_TIMEOUT_SECONDS: "10"
   LOGAN_ANALYTICS_SINK_FAILURE_MODE: fail
   LOGAN_RATE_LIMIT_ENABLED: "false"
+  LOGAN_API_WORKERS: ${LOGAN_API_WORKERS:-1}
   LOGAN_METRICS_ENABLED: "true"
   LOGAN_CORS_ALLOWED_ORIGINS: ${LOGAN_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
   LOGAN_OTEL_ENABLED: "false"
@@ -53,6 +54,16 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 15
+      start_period: 15s
 
   api:
     build:

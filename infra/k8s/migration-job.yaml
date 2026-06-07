@@ -10,8 +10,8 @@ spec:
       containers:
         - name: migrate
           image: ghcr.io/itwake/logan-api:latest
-          command: ["alembic", "upgrade", "head"]
-          workingDir: /app/apps/api
+          command: ["python", "scripts/run_migrations.py"]
+          workingDir: /app
           envFrom:
             - configMapRef:
                 name: logan-config

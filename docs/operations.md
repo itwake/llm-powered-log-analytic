@@ -241,6 +241,8 @@ and `sqlalchemy` force a backend explicitly.
 Set `LOGAN_CORS_ALLOWED_ORIGINS` to a comma-separated list of browser origins allowed to send
 credentialed API requests. The default is `http://localhost:3000`; production deployments should
 set it to the deployed web origin, such as `https://logan.example.com`.
+Containerized API deployments can set `LOGAN_API_WORKERS` to control the number of Uvicorn worker
+processes. Keep it low for local smoke runs and size it from CPU limits in Kubernetes.
 
 Uploads use `LOGAN_OBJECT_STORE_BACKEND=local` by default. The API returns an authenticated
 `PUT /api/cases/{case_id}/uploads/{file_id}/content` URL, writes raw bytes to
