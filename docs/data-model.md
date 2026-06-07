@@ -8,8 +8,8 @@ The production metadata model follows the final specification and is represented
 
 Core tables:
 
-- `users`, `sessions`, `copilot_credentials`, `copilot_device_auth`
-- `cases`, `case_collaborators`
+- `organizations`, `users`, `sessions`, `copilot_credentials`, `copilot_device_auth`
+- `cases`, `case_collaborators`, `policy_groups`, `policy_group_members`, `case_group_access`
 - `analysis_runs`, `job_events`, `analysis_step_artifacts`, `analytics_sink_writes`
 - `raw_files`, `raw_log_lines`, `normalized_log_lines`
 - `log_templates`, `representative_samples`, `template_annotations`
@@ -18,14 +18,20 @@ Core tables:
 - `feedback`, `exports`, `audit_logs`
 
 The API now has a durable SQLAlchemy metadata store for auth/session, Copilot credentials,
-device-auth polling state, cases, uploads, analysis runs, serialized results, normalized
-PostgreSQL/SQLite analytics rows, exports, feedback, and audit logs. The in-memory store
-remains available as an explicit lightweight test option.
+device-auth polling state, organizations, policy groups, cases, uploads, analysis runs,
+serialized results, normalized PostgreSQL/SQLite analytics rows, exports, feedback, and audit
+logs. The in-memory store remains available as an explicit lightweight test option.
 
 `case_collaborators` stores per-case access grants with `case_id`, `user_id`, `role`, `added_by`,
 and create/update timestamps. `(case_id, user_id)` is unique. New case creators are written as
 `owner` collaborators, and access checks also treat `cases.created_by` as an implicit owner so
 pre-existing cases remain accessible after migration.
+
+Organizations provide tenant isolation for users and cases. `policy_groups` are scoped by
+organization and can grant viewer/editor/owner case access through `case_group_access`, while
+`policy_group_members` records group membership and member roles. SCIM user and group sync writes
+to the same user and policy-group tables; bearer-token SCIM traffic is scoped to
+`LOGAN_SCIM_ORGANIZATION_ID`, defaulting to the default organization.
 
 When an analysis completes, the SQLAlchemy store keeps the full `AnalysisResult` serialized
 on `analysis_runs.result_json` with `model_inputs=[]` and also fans worker artifacts out into
@@ -105,4 +111,5 @@ available for the report endpoints.
 Remaining production data-model work:
 
 - External analytics store aliases/retention policy.
-- Advanced policy groups or SCIM/user-directory integration if required by deployment.
+- Tenant-specific encryption-key management and external directory policy mapping if required by
+  deployment.
