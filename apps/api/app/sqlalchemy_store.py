@@ -198,6 +198,14 @@ def _sync_database_url(database_url: str) -> str:
     return database_url
 
 
+def _postgres_incremental_migration_paths(migrations_dir: Path) -> list[Path]:
+    return [
+        path
+        for path in sorted(migrations_dir.glob("*.sql"))
+        if path.name != "0001_initial.sql"
+    ]
+
+
 class SQLAlchemyStore:
     def __init__(
         self,
@@ -221,7 +229,19 @@ class SQLAlchemyStore:
         self.session_factory = sessionmaker(self.engine, expire_on_commit=False, future=True)
         if create_schema:
             Base.metadata.create_all(self.engine)
+            self._run_postgres_incremental_migrations()
             self.ensure_organization(is_default=True)
+
+    def _run_postgres_incremental_migrations(self) -> None:
+        if self.engine.dialect.name != "postgresql":
+            return
+        migrations_dir = Path(__file__).resolve().parents[1] / "migrations"
+        for migration_path in _postgres_incremental_migration_paths(migrations_dir):
+            sql = migration_path.read_text(encoding="utf-8").strip()
+            if not sql:
+                continue
+            with self.engine.begin() as connection:
+                connection.exec_driver_sql(sql)
 
     @contextmanager
     def _session(self) -> Iterator[Session]:

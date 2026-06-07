@@ -16,7 +16,7 @@ from app.core.security import decrypt_token
 from app.main import create_app
 from app.models import tables
 from app.services.copilot_auth_service import MockGitHubDeviceClient
-from app.sqlalchemy_store import SQLAlchemyStore
+from app.sqlalchemy_store import SQLAlchemyStore, _postgres_incremental_migration_paths
 from app.store import RAW_LOG_RETAINED_MARKER, create_store
 
 
@@ -44,6 +44,17 @@ class FakeS3Client:
     def download_file(self, *, Bucket: str, Key: str, Filename: str) -> None:
         self.download_calls.append({"Bucket": Bucket, "Key": Key, "Filename": Filename})
         Path(Filename).write_bytes(self.objects[(Bucket, Key)])
+
+
+def test_postgres_incremental_migration_paths_skip_initial_schema() -> None:
+    names = [
+        path.name
+        for path in _postgres_incremental_migration_paths(Path("apps/api/migrations"))
+    ]
+
+    assert "0001_initial.sql" not in names
+    assert "0002_analysis_step_artifacts.sql" in names
+    assert "0003_enterprise_policy_scim.sql" in names
 
 
 async def _client(store: SQLAlchemyStore) -> AsyncClient:

@@ -29,7 +29,19 @@ ALTER TABLE copilot_credentials
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'fk_users_organization'
+    SELECT 1
+    FROM pg_constraint constraint_record
+    JOIN pg_class source_table
+      ON source_table.oid = constraint_record.conrelid
+    JOIN pg_class target_table
+      ON target_table.oid = constraint_record.confrelid
+    JOIN pg_attribute source_column
+      ON source_column.attrelid = source_table.oid
+     AND source_column.attnum = ANY(constraint_record.conkey)
+    WHERE constraint_record.contype = 'f'
+      AND source_table.relname = 'users'
+      AND source_column.attname = 'organization_id'
+      AND target_table.relname = 'organizations'
   ) THEN
     ALTER TABLE users
       ADD CONSTRAINT fk_users_organization
@@ -37,7 +49,19 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'fk_cases_organization'
+    SELECT 1
+    FROM pg_constraint constraint_record
+    JOIN pg_class source_table
+      ON source_table.oid = constraint_record.conrelid
+    JOIN pg_class target_table
+      ON target_table.oid = constraint_record.confrelid
+    JOIN pg_attribute source_column
+      ON source_column.attrelid = source_table.oid
+     AND source_column.attnum = ANY(constraint_record.conkey)
+    WHERE constraint_record.contype = 'f'
+      AND source_table.relname = 'cases'
+      AND source_column.attname = 'organization_id'
+      AND target_table.relname = 'organizations'
   ) THEN
     ALTER TABLE cases
       ADD CONSTRAINT fk_cases_organization
