@@ -266,7 +266,7 @@ class MockCopilotAnnotationGateway:
             ],
             "uncertainties": [
                 "Clock skew and sparse windows may affect causal ordering.",
-                "Database pool metrics and traces are required before final RCA.",
+                "Service metrics and traces are required before final RCA.",
             ],
             "confidence": 0.78,
         }
