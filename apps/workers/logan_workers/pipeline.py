@@ -201,12 +201,14 @@ class AnalyzeCasePipeline:
             ),
             lambda value: {"normalized_lines": len(value)},
         )
+        drain_config = config.get("drain") if isinstance(config.get("drain"), dict) else {}
         normalized, templates = await run_step(
             "drain_templating",
             lambda: run_drain_templating(
                 case_id=case_id,
                 analysis_run_id=analysis_run_id,
                 logs=normalized,
+                config=drain_config,
             ),
             lambda value: {"normalized_lines": len(value[0]), "templates": len(value[1])},
         )

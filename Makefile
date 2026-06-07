@@ -3,7 +3,7 @@ PYTHON ?= python3
 SCALE_PROFILE ?= quick
 SCALE_TARGET_BYTES ?=
 
-.PHONY: setup up migrate test evaluate scale-benchmark e2e lint api worker web full-stack-up full-stack-smoke full-stack-down copilot-staging-smoke temporal-retry-smoke
+.PHONY: setup up migrate test evaluate scale-benchmark e2e lint api worker web full-stack-up full-stack-smoke full-stack-down copilot-staging-smoke temporal-retry-smoke openapi-snapshot
 
 setup:
 	corepack enable
@@ -64,3 +64,6 @@ copilot-staging-smoke:
 
 temporal-retry-smoke:
 	LOGAN_RUN_TEMPORAL_INTEGRATION=true python3 -m pytest -q tests/integration/test_temporal_retry.py
+
+openapi-snapshot:
+	$(PYTHON) scripts/export_openapi.py --out docs/openapi.snapshot.json
