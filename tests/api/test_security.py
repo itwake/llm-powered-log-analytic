@@ -71,3 +71,22 @@ def test_credential_keyring_encrypts_with_key_id_and_decrypts_legacy_tokens() ->
     assert security.decrypt_token(encrypted, "current-secret") == "current-token"
     assert security.decrypt_token_for_settings(encrypted, app_settings) == "current-token"
     assert security.decrypt_token_for_settings(legacy, app_settings) == "legacy-token"
+
+
+def test_production_settings_reject_default_runtime_secrets() -> None:
+    app_settings = Settings(
+        env="production",
+        secret_key="change-me",
+        credential_encryption_key="change-me-local-key",
+    )
+
+    with pytest.raises(ValueError, match="Invalid production configuration"):
+        app_settings.validate_for_runtime()
+
+
+def test_production_settings_accept_non_default_runtime_secrets() -> None:
+    Settings(
+        env="production",
+        secret_key="s" * 32,
+        credential_encryption_key="c" * 32,
+    ).validate_for_runtime()

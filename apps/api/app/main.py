@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, auth, capabilities, cases, chat, copilot_auth, scim
+from app.config import validate_runtime_settings
 from app.observability import configure_otel, install_metrics
 from app.rate_limit import RateLimitMiddleware
 from app.services.copilot_auth_service import DeviceCodeClient, GitHubDeviceCodeClient
@@ -37,6 +38,7 @@ def create_app(
         return {"status": "ok"}
 
     app.state.store = store or create_store()
+    validate_runtime_settings(app.state.store.settings)
     app.state.s3_client_factory = s3_client_factory
     app.state.copilot_auth_client = copilot_auth_client or GitHubDeviceCodeClient(
         app_settings=app.state.store.settings

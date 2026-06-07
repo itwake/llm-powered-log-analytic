@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -10,6 +11,19 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+PRODUCTION_ENV_NAMES = {"prod", "production"}
+DEFAULT_SECRET_KEYS = {"", "change-me", "logan-local-dev-secret"}
+DEFAULT_CREDENTIAL_ENCRYPTION_KEYS = {
+    "",
+    "change-me-local-key",
+    "logan-local-dev-credential-key",
+}
+
+
+def _is_unsafe_production_secret(value: str, unsafe_values: Iterable[str]) -> bool:
+    return value.strip() in unsafe_values or len(value.strip()) < 32
 
 
 @dataclass(frozen=True)
@@ -111,6 +125,28 @@ class Settings:
     scim_organization_id: str = (
         os.getenv("LOGAN_SCIM_ORGANIZATION_ID", "default").strip() or "default"
     )
+
+    def validate_for_runtime(self) -> None:
+        if self.env.strip().lower() not in PRODUCTION_ENV_NAMES:
+            return
+        errors: list[str] = []
+        if _is_unsafe_production_secret(self.secret_key, DEFAULT_SECRET_KEYS):
+            errors.append(
+                "LOGAN_SECRET_KEY must be set to a non-default value with at least 32 characters"
+            )
+        if _is_unsafe_production_secret(
+            self.credential_encryption_key, DEFAULT_CREDENTIAL_ENCRYPTION_KEYS
+        ):
+            errors.append(
+                "LOGAN_CREDENTIAL_ENCRYPTION_KEY must be set to a non-default value "
+                "with at least 32 characters"
+            )
+        if errors:
+            raise ValueError("Invalid production configuration: " + "; ".join(errors))
+
+
+def validate_runtime_settings(app_settings: Settings) -> None:
+    app_settings.validate_for_runtime()
 
 
 settings = Settings()

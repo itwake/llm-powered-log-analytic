@@ -16,7 +16,12 @@ from app.core.security import decrypt_token
 from app.main import create_app
 from app.models import tables
 from app.services.copilot_auth_service import MockGitHubDeviceClient
-from app.sqlalchemy_store import SQLAlchemyStore, _postgres_incremental_migration_paths
+from app.sqlalchemy_store import (
+    SQLAlchemyStore,
+    _postgres_incremental_migration_paths,
+    _postgres_migration_checksum,
+    _postgres_migration_version,
+)
 from app.store import RAW_LOG_RETAINED_MARKER, create_store
 
 
@@ -44,6 +49,17 @@ class FakeS3Client:
     def download_file(self, *, Bucket: str, Key: str, Filename: str) -> None:
         self.download_calls.append({"Bucket": Bucket, "Key": Key, "Filename": Filename})
         Path(Filename).write_bytes(self.objects[(Bucket, Key)])
+
+
+
+def test_postgres_migration_metadata_helpers_are_stable() -> None:
+    migration_path = Path("apps/api/migrations/0003_enterprise_policy_scim.sql")
+    sql = migration_path.read_text(encoding="utf-8")
+
+    assert _postgres_migration_version(migration_path) == "0003_enterprise_policy_scim"
+    assert _postgres_migration_checksum(sql) == _postgres_migration_checksum(sql)
+    changed_checksum = _postgres_migration_checksum(sql + "\n-- changed")
+    assert _postgres_migration_checksum(sql) != changed_checksum
 
 
 def test_postgres_incremental_migration_paths_skip_initial_schema() -> None:

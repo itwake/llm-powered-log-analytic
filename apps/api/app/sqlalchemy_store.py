@@ -12,14 +12,13 @@ from typing import Any, Iterator
 from logan_workers.activities.export import export_analysis
 from logan_workers.models import AnalysisResult, OFFENDING_SIGNALS
 from logan_workers.pipeline import AnalyzeCasePipeline
-from sqlalchemy import create_engine, delete, func, or_, select
+from sqlalchemy import create_engine, delete, func, or_, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings, settings
 from app.core.security import (
-    credential_key_id_from_settings,
     default_session_expiry,
     encrypt_token_for_settings,
     hash_password,
@@ -206,6 +205,29 @@ def _postgres_incremental_migration_paths(migrations_dir: Path) -> list[Path]:
     ]
 
 
+def _postgres_migration_version(migration_path: Path) -> str:
+    return migration_path.stem
+
+
+def _postgres_migration_checksum(sql: str) -> str:
+    return hashlib.sha256(sql.encode("utf-8")).hexdigest()
+
+
+_SCHEMA_MIGRATIONS_LOCK_NAME = "logan_schema_migrations"
+_SCHEMA_MIGRATIONS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version TEXT PRIMARY KEY,
+  checksum TEXT NOT NULL,
+  status TEXT NOT NULL,
+  applied_at TIMESTAMPTZ,
+  duration_ms BIGINT,
+  error_message TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+)
+"""
+
+
 class SQLAlchemyStore:
     def __init__(
         self,
@@ -236,12 +258,107 @@ class SQLAlchemyStore:
         if self.engine.dialect.name != "postgresql":
             return
         migrations_dir = Path(__file__).resolve().parents[1] / "migrations"
+        self._ensure_postgres_schema_migrations_table()
         for migration_path in _postgres_incremental_migration_paths(migrations_dir):
-            sql = migration_path.read_text(encoding="utf-8").strip()
-            if not sql:
-                continue
+            self._apply_postgres_incremental_migration(migration_path)
+
+    def _lock_postgres_schema_migrations(self, connection: Any) -> None:
+        connection.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_name))"),
+            {"lock_name": _SCHEMA_MIGRATIONS_LOCK_NAME},
+        )
+
+    def _ensure_postgres_schema_migrations_table(self) -> None:
+        with self.engine.begin() as connection:
+            self._lock_postgres_schema_migrations(connection)
+            connection.exec_driver_sql(_SCHEMA_MIGRATIONS_TABLE_SQL)
+
+    def _apply_postgres_incremental_migration(self, migration_path: Path) -> None:
+        sql = migration_path.read_text(encoding="utf-8").strip()
+        if not sql:
+            return
+        version = _postgres_migration_version(migration_path)
+        checksum = _postgres_migration_checksum(sql)
+        started_at = time.perf_counter()
+        try:
             with self.engine.begin() as connection:
+                self._lock_postgres_schema_migrations(connection)
+                connection.exec_driver_sql(_SCHEMA_MIGRATIONS_TABLE_SQL)
+                existing = connection.execute(
+                    text(
+                        "SELECT checksum, status FROM schema_migrations "
+                        "WHERE version = :version"
+                    ),
+                    {"version": version},
+                ).mappings().first()
+                if existing:
+                    if existing["checksum"] != checksum:
+                        raise RuntimeError(
+                            f"Postgres migration {version} checksum changed; "
+                            "manual operator review is required"
+                        )
+                    if existing["status"] == "applied":
+                        return
+                    if existing["status"] == "failed":
+                        raise RuntimeError(
+                            f"Postgres migration {version} previously failed; "
+                            "manual operator review is required"
+                        )
+                connection.execute(
+                    text(
+                        "INSERT INTO schema_migrations "
+                        "(version, checksum, status, updated_at) "
+                        "VALUES (:version, :checksum, 'running', now()) "
+                        "ON CONFLICT (version) DO UPDATE SET "
+                        "checksum = EXCLUDED.checksum, status = 'running', "
+                        "error_message = NULL, updated_at = now()"
+                    ),
+                    {"version": version, "checksum": checksum},
+                )
                 connection.exec_driver_sql(sql)
+                duration_ms = int((time.perf_counter() - started_at) * 1000)
+                connection.execute(
+                    text(
+                        "UPDATE schema_migrations "
+                        "SET status = 'applied', applied_at = now(), "
+                        "duration_ms = :duration_ms, error_message = NULL, updated_at = now() "
+                        "WHERE version = :version"
+                    ),
+                    {"version": version, "duration_ms": duration_ms},
+                )
+        except Exception as exc:
+            message = sanitize_error_message(exc)
+            if "checksum changed" not in message and "previously failed" not in message:
+                self._record_postgres_migration_failure(version, checksum, message, started_at)
+            raise
+
+    def _record_postgres_migration_failure(
+        self, version: str, checksum: str, message: str, started_at: float
+    ) -> None:
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
+        try:
+            with self.engine.begin() as connection:
+                self._lock_postgres_schema_migrations(connection)
+                connection.exec_driver_sql(_SCHEMA_MIGRATIONS_TABLE_SQL)
+                connection.execute(
+                    text(
+                        "INSERT INTO schema_migrations "
+                        "(version, checksum, status, duration_ms, error_message, updated_at) "
+                        "VALUES (:version, :checksum, 'failed', :duration_ms, :message, now()) "
+                        "ON CONFLICT (version) DO UPDATE SET "
+                        "checksum = EXCLUDED.checksum, status = 'failed', "
+                        "duration_ms = EXCLUDED.duration_ms, "
+                        "error_message = EXCLUDED.error_message, updated_at = now()"
+                    ),
+                    {
+                        "version": version,
+                        "checksum": checksum,
+                        "duration_ms": duration_ms,
+                        "message": message[:1000],
+                    },
+                )
+        except Exception:
+            return
 
     @contextmanager
     def _session(self) -> Iterator[Session]:
