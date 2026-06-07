@@ -52,6 +52,29 @@ def test_merge_analysis_result_progress_preserves_orchestrator() -> None:
     }
 
 
+@pytest.mark.asyncio
+async def test_cors_allowed_origins_are_configurable() -> None:
+    app_settings = Settings(cors_allowed_origins="https://logan.example.com, http://localhost:3000")
+    app = create_app(
+        store=InMemoryStore(app_settings),
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.options(
+            "/api/auth/me",
+            headers={
+                "Origin": "https://logan.example.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://logan.example.com"
+
+
 class FailingAnnotationGateway(MockCopilotAnnotationGateway):
     async def responses(self, **kwargs):
         raise RuntimeError(

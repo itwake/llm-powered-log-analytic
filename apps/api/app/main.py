@@ -46,7 +46,7 @@ def create_app(
     app.state.model_gateway = model_gateway or _default_model_gateway(app.state.store)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],
+        allow_origins=app.state.store.settings.cors_origins(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

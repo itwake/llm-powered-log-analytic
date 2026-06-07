@@ -48,6 +48,8 @@ jobs:
         run: pnpm --filter @logan/web build
       - name: Typecheck web
         run: pnpm --filter @logan/web test
+      - name: Build production web image
+        run: docker build -f infra/docker/web.Dockerfile -t logan-web-ci .
 
   full-stack-smoke:
     runs-on: ubuntu-latest

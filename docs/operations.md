@@ -200,6 +200,16 @@ duration, and timestamps, guarded by a PostgreSQL advisory lock so concurrent AP
 race the same migration. A checksum change or previously failed migration is treated as an
 operator-review condition rather than being retried blindly.
 
+Run the same migration path explicitly with:
+
+```bash
+make migrate
+```
+
+The command calls `scripts/run_migrations.py`. It creates the SQLAlchemy schema for SQLite and
+PostgreSQL stores, applies PostgreSQL incremental SQL migrations with `schema_migrations`
+tracking, and exits as a no-op for the explicit in-memory store.
+
 The pytest wrapper is opt-in:
 
 ```bash
@@ -228,6 +238,9 @@ Set `LOGAN_DATABASE_URL=sqlite:////tmp/logan.db` for local durable metadata, or 
 PostgreSQL URL such as `postgresql+psycopg://logan:logan@postgres:5432/logan`.
 `LOGAN_STORE_BACKEND=auto` selects SQLAlchemy when `LOGAN_DATABASE_URL` is set; `memory`
 and `sqlalchemy` force a backend explicitly.
+Set `LOGAN_CORS_ALLOWED_ORIGINS` to a comma-separated list of browser origins allowed to send
+credentialed API requests. The default is `http://localhost:3000`; production deployments should
+set it to the deployed web origin, such as `https://logan.example.com`.
 
 Uploads use `LOGAN_OBJECT_STORE_BACKEND=local` by default. The API returns an authenticated
 `PUT /api/cases/{case_id}/uploads/{file_id}/content` URL, writes raw bytes to

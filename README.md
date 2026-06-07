@@ -9,7 +9,8 @@ This repository is the staged foundation for the final product. The current impl
 - `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, real GitHub Copilot device-code auth, Copilot `/responses` gateway with streaming support, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters with lifecycle/idempotency tracking, opt-in external temporal/log report query paths, and a lightweight in-memory store for explicit tests/local experimentation.
 - `apps/workers`: Python log-analysis pipeline plus Temporal workflow/activity worker for ingestion, multi-line merge, timestamp parsing, redaction, templating, representative sampling, model annotation, label broadcasting, temporal aggregation, candidate causal graph generation with PGEM-style and Granger-style evidence, evidence-packet causal summary generation through the model gateway, cautious fallback summary rendering, and export generation.
 - `apps/web`: Next.js/React/TypeScript operational workbench shell aligned to final API shapes, with Apache ECharts for Temporal View stacked time windows and Cytoscape.js for the directed Causal Graph.
-- `infra/docker`: first-pass Dockerfiles for web, API, and worker.
+- `infra/docker`: Dockerfiles for web, API, and worker. The web image builds the Next.js app and
+  serves it with `next start` rather than the development server.
 - `infra/k8s`: coherent Kubernetes manifests for namespace, config, secrets examples, deployments, services, ingress, PVCs, migration job, and network policy.
 
 ## Local Setup
@@ -107,6 +108,8 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web
 
 `NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. Browser API calls use
 `credentials: "include"` so the FastAPI `logan_session` cookie is sent to the backend.
+Set `LOGAN_CORS_ALLOWED_ORIGINS` on the API to the comma-separated browser origins that may send
+credentialed requests, for example `https://logan.example.com,http://localhost:3000`.
 The default local API uses in-memory metadata unless `LOGAN_DATABASE_URL` is set.
 Uploaded bytes use the local object store by default and are written under
 `.logan/object-store` unless `LOGAN_LOCAL_OBJECT_STORE_DIR` is set.

@@ -15,7 +15,7 @@ up:
 	$(COMPOSE) up --build
 
 migrate:
-	cd apps/api && alembic upgrade head
+	$(PYTHON) scripts/run_migrations.py
 
 test:
 	$(PYTHON) -m pytest tests

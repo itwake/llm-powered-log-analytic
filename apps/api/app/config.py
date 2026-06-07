@@ -13,6 +13,12 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _origin_list(value: str | None) -> list[str]:
+    if value is None:
+        return []
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
 PRODUCTION_ENV_NAMES = {"prod", "production"}
 DEFAULT_SECRET_KEYS = {"", "change-me", "logan-local-dev-secret"}
 DEFAULT_CREDENTIAL_ENCRYPTION_KEYS = {
@@ -99,6 +105,9 @@ class Settings:
     )
     metrics_enabled: bool = _env_bool("LOGAN_METRICS_ENABLED", True)
     metrics_path: str = os.getenv("LOGAN_METRICS_PATH", "/metrics")
+    cors_allowed_origins: str = os.getenv(
+        "LOGAN_CORS_ALLOWED_ORIGINS", "http://localhost:3000"
+    )
     otel_enabled: bool = _env_bool("LOGAN_OTEL_ENABLED", False)
     otel_service_name: str = os.getenv("LOGAN_OTEL_SERVICE_NAME", "logan-api")
     otel_exporter_otlp_endpoint: str | None = (
@@ -143,6 +152,9 @@ class Settings:
             )
         if errors:
             raise ValueError("Invalid production configuration: " + "; ".join(errors))
+
+    def cors_origins(self) -> list[str]:
+        return _origin_list(self.cors_allowed_origins) or ["http://localhost:3000"]
 
 
 def validate_runtime_settings(app_settings: Settings) -> None:
