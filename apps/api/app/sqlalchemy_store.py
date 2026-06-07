@@ -19,8 +19,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings, settings
 from app.core.security import (
+    credential_key_id_from_settings,
     default_session_expiry,
-    encrypt_token,
+    encrypt_token_for_settings,
     hash_password,
     hash_token,
     issue_session_token,
@@ -58,15 +59,23 @@ from app.store import (
     AnalysisStepArtifactRecord,
     AnalyticsSinkWriteRecord,
     AuditLogRecord,
+    CaseGroupAccessRecord,
     CaseCollaboratorRecord,
     CaseRecord,
+    CASE_PERMISSION_ROLES,
     CopilotAuthRecord,
     COPILOT_AUTH_CREDENTIAL_TYPES,
     CredentialRecord,
+    DEFAULT_ORGANIZATION_ID,
+    DEFAULT_ORGANIZATION_NAME,
+    DEFAULT_ORGANIZATION_SLUG,
     ExportRecord,
     FeedbackRecord,
     JobEventRecord,
     MODEL_INVOCATION_AUDIT_ACTION,
+    OrganizationRecord,
+    PolicyGroupMemberRecord,
+    PolicyGroupRecord,
     RAW_LOG_RETAINED_MARKER,
     RetentionResultRecord,
     SessionRecord,
@@ -77,6 +86,8 @@ from app.store import (
     _validate_case_role,
     _validate_global_role,
     merge_analysis_result_progress,
+    _validate_policy_group_role,
+    _slugify,
     model_invocation_audit_metadata,
     merge_recorded_progress,
     sanitize_error_message,
@@ -210,6 +221,7 @@ class SQLAlchemyStore:
         self.session_factory = sessionmaker(self.engine, expire_on_commit=False, future=True)
         if create_schema:
             Base.metadata.create_all(self.engine)
+            self.ensure_organization(is_default=True)
 
     @contextmanager
     def _session(self) -> Iterator[Session]:
@@ -221,14 +233,61 @@ class SQLAlchemyStore:
                 session.rollback()
                 raise
 
+    def ensure_organization(
+        self,
+        *,
+        organization_id: str = DEFAULT_ORGANIZATION_ID,
+        name: str = DEFAULT_ORGANIZATION_NAME,
+        slug: str = DEFAULT_ORGANIZATION_SLUG,
+        is_default: bool = False,
+    ) -> OrganizationRecord:
+        with self._session() as session:
+            organization = session.get(tables.Organization, organization_id)
+            if organization is None:
+                organization = tables.Organization(
+                    id=organization_id,
+                    name=name,
+                    slug=slug,
+                    is_default=is_default,
+                    created_at=_now(),
+                )
+                session.add(organization)
+                session.flush()
+            return self._organization_record(organization)
+
+    def get_organization(self, organization_id: str) -> OrganizationRecord | None:
+        with self._session() as session:
+            organization = session.get(tables.Organization, organization_id)
+            return self._organization_record(organization) if organization else None
+
+    def list_organizations(self) -> list[OrganizationRecord]:
+        with self._session() as session:
+            rows = session.scalars(
+                select(tables.Organization).order_by(
+                    tables.Organization.name, tables.Organization.id
+                )
+            ).all()
+            return [self._organization_record(row) for row in rows]
+
     def register_user(
-        self, *, email: str, username: str, full_name: str | None, password: str
+        self,
+        *,
+        email: str,
+        username: str,
+        full_name: str | None,
+        password: str,
+        organization_id: str | None = None,
+        external_id: str | None = None,
     ) -> UserRecord:
+        org_id = organization_id or DEFAULT_ORGANIZATION_ID
+        self.ensure_organization(organization_id=org_id)
         user = tables.User(
             id=str(uuid.uuid4()),
+            organization_id=org_id,
             email=email,
             username=username,
             full_name=full_name,
+            external_id=external_id,
             password_hash=hash_password(password),
             role="engineer",
             is_active=True,
@@ -320,11 +379,14 @@ class SQLAlchemyStore:
         q: str | None = None,
         role: str | None = None,
         is_active: bool | None = None,
+        organization_id: str | None = None,
         offset: int = 0,
         limit: int | None = None,
     ) -> tuple[list[UserRecord], int]:
         with self._session() as session:
             criteria = []
+            if organization_id:
+                criteria.append(tables.User.organization_id == organization_id)
             if q:
                 like = f"%{q.lower()}%"
                 criteria.append(
@@ -352,6 +414,50 @@ class SQLAlchemyStore:
                 items_query = items_query.limit(limit)
             total = session.scalar(total_query) or 0
             return [self._user_record(row) for row in session.scalars(items_query).all()], total
+
+    def update_user_profile(
+        self,
+        *,
+        user_id: str,
+        email: str | None = None,
+        username: str | None = None,
+        full_name: str | None = None,
+        external_id: str | None = None,
+        updated_by: str | None = None,
+    ) -> UserRecord:
+        with self._session() as session:
+            user = session.get(tables.User, user_id)
+            if user is None:
+                raise KeyError(user_id)
+            if email is not None and email != user.email:
+                existing = session.scalar(
+                    select(tables.User).where(tables.User.email == email)
+                )
+                if existing is not None:
+                    raise ValueError("user already exists")
+                user.email = email
+            if username is not None and username != user.username:
+                existing = session.scalar(
+                    select(tables.User).where(tables.User.username == username)
+                )
+                if existing is not None:
+                    raise ValueError("user already exists")
+                user.username = username
+            if full_name is not None:
+                user.full_name = full_name
+            if external_id is not None:
+                user.external_id = external_id
+            user.updated_at = _now()
+            self._add_audit(
+                session,
+                action="admin.user.profile_update",
+                user_id=updated_by,
+                target_type="user",
+                target_id=user_id,
+                metadata={"updated": True},
+            )
+            session.flush()
+            return self._user_record(user)
 
     def update_user_role(
         self, *, user_id: str, role: str, updated_by: str | None = None
@@ -403,7 +509,7 @@ class SQLAlchemyStore:
         github_base_url: str,
         expires_at: datetime | None = None,
     ) -> CredentialRecord:
-        encrypted = encrypt_token(token, self.settings.credential_encryption_key)
+        encrypted, key_id = encrypt_token_for_settings(token, self.settings)
         hint = token_hint(token)
         credential_expires_at = _utc(expires_at)
         with self._session() as session:
@@ -423,6 +529,7 @@ class SQLAlchemyStore:
                     credential_type=credential_type,
                     encrypted_token=encrypted,
                     token_hint=hint,
+                    key_id=key_id,
                     github_base_url=github_base_url,
                     runtime_type="github_copilot",
                     created_at=_now(),
@@ -434,6 +541,7 @@ class SQLAlchemyStore:
                 credential.credential_type = credential_type
                 credential.encrypted_token = encrypted
                 credential.token_hint = hint
+                credential.key_id = key_id
                 credential.github_base_url = github_base_url
                 credential.runtime_type = "github_copilot"
                 credential.expires_at = credential_expires_at
@@ -538,9 +646,12 @@ class SQLAlchemyStore:
     def create_case(self, *, user_id: str, data: dict[str, Any]) -> CaseRecord:
         case_id = str(uuid.uuid4())
         with self._session() as session:
+            user = session.get(tables.User, user_id)
+            organization_id = user.organization_id if user else DEFAULT_ORGANIZATION_ID
             count = session.scalar(select(func.count()).select_from(tables.Case)) or 0
             case = tables.Case(
                 id=case_id,
+                organization_id=organization_id,
                 case_key=f"LOGAN-{_now():%Y%m%d}-{count + 1:04d}",
                 created_by=user_id,
                 title=data["title"],
@@ -629,12 +740,25 @@ class SQLAlchemyStore:
                     tables.CaseCollaborator.user_id == user.id,
                     tables.CaseCollaborator.role.in_(["owner", "editor", "viewer"]),
                 )
+                group_cases = (
+                    select(tables.CaseGroupAccess.case_id)
+                    .join(
+                        tables.PolicyGroupMember,
+                        tables.CaseGroupAccess.group_id == tables.PolicyGroupMember.group_id,
+                    )
+                    .where(
+                        tables.PolicyGroupMember.user_id == user.id,
+                        tables.CaseGroupAccess.role.in_(["owner", "editor", "viewer"]),
+                    )
+                )
                 criteria.append(
                     or_(
                         tables.Case.created_by == user.id,
                         tables.Case.id.in_(collaborator_cases),
+                        tables.Case.id.in_(group_cases),
                     )
                 )
+            criteria.append(tables.Case.organization_id == user.organization_id)
             total_query = select(func.count()).select_from(tables.Case)
             items_query = select(tables.Case).order_by(tables.Case.created_at, tables.Case.id)
             if criteria:
@@ -657,6 +781,8 @@ class SQLAlchemyStore:
             case = session.get(tables.Case, case_id)
             if case is None:
                 return False
+            if case.organization_id != user.organization_id:
+                return False
             if user.role == "admin" or case.created_by == user_id:
                 return True
             collaborator = session.scalar(
@@ -665,7 +791,28 @@ class SQLAlchemyStore:
                     tables.CaseCollaborator.user_id == user_id,
                 )
             )
-            return _case_role_allows(collaborator.role if collaborator else None, permission)
+            if _case_role_allows(collaborator.role if collaborator else None, permission):
+                return True
+            group_access = session.scalar(
+                select(tables.CaseGroupAccess)
+                .join(
+                    tables.PolicyGroupMember,
+                    tables.CaseGroupAccess.group_id == tables.PolicyGroupMember.group_id,
+                )
+                .join(
+                    tables.PolicyGroup,
+                    tables.PolicyGroup.id == tables.CaseGroupAccess.group_id,
+                )
+                .where(
+                    tables.CaseGroupAccess.case_id == case_id,
+                    tables.PolicyGroupMember.user_id == user_id,
+                    tables.PolicyGroup.organization_id == user.organization_id,
+                    tables.CaseGroupAccess.role.in_(
+                        list(CASE_PERMISSION_ROLES.get(permission, frozenset()))
+                    ),
+                )
+            )
+            return group_access is not None
 
     def list_case_collaborators(self, case_id: str) -> list[CaseCollaboratorRecord]:
         with self._session() as session:
@@ -713,6 +860,11 @@ class SQLAlchemyStore:
             user = session.get(tables.User, user_id)
             if user is None:
                 raise KeyError(user_id)
+            case = session.get(tables.Case, case_id)
+            if case is None:
+                raise KeyError(case_id)
+            if case.organization_id != user.organization_id:
+                raise ValueError("user and case must belong to the same organization")
             collaborator = session.scalar(
                 select(tables.CaseCollaborator).where(
                     tables.CaseCollaborator.case_id == case_id,
@@ -770,6 +922,298 @@ class SQLAlchemyStore:
                 user_id=removed_by,
                 target_type="user",
                 target_id=user_id,
+                case_id=case_id,
+                metadata={"role": removed_role},
+            )
+            return True
+
+    def create_policy_group(
+        self,
+        *,
+        organization_id: str,
+        name: str,
+        slug: str | None = None,
+        description: str | None = None,
+        external_id: str | None = None,
+        created_by: str | None = None,
+    ) -> PolicyGroupRecord:
+        self.ensure_organization(organization_id=organization_id)
+        normalized_slug = _slugify(slug or name)
+        with self._session() as session:
+            existing = session.scalar(
+                select(tables.PolicyGroup).where(
+                    tables.PolicyGroup.organization_id == organization_id,
+                    tables.PolicyGroup.slug == normalized_slug,
+                )
+            )
+            if existing is not None:
+                raise ValueError("policy group already exists")
+            group = tables.PolicyGroup(
+                id=str(uuid.uuid4()),
+                organization_id=organization_id,
+                name=name,
+                slug=normalized_slug,
+                description=description,
+                external_id=external_id,
+                created_at=_now(),
+                updated_at=_now(),
+            )
+            session.add(group)
+            self._add_audit(
+                session,
+                action="policy_group.create",
+                user_id=created_by,
+                target_type="policy_group",
+                target_id=group.id,
+                metadata={"organization_id": organization_id, "slug": normalized_slug},
+            )
+            session.flush()
+            return self._policy_group_record(group)
+
+    def update_policy_group(
+        self,
+        *,
+        group_id: str,
+        name: str | None = None,
+        slug: str | None = None,
+        description: str | None = None,
+        external_id: str | None = None,
+        updated_by: str | None = None,
+    ) -> PolicyGroupRecord:
+        with self._session() as session:
+            group = session.get(tables.PolicyGroup, group_id)
+            if group is None:
+                raise KeyError(group_id)
+            normalized_slug = _slugify(slug or name or group.slug)
+            if normalized_slug != group.slug:
+                existing = session.scalar(
+                    select(tables.PolicyGroup).where(
+                        tables.PolicyGroup.organization_id == group.organization_id,
+                        tables.PolicyGroup.slug == normalized_slug,
+                    )
+                )
+                if existing is not None:
+                    raise ValueError("policy group already exists")
+            if name is not None:
+                group.name = name
+            group.slug = normalized_slug
+            if description is not None:
+                group.description = description
+            if external_id is not None:
+                group.external_id = external_id
+            group.updated_at = _now()
+            self._add_audit(
+                session,
+                action="policy_group.update",
+                user_id=updated_by,
+                target_type="policy_group",
+                target_id=group_id,
+                metadata={"organization_id": group.organization_id, "slug": group.slug},
+            )
+            session.flush()
+            return self._policy_group_record(group)
+
+    def get_policy_group(self, group_id: str) -> PolicyGroupRecord | None:
+        with self._session() as session:
+            group = session.get(tables.PolicyGroup, group_id)
+            return self._policy_group_record(group) if group else None
+
+    def list_policy_groups(
+        self, *, organization_id: str | None = None
+    ) -> list[PolicyGroupRecord]:
+        with self._session() as session:
+            query = select(tables.PolicyGroup).order_by(
+                tables.PolicyGroup.name, tables.PolicyGroup.id
+            )
+            if organization_id is not None:
+                query = query.where(tables.PolicyGroup.organization_id == organization_id)
+            return [self._policy_group_record(row) for row in session.scalars(query).all()]
+
+    def list_policy_group_members(self, group_id: str) -> list[PolicyGroupMemberRecord]:
+        with self._session() as session:
+            if session.get(tables.PolicyGroup, group_id) is None:
+                raise KeyError(group_id)
+            rows = session.execute(
+                select(tables.PolicyGroupMember, tables.User)
+                .join(tables.User, tables.PolicyGroupMember.user_id == tables.User.id)
+                .where(tables.PolicyGroupMember.group_id == group_id)
+                .order_by(tables.PolicyGroupMember.created_at, tables.PolicyGroupMember.id)
+            ).all()
+            items = [
+                self._policy_group_member_record(member, user)
+                for member, user in rows
+            ]
+            return sorted(
+                items,
+                key=lambda item: (item.role != "owner", item.email or "", item.user_id),
+            )
+
+    def upsert_policy_group_member(
+        self, *, group_id: str, user_id: str, role: str = "viewer", added_by: str | None = None
+    ) -> PolicyGroupMemberRecord:
+        _validate_policy_group_role(role)
+        with self._session() as session:
+            group = session.get(tables.PolicyGroup, group_id)
+            if group is None:
+                raise KeyError(group_id)
+            user = session.get(tables.User, user_id)
+            if user is None:
+                raise KeyError(user_id)
+            if user.organization_id != group.organization_id:
+                raise ValueError("user and policy group must belong to the same organization")
+            member = session.scalar(
+                select(tables.PolicyGroupMember).where(
+                    tables.PolicyGroupMember.group_id == group_id,
+                    tables.PolicyGroupMember.user_id == user_id,
+                )
+            )
+            previous_role = member.role if member else None
+            now = _now()
+            if member is None:
+                member = tables.PolicyGroupMember(
+                    id=str(uuid.uuid4()),
+                    group_id=group_id,
+                    user_id=user_id,
+                    role=role,
+                    added_by=added_by,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(member)
+            else:
+                member.role = role
+                member.added_by = added_by
+                member.updated_at = now
+            self._add_audit(
+                session,
+                action="policy_group.member.add",
+                user_id=added_by,
+                target_type="user",
+                target_id=user_id,
+                metadata={
+                    "group_id": group_id,
+                    "role": role,
+                    "previous_role": previous_role,
+                },
+            )
+            session.flush()
+            return self._policy_group_member_record(member, user)
+
+    def remove_policy_group_member(
+        self, *, group_id: str, user_id: str, removed_by: str | None = None
+    ) -> bool:
+        with self._session() as session:
+            if session.get(tables.PolicyGroup, group_id) is None:
+                raise KeyError(group_id)
+            member = session.scalar(
+                select(tables.PolicyGroupMember).where(
+                    tables.PolicyGroupMember.group_id == group_id,
+                    tables.PolicyGroupMember.user_id == user_id,
+                )
+            )
+            if member is None:
+                return False
+            removed_role = member.role
+            session.delete(member)
+            self._add_audit(
+                session,
+                action="policy_group.member.remove",
+                user_id=removed_by,
+                target_type="user",
+                target_id=user_id,
+                metadata={"group_id": group_id, "role": removed_role},
+            )
+            return True
+
+    def list_case_group_access(self, case_id: str) -> list[CaseGroupAccessRecord]:
+        with self._session() as session:
+            if session.get(tables.Case, case_id) is None:
+                raise KeyError(case_id)
+            rows = session.execute(
+                select(tables.CaseGroupAccess, tables.PolicyGroup)
+                .join(tables.PolicyGroup, tables.CaseGroupAccess.group_id == tables.PolicyGroup.id)
+                .where(tables.CaseGroupAccess.case_id == case_id)
+                .order_by(tables.CaseGroupAccess.created_at, tables.CaseGroupAccess.id)
+            ).all()
+            items = [
+                self._case_group_access_record(access, group)
+                for access, group in rows
+            ]
+            return sorted(
+                items,
+                key=lambda item: (item.role != "owner", item.group_name or "", item.group_id),
+            )
+
+    def upsert_case_group_access(
+        self, *, case_id: str, group_id: str, role: str, granted_by: str | None = None
+    ) -> CaseGroupAccessRecord:
+        _validate_policy_group_role(role)
+        with self._session() as session:
+            case = session.get(tables.Case, case_id)
+            if case is None:
+                raise KeyError(case_id)
+            group = session.get(tables.PolicyGroup, group_id)
+            if group is None:
+                raise KeyError(group_id)
+            if group.organization_id != case.organization_id:
+                raise ValueError("case and policy group must belong to the same organization")
+            access = session.scalar(
+                select(tables.CaseGroupAccess).where(
+                    tables.CaseGroupAccess.case_id == case_id,
+                    tables.CaseGroupAccess.group_id == group_id,
+                )
+            )
+            previous_role = access.role if access else None
+            now = _now()
+            if access is None:
+                access = tables.CaseGroupAccess(
+                    id=str(uuid.uuid4()),
+                    case_id=case_id,
+                    group_id=group_id,
+                    role=role,
+                    granted_by=granted_by,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(access)
+            else:
+                access.role = role
+                access.granted_by = granted_by
+                access.updated_at = now
+            self._add_audit(
+                session,
+                action="case.policy_group.grant",
+                user_id=granted_by,
+                target_type="policy_group",
+                target_id=group_id,
+                case_id=case_id,
+                metadata={"role": role, "previous_role": previous_role},
+            )
+            session.flush()
+            return self._case_group_access_record(access, group)
+
+    def remove_case_group_access(
+        self, *, case_id: str, group_id: str, removed_by: str | None = None
+    ) -> bool:
+        with self._session() as session:
+            if session.get(tables.Case, case_id) is None:
+                raise KeyError(case_id)
+            access = session.scalar(
+                select(tables.CaseGroupAccess).where(
+                    tables.CaseGroupAccess.case_id == case_id,
+                    tables.CaseGroupAccess.group_id == group_id,
+                )
+            )
+            if access is None:
+                return False
+            removed_role = access.role
+            session.delete(access)
+            self._add_audit(
+                session,
+                action="case.policy_group.revoke",
+                user_id=removed_by,
+                target_type="policy_group",
+                target_id=group_id,
                 case_id=case_id,
                 metadata={"role": removed_role},
             )
@@ -2998,6 +3442,15 @@ class SQLAlchemyStore:
         session.add(audit)
         return audit
 
+    def _organization_record(self, row: tables.Organization) -> OrganizationRecord:
+        return OrganizationRecord(
+            id=row.id,
+            name=row.name,
+            slug=row.slug,
+            is_default=row.is_default,
+            created_at=_utc(row.created_at) or _now(),
+        )
+
     def _user_record(self, row: tables.User) -> UserRecord:
         return UserRecord(
             id=row.id,
@@ -3007,6 +3460,8 @@ class SQLAlchemyStore:
             password_hash=row.password_hash,
             role=row.role,
             is_active=row.is_active,
+            organization_id=row.organization_id or DEFAULT_ORGANIZATION_ID,
+            external_id=row.external_id,
             created_at=_utc(row.created_at) or _now(),
         )
 
@@ -3029,6 +3484,7 @@ class SQLAlchemyStore:
             token_hint=row.token_hint or "",
             github_base_url=row.github_base_url,
             runtime_type=row.runtime_type,
+            key_id=row.key_id,
             created_at=_utc(row.created_at) or _now(),
             expires_at=_utc(row.expires_at),
             revoked_at=_utc(row.revoked_at),
@@ -3064,6 +3520,7 @@ class SQLAlchemyStore:
             timezone=row.timezone,
             status=row.status,
             created_by=row.created_by,
+            organization_id=row.organization_id or DEFAULT_ORGANIZATION_ID,
             created_at=_utc(row.created_at) or _now(),
         )
 
@@ -3081,6 +3538,49 @@ class SQLAlchemyStore:
             email=user.email if user else None,
             username=user.username if user else None,
             full_name=user.full_name if user else None,
+        )
+
+    def _policy_group_record(self, row: tables.PolicyGroup) -> PolicyGroupRecord:
+        return PolicyGroupRecord(
+            id=row.id,
+            organization_id=row.organization_id,
+            name=row.name,
+            slug=row.slug,
+            description=row.description,
+            external_id=row.external_id,
+            created_at=_utc(row.created_at) or _now(),
+            updated_at=_utc(row.updated_at) or _now(),
+        )
+
+    def _policy_group_member_record(
+        self, row: tables.PolicyGroupMember, user: tables.User | None = None
+    ) -> PolicyGroupMemberRecord:
+        return PolicyGroupMemberRecord(
+            id=row.id,
+            group_id=row.group_id,
+            user_id=row.user_id,
+            role=row.role,
+            added_by=row.added_by,
+            created_at=_utc(row.created_at) or _now(),
+            updated_at=_utc(row.updated_at) or _now(),
+            email=user.email if user else None,
+            username=user.username if user else None,
+            full_name=user.full_name if user else None,
+        )
+
+    def _case_group_access_record(
+        self, row: tables.CaseGroupAccess, group: tables.PolicyGroup | None = None
+    ) -> CaseGroupAccessRecord:
+        return CaseGroupAccessRecord(
+            id=row.id,
+            case_id=row.case_id,
+            group_id=row.group_id,
+            role=row.role,
+            granted_by=row.granted_by,
+            created_at=_utc(row.created_at) or _now(),
+            updated_at=_utc(row.updated_at) or _now(),
+            group_name=group.name if group else None,
+            group_slug=group.slug if group else None,
         )
 
     def _upload_record(self, row: tables.RawFile) -> UploadRecord:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import bcrypt
 import pytest
 
+from app.config import Settings
 from app.core import security
 
 
@@ -53,3 +54,20 @@ def test_verify_password_supports_legacy_raw_bcrypt_hashes() -> None:
 
     assert security.verify_password("password123", password_hash) is True
     assert security.verify_password("wrong-password", password_hash) is False
+
+
+def test_credential_keyring_encrypts_with_key_id_and_decrypts_legacy_tokens() -> None:
+    legacy = security.encrypt_token("legacy-token", "legacy-secret")
+    app_settings = Settings(
+        credential_encryption_key="current-secret",
+        credential_encryption_key_id="v2",
+        credential_encryption_keyring='{"legacy":"legacy-secret"}',
+    )
+
+    encrypted, key_id = security.encrypt_token_for_settings("current-token", app_settings)
+
+    assert key_id == "v2"
+    assert encrypted.startswith(security.ENCRYPTED_TOKEN_PREFIX)
+    assert security.decrypt_token(encrypted, "current-secret") == "current-token"
+    assert security.decrypt_token_for_settings(encrypted, app_settings) == "current-token"
+    assert security.decrypt_token_for_settings(legacy, app_settings) == "legacy-token"

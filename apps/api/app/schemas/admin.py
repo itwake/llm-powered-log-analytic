@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class AdminUserResponse(BaseModel):
     id: str
+    organization_id: str
     email: str
     username: str
     full_name: str | None = None
@@ -64,3 +65,76 @@ class RetentionRunResponse(BaseModel):
     exports_deleted: int = 0
     analysis_results_cleared: int = 0
     step_artifacts_deleted: int = 0
+
+
+class AdminPolicyGroupCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    slug: str | None = Field(default=None, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+
+
+class AdminPolicyGroupPatchRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    slug: str | None = Field(default=None, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+
+
+class AdminPolicyGroupResponse(BaseModel):
+    id: str
+    organization_id: str
+    name: str
+    slug: str
+    description: str | None = None
+    member_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminPolicyGroupListResponse(BaseModel):
+    items: list[AdminPolicyGroupResponse]
+    total: int
+
+
+class AdminPolicyGroupMemberRequest(BaseModel):
+    user_id: str
+    role: str = "viewer"
+
+
+class AdminPolicyGroupMemberResponse(BaseModel):
+    id: str
+    group_id: str
+    user_id: str
+    role: str
+    added_by: str | None = None
+    email: str | None = None
+    username: str | None = None
+    full_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminPolicyGroupMemberListResponse(BaseModel):
+    items: list[AdminPolicyGroupMemberResponse]
+    total: int
+
+
+class AdminCaseGroupAccessRequest(BaseModel):
+    group_id: str
+    role: str = "viewer"
+
+
+class AdminCaseGroupAccessResponse(BaseModel):
+    id: str
+    case_id: str
+    group_id: str
+    role: str
+    granted_by: str | None = None
+    group_name: str | None = None
+    group_slug: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminCaseGroupAccessListResponse(BaseModel):
+    items: list[AdminCaseGroupAccessResponse]
+    total: int

@@ -14,7 +14,7 @@ from logan_workers.pipeline import AnalyzeCasePipeline
 from app.config import Settings, settings
 from app.core.security import (
     default_session_expiry,
-    encrypt_token,
+    encrypt_token_for_settings,
     hash_password,
     hash_token,
     issue_session_token,
@@ -37,11 +37,15 @@ from app.services.object_store import (
 
 GLOBAL_USER_ROLES = frozenset({"admin", "engineer"})
 CASE_COLLABORATOR_ROLES = frozenset({"owner", "editor", "viewer"})
+POLICY_GROUP_ROLES = CASE_COLLABORATOR_ROLES
 CASE_PERMISSION_ROLES: dict[str, frozenset[str]] = {
     "view": frozenset({"owner", "editor", "viewer"}),
     "edit": frozenset({"owner", "editor"}),
     "owner": frozenset({"owner"}),
 }
+DEFAULT_ORGANIZATION_ID = "default"
+DEFAULT_ORGANIZATION_SLUG = "default"
+DEFAULT_ORGANIZATION_NAME = "Default Organization"
 RAW_LOG_RETAINED_MARKER = "[raw log text scrubbed by retention policy]"
 MODEL_INVOCATION_AUDIT_ACTION = "model.invocation"
 
@@ -64,6 +68,15 @@ _SENSITIVE_ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         "<REDACTED>",
     ),
     (re.compile(r"\bsk-[A-Za-z0-9_-]{10,}\b"), "<REDACTED>"),
+    (
+        re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+        "<REDACTED>",
+    ),
+    (
+        re.compile(r"(?<![A-Za-z0-9_])/(?:root|home|var|tmp|etc|opt|srv|workspace|Users)(?:/[^\s,;:)]+)+"),
+        "<REDACTED_PATH>",
+    ),
+    (re.compile(r"\b[A-Za-z]:\\(?:[^\\\s,;:]+\\?)+"), "<REDACTED_PATH>"),
     (re.compile(r"\b[A-Za-z0-9_-]{40,}\b"), "<REDACTED>"),
 )
 _SENSITIVE_METADATA_KEY_PARTS = {
@@ -81,6 +94,7 @@ _SENSITIVE_METADATA_KEY_PARTS = {
     "source_token",
     "template_context",
     "token",
+    "path",
 }
 _SAFE_STRING_LIST_METADATA = {"export_types"}
 _SECRET_WORKFLOW_KEY_PARTS = {
@@ -283,6 +297,15 @@ def merge_recorded_progress(
 
 
 @dataclass
+class OrganizationRecord:
+    id: str
+    name: str
+    slug: str
+    is_default: bool = False
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+@dataclass
 class UserRecord:
     id: str
     email: str
@@ -291,6 +314,8 @@ class UserRecord:
     password_hash: str
     role: str = "engineer"
     is_active: bool = True
+    organization_id: str = DEFAULT_ORGANIZATION_ID
+    external_id: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -313,6 +338,7 @@ class CredentialRecord:
     token_hint: str
     github_base_url: str
     runtime_type: str = "github_copilot"
+    key_id: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime | None = None
     revoked_at: datetime | None = None
@@ -348,6 +374,7 @@ class CaseRecord:
     timezone: str = "UTC"
     status: str = "created"
     created_by: str = ""
+    organization_id: str = DEFAULT_ORGANIZATION_ID
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -363,6 +390,45 @@ class CaseCollaboratorRecord:
     email: str | None = None
     username: str | None = None
     full_name: str | None = None
+
+
+@dataclass
+class PolicyGroupRecord:
+    id: str
+    organization_id: str
+    name: str
+    slug: str
+    description: str | None = None
+    external_id: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+@dataclass
+class PolicyGroupMemberRecord:
+    id: str
+    group_id: str
+    user_id: str
+    role: str = "viewer"
+    added_by: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    email: str | None = None
+    username: str | None = None
+    full_name: str | None = None
+
+
+@dataclass
+class CaseGroupAccessRecord:
+    id: str
+    case_id: str
+    group_id: str
+    role: str
+    granted_by: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    group_name: str | None = None
+    group_slug: str | None = None
 
 
 @dataclass
@@ -578,11 +644,42 @@ def _validate_case_role(role: str) -> str:
     return role
 
 
+def _validate_policy_group_role(role: str) -> str:
+    if role not in POLICY_GROUP_ROLES:
+        raise ValueError("policy group role must be one of: owner, editor, viewer")
+    return role
+
+
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "group"
+
+
 class MetadataStore(Protocol):
     settings: Settings
 
+    def ensure_organization(
+        self,
+        *,
+        organization_id: str = DEFAULT_ORGANIZATION_ID,
+        name: str = DEFAULT_ORGANIZATION_NAME,
+        slug: str = DEFAULT_ORGANIZATION_SLUG,
+        is_default: bool = False,
+    ) -> OrganizationRecord: ...
+
+    def get_organization(self, organization_id: str) -> OrganizationRecord | None: ...
+
+    def list_organizations(self) -> list[OrganizationRecord]: ...
+
     def register_user(
-        self, *, email: str, username: str, full_name: str | None, password: str
+        self,
+        *,
+        email: str,
+        username: str,
+        full_name: str | None,
+        password: str,
+        organization_id: str | None = None,
+        external_id: str | None = None,
     ) -> UserRecord: ...
 
     def authenticate(self, email_or_username: str, password: str) -> UserRecord | None: ...
@@ -601,9 +698,21 @@ class MetadataStore(Protocol):
         q: str | None = None,
         role: str | None = None,
         is_active: bool | None = None,
+        organization_id: str | None = None,
         offset: int = 0,
         limit: int | None = None,
     ) -> tuple[list[UserRecord], int]: ...
+
+    def update_user_profile(
+        self,
+        *,
+        user_id: str,
+        email: str | None = None,
+        username: str | None = None,
+        full_name: str | None = None,
+        external_id: str | None = None,
+        updated_by: str | None = None,
+    ) -> UserRecord: ...
 
     def update_user_role(
         self, *, user_id: str, role: str, updated_by: str | None = None
@@ -674,6 +783,54 @@ class MetadataStore(Protocol):
 
     def remove_case_collaborator(
         self, *, case_id: str, user_id: str, removed_by: str
+    ) -> bool: ...
+
+    def create_policy_group(
+        self,
+        *,
+        organization_id: str,
+        name: str,
+        slug: str | None = None,
+        description: str | None = None,
+        external_id: str | None = None,
+        created_by: str | None = None,
+    ) -> PolicyGroupRecord: ...
+
+    def update_policy_group(
+        self,
+        *,
+        group_id: str,
+        name: str | None = None,
+        slug: str | None = None,
+        description: str | None = None,
+        external_id: str | None = None,
+        updated_by: str | None = None,
+    ) -> PolicyGroupRecord: ...
+
+    def get_policy_group(self, group_id: str) -> PolicyGroupRecord | None: ...
+
+    def list_policy_groups(
+        self, *, organization_id: str | None = None
+    ) -> list[PolicyGroupRecord]: ...
+
+    def list_policy_group_members(self, group_id: str) -> list[PolicyGroupMemberRecord]: ...
+
+    def upsert_policy_group_member(
+        self, *, group_id: str, user_id: str, role: str = "viewer", added_by: str | None = None
+    ) -> PolicyGroupMemberRecord: ...
+
+    def remove_policy_group_member(
+        self, *, group_id: str, user_id: str, removed_by: str | None = None
+    ) -> bool: ...
+
+    def list_case_group_access(self, case_id: str) -> list[CaseGroupAccessRecord]: ...
+
+    def upsert_case_group_access(
+        self, *, case_id: str, group_id: str, role: str, granted_by: str | None = None
+    ) -> CaseGroupAccessRecord: ...
+
+    def remove_case_group_access(
+        self, *, case_id: str, group_id: str, removed_by: str | None = None
     ) -> bool: ...
 
     def create_upload(
@@ -828,6 +985,7 @@ class MetadataStore(Protocol):
 class InMemoryStore:
     def __init__(self, app_settings: Settings = settings) -> None:
         self.settings = app_settings
+        self.organizations: dict[str, OrganizationRecord] = {}
         self.users: dict[str, UserRecord] = {}
         self.users_by_email: dict[str, str] = {}
         self.users_by_username: dict[str, str] = {}
@@ -836,6 +994,9 @@ class InMemoryStore:
         self.copilot_auth: dict[str, CopilotAuthRecord] = {}
         self.cases: dict[str, CaseRecord] = {}
         self.case_collaborators: dict[tuple[str, str], CaseCollaboratorRecord] = {}
+        self.policy_groups: dict[str, PolicyGroupRecord] = {}
+        self.policy_group_members: dict[tuple[str, str], PolicyGroupMemberRecord] = {}
+        self.case_group_access: dict[tuple[str, str], CaseGroupAccessRecord] = {}
         self.uploads: dict[str, UploadRecord] = {}
         self.runs: dict[str, AnalysisRunRecord] = {}
         self.job_events: dict[str, JobEventRecord] = {}
@@ -845,18 +1006,56 @@ class InMemoryStore:
         self.feedback: dict[str, FeedbackRecord] = {}
         self.exports: dict[str, ExportRecord] = {}
         self.audit_logs: dict[str, AuditLogRecord] = {}
+        self.ensure_organization(is_default=True)
+
+    def ensure_organization(
+        self,
+        *,
+        organization_id: str = DEFAULT_ORGANIZATION_ID,
+        name: str = DEFAULT_ORGANIZATION_NAME,
+        slug: str = DEFAULT_ORGANIZATION_SLUG,
+        is_default: bool = False,
+    ) -> OrganizationRecord:
+        existing = self.organizations.get(organization_id)
+        if existing is not None:
+            return existing
+        record = OrganizationRecord(
+            id=organization_id,
+            name=name,
+            slug=slug,
+            is_default=is_default,
+        )
+        self.organizations[record.id] = record
+        return record
+
+    def get_organization(self, organization_id: str) -> OrganizationRecord | None:
+        return self.organizations.get(organization_id)
+
+    def list_organizations(self) -> list[OrganizationRecord]:
+        return sorted(self.organizations.values(), key=lambda item: (item.name, item.id))
 
     def register_user(
-        self, *, email: str, username: str, full_name: str | None, password: str
+        self,
+        *,
+        email: str,
+        username: str,
+        full_name: str | None,
+        password: str,
+        organization_id: str | None = None,
+        external_id: str | None = None,
     ) -> UserRecord:
         if email in self.users_by_email or username in self.users_by_username:
             raise ValueError("user already exists")
+        org_id = organization_id or DEFAULT_ORGANIZATION_ID
+        self.ensure_organization(organization_id=org_id)
         user = UserRecord(
             id=str(uuid.uuid4()),
             email=email,
             username=username,
             full_name=full_name,
             password_hash=hash_password(password),
+            organization_id=org_id,
+            external_id=external_id,
         )
         self.users[user.id] = user
         self.users_by_email[email] = user.id
@@ -912,10 +1111,13 @@ class InMemoryStore:
         q: str | None = None,
         role: str | None = None,
         is_active: bool | None = None,
+        organization_id: str | None = None,
         offset: int = 0,
         limit: int | None = None,
     ) -> tuple[list[UserRecord], int]:
         items = list(self.users.values())
+        if organization_id:
+            items = [item for item in items if item.organization_id == organization_id]
         if q:
             lowered = q.lower()
             items = [
@@ -932,6 +1134,44 @@ class InMemoryStore:
         items.sort(key=lambda item: (item.created_at, item.email, item.id))
         total = len(items)
         return items[offset : offset + limit if limit is not None else None], total
+
+    def update_user_profile(
+        self,
+        *,
+        user_id: str,
+        email: str | None = None,
+        username: str | None = None,
+        full_name: str | None = None,
+        external_id: str | None = None,
+        updated_by: str | None = None,
+    ) -> UserRecord:
+        user = self.users.get(user_id)
+        if user is None:
+            raise KeyError(user_id)
+        if email is not None and email != user.email:
+            if email in self.users_by_email:
+                raise ValueError("user already exists")
+            self.users_by_email.pop(user.email, None)
+            self.users_by_email[email] = user.id
+            user.email = email
+        if username is not None and username != user.username:
+            if username in self.users_by_username:
+                raise ValueError("user already exists")
+            self.users_by_username.pop(user.username, None)
+            self.users_by_username[username] = user.id
+            user.username = username
+        if full_name is not None:
+            user.full_name = full_name
+        if external_id is not None:
+            user.external_id = external_id
+        self.record_audit(
+            action="admin.user.profile_update",
+            user_id=updated_by,
+            target_type="user",
+            target_id=user_id,
+            metadata={"updated": True},
+        )
+        return user
 
     def update_user_role(
         self, *, user_id: str, role: str, updated_by: str | None = None
@@ -977,13 +1217,15 @@ class InMemoryStore:
         github_base_url: str,
         expires_at: datetime | None = None,
     ) -> CredentialRecord:
+        encrypted_token, key_id = encrypt_token_for_settings(token, self.settings)
         record = CredentialRecord(
             id=str(uuid.uuid4()),
             user_id=user_id,
             credential_type=credential_type,
-            encrypted_token=encrypt_token(token, self.settings.credential_encryption_key),
+            encrypted_token=encrypted_token,
             token_hint=token_hint(token),
             github_base_url=github_base_url,
+            key_id=key_id,
             expires_at=_as_utc(expires_at),
         )
         self.credentials_by_user[(user_id, credential_type)] = record
@@ -1033,7 +1275,16 @@ class InMemoryStore:
     def create_case(self, *, user_id: str, data: dict[str, Any]) -> CaseRecord:
         case_id = str(uuid.uuid4())
         case_key = f"LOGAN-{datetime.now(UTC):%Y%m%d}-{len(self.cases) + 1:04d}"
-        record = CaseRecord(id=case_id, case_key=case_key, created_by=user_id, **data)
+        user = self.users.get(user_id)
+        organization_id = user.organization_id if user else DEFAULT_ORGANIZATION_ID
+        self.ensure_organization(organization_id=organization_id)
+        record = CaseRecord(
+            id=case_id,
+            case_key=case_key,
+            created_by=user_id,
+            organization_id=organization_id,
+            **data,
+        )
         self.cases[case_id] = record
         self.case_collaborators[(case_id, user_id)] = CaseCollaboratorRecord(
             id=str(uuid.uuid4()),
@@ -1082,7 +1333,9 @@ class InMemoryStore:
         offset: int = 0,
         limit: int | None = None,
     ) -> tuple[list[CaseRecord], int]:
-        items = list(self.cases.values())
+        items = [
+            item for item in self.cases.values() if item.organization_id == user.organization_id
+        ]
         if user.role != "admin":
             collaborator_case_ids = {
                 case_id
@@ -1090,10 +1343,13 @@ class InMemoryStore:
                 if collaborator_user_id == user.id
                 and _case_role_allows(collaborator.role, "view")
             }
+            group_case_ids = self._case_ids_for_user_policy_groups(user.id, "view")
             items = [
                 item
                 for item in items
-                if item.created_by == user.id or item.id in collaborator_case_ids
+                if item.created_by == user.id
+                or item.id in collaborator_case_ids
+                or item.id in group_case_ids
             ]
         if status:
             items = [item for item in items if item.status == status]
@@ -1110,14 +1366,39 @@ class InMemoryStore:
         if user is None or not user.is_active:
             return False
         if user.role == "admin":
-            return case_id in self.cases
+            case = self.cases.get(case_id)
+            return case is not None and case.organization_id == user.organization_id
         case = self.cases.get(case_id)
         if case is None:
+            return False
+        if case.organization_id != user.organization_id:
             return False
         if case.created_by == user_id:
             return True
         collaborator = self.case_collaborators.get((case_id, user_id))
-        return _case_role_allows(collaborator.role if collaborator else None, permission)
+        if _case_role_allows(collaborator.role if collaborator else None, permission):
+            return True
+        return case_id in self._case_ids_for_user_policy_groups(user_id, permission)
+
+    def _case_ids_for_user_policy_groups(self, user_id: str, permission: str) -> set[str]:
+        user = self.users.get(user_id)
+        if user is None:
+            return set()
+        group_ids = {
+            group_id
+            for (group_id, member_user_id), member in self.policy_group_members.items()
+            if member_user_id == user_id
+            and group_id in self.policy_groups
+            and self.policy_groups[group_id].organization_id == user.organization_id
+        }
+        return {
+            case_id
+            for (case_id, group_id), access in self.case_group_access.items()
+            if group_id in group_ids
+            and case_id in self.cases
+            and self.cases[case_id].organization_id == user.organization_id
+            and _case_role_allows(access.role, permission)
+        }
 
     def list_case_collaborators(self, case_id: str) -> list[CaseCollaboratorRecord]:
         case = self.cases.get(case_id)
@@ -1154,6 +1435,8 @@ class InMemoryStore:
             raise KeyError(case_id)
         if user_id not in self.users:
             raise KeyError(user_id)
+        if self.cases[case_id].organization_id != self.users[user_id].organization_id:
+            raise ValueError("user and case must belong to the same organization")
         now = datetime.now(UTC)
         key = (case_id, user_id)
         existing = self.case_collaborators.get(key)
@@ -1194,6 +1477,247 @@ class InMemoryStore:
             metadata={"role": removed.role},
         )
         return True
+
+    def create_policy_group(
+        self,
+        *,
+        organization_id: str,
+        name: str,
+        slug: str | None = None,
+        description: str | None = None,
+        external_id: str | None = None,
+        created_by: str | None = None,
+    ) -> PolicyGroupRecord:
+        self.ensure_organization(organization_id=organization_id)
+        normalized_slug = _slugify(slug or name)
+        if any(
+            group.organization_id == organization_id and group.slug == normalized_slug
+            for group in self.policy_groups.values()
+        ):
+            raise ValueError("policy group already exists")
+        record = PolicyGroupRecord(
+            id=str(uuid.uuid4()),
+            organization_id=organization_id,
+            name=name,
+            slug=normalized_slug,
+            description=description,
+            external_id=external_id,
+        )
+        self.policy_groups[record.id] = record
+        self.record_audit(
+            action="policy_group.create",
+            user_id=created_by,
+            target_type="policy_group",
+            target_id=record.id,
+            metadata={"organization_id": organization_id, "slug": normalized_slug},
+        )
+        return record
+
+    def update_policy_group(
+        self,
+        *,
+        group_id: str,
+        name: str | None = None,
+        slug: str | None = None,
+        description: str | None = None,
+        external_id: str | None = None,
+        updated_by: str | None = None,
+    ) -> PolicyGroupRecord:
+        group = self.policy_groups.get(group_id)
+        if group is None:
+            raise KeyError(group_id)
+        normalized_slug = _slugify(slug or name or group.slug)
+        if normalized_slug != group.slug and any(
+            item.organization_id == group.organization_id and item.slug == normalized_slug
+            for item in self.policy_groups.values()
+        ):
+            raise ValueError("policy group already exists")
+        if name is not None:
+            group.name = name
+        group.slug = normalized_slug
+        if description is not None:
+            group.description = description
+        if external_id is not None:
+            group.external_id = external_id
+        group.updated_at = datetime.now(UTC)
+        self.record_audit(
+            action="policy_group.update",
+            user_id=updated_by,
+            target_type="policy_group",
+            target_id=group_id,
+            metadata={"organization_id": group.organization_id, "slug": group.slug},
+        )
+        return group
+
+    def get_policy_group(self, group_id: str) -> PolicyGroupRecord | None:
+        return self.policy_groups.get(group_id)
+
+    def list_policy_groups(
+        self, *, organization_id: str | None = None
+    ) -> list[PolicyGroupRecord]:
+        items = list(self.policy_groups.values())
+        if organization_id is not None:
+            items = [item for item in items if item.organization_id == organization_id]
+        return sorted(items, key=lambda item: (item.name, item.id))
+
+    def list_policy_group_members(self, group_id: str) -> list[PolicyGroupMemberRecord]:
+        if group_id not in self.policy_groups:
+            raise KeyError(group_id)
+        items = [
+            self._with_policy_group_member_user_details(member)
+            for (member_group_id, _user_id), member in self.policy_group_members.items()
+            if member_group_id == group_id
+        ]
+        return sorted(items, key=lambda item: (item.role != "owner", item.email or "", item.user_id))
+
+    def upsert_policy_group_member(
+        self, *, group_id: str, user_id: str, role: str = "viewer", added_by: str | None = None
+    ) -> PolicyGroupMemberRecord:
+        _validate_policy_group_role(role)
+        group = self.policy_groups.get(group_id)
+        if group is None:
+            raise KeyError(group_id)
+        user = self.users.get(user_id)
+        if user is None:
+            raise KeyError(user_id)
+        if user.organization_id != group.organization_id:
+            raise ValueError("user and policy group must belong to the same organization")
+        now = datetime.now(UTC)
+        key = (group_id, user_id)
+        existing = self.policy_group_members.get(key)
+        record = PolicyGroupMemberRecord(
+            id=existing.id if existing else str(uuid.uuid4()),
+            group_id=group_id,
+            user_id=user_id,
+            role=role,
+            added_by=added_by,
+            created_at=existing.created_at if existing else now,
+            updated_at=now,
+        )
+        self.policy_group_members[key] = record
+        self.record_audit(
+            action="policy_group.member.add",
+            user_id=added_by,
+            target_type="user",
+            target_id=user_id,
+            metadata={
+                "group_id": group_id,
+                "role": role,
+                "previous_role": existing.role if existing else None,
+            },
+        )
+        return self._with_policy_group_member_user_details(record)
+
+    def remove_policy_group_member(
+        self, *, group_id: str, user_id: str, removed_by: str | None = None
+    ) -> bool:
+        if group_id not in self.policy_groups:
+            raise KeyError(group_id)
+        removed = self.policy_group_members.pop((group_id, user_id), None)
+        if removed is None:
+            return False
+        self.record_audit(
+            action="policy_group.member.remove",
+            user_id=removed_by,
+            target_type="user",
+            target_id=user_id,
+            metadata={"group_id": group_id, "role": removed.role},
+        )
+        return True
+
+    def list_case_group_access(self, case_id: str) -> list[CaseGroupAccessRecord]:
+        if case_id not in self.cases:
+            raise KeyError(case_id)
+        items = [
+            self._with_case_group_details(access)
+            for (access_case_id, _group_id), access in self.case_group_access.items()
+            if access_case_id == case_id
+        ]
+        return sorted(items, key=lambda item: (item.role != "owner", item.group_name or "", item.group_id))
+
+    def upsert_case_group_access(
+        self, *, case_id: str, group_id: str, role: str, granted_by: str | None = None
+    ) -> CaseGroupAccessRecord:
+        _validate_policy_group_role(role)
+        case = self.cases.get(case_id)
+        if case is None:
+            raise KeyError(case_id)
+        group = self.policy_groups.get(group_id)
+        if group is None:
+            raise KeyError(group_id)
+        if group.organization_id != case.organization_id:
+            raise ValueError("case and policy group must belong to the same organization")
+        now = datetime.now(UTC)
+        key = (case_id, group_id)
+        existing = self.case_group_access.get(key)
+        record = CaseGroupAccessRecord(
+            id=existing.id if existing else str(uuid.uuid4()),
+            case_id=case_id,
+            group_id=group_id,
+            role=role,
+            granted_by=granted_by,
+            created_at=existing.created_at if existing else now,
+            updated_at=now,
+        )
+        self.case_group_access[key] = record
+        self.record_audit(
+            action="case.policy_group.grant",
+            user_id=granted_by,
+            target_type="policy_group",
+            target_id=group_id,
+            case_id=case_id,
+            metadata={"role": role, "previous_role": existing.role if existing else None},
+        )
+        return self._with_case_group_details(record)
+
+    def remove_case_group_access(
+        self, *, case_id: str, group_id: str, removed_by: str | None = None
+    ) -> bool:
+        if case_id not in self.cases:
+            raise KeyError(case_id)
+        removed = self.case_group_access.pop((case_id, group_id), None)
+        if removed is None:
+            return False
+        self.record_audit(
+            action="case.policy_group.revoke",
+            user_id=removed_by,
+            target_type="policy_group",
+            target_id=group_id,
+            case_id=case_id,
+            metadata={"role": removed.role},
+        )
+        return True
+
+    def _with_policy_group_member_user_details(
+        self, member: PolicyGroupMemberRecord
+    ) -> PolicyGroupMemberRecord:
+        user = self.users.get(member.user_id)
+        return PolicyGroupMemberRecord(
+            id=member.id,
+            group_id=member.group_id,
+            user_id=member.user_id,
+            role=member.role,
+            added_by=member.added_by,
+            created_at=member.created_at,
+            updated_at=member.updated_at,
+            email=user.email if user else member.email,
+            username=user.username if user else member.username,
+            full_name=user.full_name if user else member.full_name,
+        )
+
+    def _with_case_group_details(self, access: CaseGroupAccessRecord) -> CaseGroupAccessRecord:
+        group = self.policy_groups.get(access.group_id)
+        return CaseGroupAccessRecord(
+            id=access.id,
+            case_id=access.case_id,
+            group_id=access.group_id,
+            role=access.role,
+            granted_by=access.granted_by,
+            created_at=access.created_at,
+            updated_at=access.updated_at,
+            group_name=group.name if group else access.group_name,
+            group_slug=group.slug if group else access.group_slug,
+        )
 
     def _with_user_details(
         self, collaborator: CaseCollaboratorRecord

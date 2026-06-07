@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class UserOut(BaseModel):
     id: str
+    organization_id: str
     email: str
     username: str
     role: str

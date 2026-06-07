@@ -38,13 +38,27 @@ def json_list_default() -> Mapped[list[Any]]:
     return mapped_column(JSON_TYPE, nullable=False, default=list, server_default="[]")
 
 
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = uuid_pk()
+    organization_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("organizations.id"), nullable=False, default="default", server_default="default"
+    )
     email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     username: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     full_name: Mapped[str | None] = mapped_column(Text)
+    external_id: Mapped[str | None] = mapped_column(Text)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[str] = mapped_column(Text, nullable=False, default="engineer")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -71,6 +85,7 @@ class CopilotCredential(Base):
     credential_type: Mapped[str] = mapped_column(Text, nullable=False)
     encrypted_token: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     token_hint: Mapped[str | None] = mapped_column(Text)
+    key_id: Mapped[str | None] = mapped_column(Text)
     github_base_url: Mapped[str] = mapped_column(Text, nullable=False, default="https://github.com")
     runtime_type: Mapped[str] = mapped_column(Text, nullable=False, default="github_copilot")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -100,6 +115,9 @@ class Case(Base):
     __tablename__ = "cases"
 
     id: Mapped[str] = uuid_pk()
+    organization_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("organizations.id"), nullable=False, default="default", server_default="default"
+    )
     case_key: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     issue_description: Mapped[str | None] = mapped_column(Text)
@@ -125,6 +143,48 @@ class CaseCollaborator(Base):
     user_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("users.id"), nullable=False)
     role: Mapped[str] = mapped_column(Text, nullable=False)
     added_by: Mapped[str | None] = mapped_column(UUID_TYPE, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PolicyGroup(Base):
+    __tablename__ = "policy_groups"
+    __table_args__ = (UniqueConstraint("organization_id", "slug"),)
+
+    id: Mapped[str] = uuid_pk()
+    organization_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("organizations.id"), nullable=False, default="default", server_default="default"
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    external_id: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PolicyGroupMember(Base):
+    __tablename__ = "policy_group_members"
+    __table_args__ = (UniqueConstraint("group_id", "user_id"),)
+
+    id: Mapped[str] = uuid_pk()
+    group_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("policy_groups.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("users.id"), nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False, default="viewer")
+    added_by: Mapped[str | None] = mapped_column(UUID_TYPE, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CaseGroupAccess(Base):
+    __tablename__ = "case_group_access"
+    __table_args__ = (UniqueConstraint("case_id", "group_id"),)
+
+    id: Mapped[str] = uuid_pk()
+    case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
+    group_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("policy_groups.id"), nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    granted_by: Mapped[str | None] = mapped_column(UUID_TYPE, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

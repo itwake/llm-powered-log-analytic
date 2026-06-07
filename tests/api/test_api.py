@@ -638,6 +638,164 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
+async def test_organization_isolation_and_policy_group_case_access(tmp_path: Path) -> None:
+    store = InMemoryStore(Settings(local_object_store_dir=str(tmp_path / "object-store")))
+    store.ensure_organization(
+        organization_id="org-two",
+        name="Second Organization",
+        slug="org-two",
+    )
+    app = create_app(
+        store=store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    owner = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    direct = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    group_member = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    outsider = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    org_two_admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+
+    owner_id = await _register_and_login(
+        owner,
+        store,
+        email="org-owner@example.com",
+        username="org-owner",
+    )
+    admin_id = await _register_and_login(
+        admin,
+        store,
+        email="org-admin@example.com",
+        username="org-admin",
+        role="admin",
+    )
+    direct_id = await _register_and_login(
+        direct,
+        store,
+        email="direct-viewer@example.com",
+        username="direct-viewer",
+    )
+    group_member_id = await _register_and_login(
+        group_member,
+        store,
+        email="group-member@example.com",
+        username="group-member",
+    )
+    await _register_and_login(
+        outsider,
+        store,
+        email="same-org-outsider@example.com",
+        username="same-org-outsider",
+    )
+    org_two_user = store.register_user(
+        email="org-two-admin@example.com",
+        username="org-two-admin",
+        full_name=None,
+        password="password123",
+        organization_id="org-two",
+    )
+    org_two_user.role = "admin"
+    org_two_login = await org_two_admin.post(
+        "/api/auth/login",
+        json={"email_or_username": "org-two-admin", "password": "password123"},
+    )
+    assert org_two_login.status_code == 200, org_two_login.text
+
+    case_id = await _create_case(owner)
+    org_two_case = store.create_case(
+        user_id=org_two_user.id,
+        data={
+            "title": "Other org case",
+            "issue_description": None,
+            "product": "other",
+            "service": "other",
+            "environment": "prod",
+            "incident_start": None,
+            "incident_end": None,
+            "timezone": "UTC",
+        },
+    )
+
+    assert (await org_two_admin.get("/api/cases")).json()["total"] == 1
+    assert (await org_two_admin.get(f"/api/cases/{case_id}")).status_code == 404
+    default_admin_cases = await admin.get("/api/cases")
+    assert default_admin_cases.status_code == 200, default_admin_cases.text
+    assert {item["case_id"] for item in default_admin_cases.json()["items"]} == {case_id}
+    assert (await admin.get(f"/api/cases/{org_two_case.id}")).status_code == 404
+    assert (await outsider.get(f"/api/cases/{case_id}")).status_code == 404
+
+    cross_org_collab = await owner.post(
+        f"/api/cases/{case_id}/collaborators",
+        json={"user_id": org_two_user.id, "role": "viewer"},
+    )
+    assert cross_org_collab.status_code == 400
+
+    direct_viewer = await owner.post(
+        f"/api/cases/{case_id}/collaborators",
+        json={"user_id": direct_id, "role": "viewer"},
+    )
+    assert direct_viewer.status_code == 200, direct_viewer.text
+    assert (await direct.get(f"/api/cases/{case_id}")).status_code == 200
+
+    group = await admin.post("/api/admin/policy-groups", json={"name": "SRE Team"})
+    assert group.status_code == 200, group.text
+    group_id = group.json()["id"]
+    member = await admin.post(
+        f"/api/admin/policy-groups/{group_id}/members",
+        json={"user_id": group_member_id, "role": "viewer"},
+    )
+    assert member.status_code == 200, member.text
+    grant = await admin.post(
+        f"/api/admin/cases/{case_id}/policy-groups",
+        json={"group_id": group_id, "role": "viewer"},
+    )
+    assert grant.status_code == 200, grant.text
+    assert (await group_member.get(f"/api/cases/{case_id}")).status_code == 200
+    viewer_upload = await group_member.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "viewer.log", "content_type": "text/plain", "size_bytes": 0},
+    )
+    assert viewer_upload.status_code == 403
+
+    editor_grant = await admin.post(
+        f"/api/admin/cases/{case_id}/policy-groups",
+        json={"group_id": group_id, "role": "editor"},
+    )
+    assert editor_grant.status_code == 200, editor_grant.text
+    editor_upload = await group_member.post(
+        f"/api/cases/{case_id}/uploads",
+        json={"filename": "editor.log", "content_type": "text/plain", "size_bytes": 0},
+    )
+    assert editor_upload.status_code == 200, editor_upload.text
+    assert (await outsider.get(f"/api/cases/{case_id}")).status_code == 404
+
+    users = await org_two_admin.get("/api/admin/users")
+    assert users.status_code == 200, users.text
+    assert {item["id"] for item in users.json()["items"]} == {org_two_user.id}
+    default_groups = await admin.get("/api/admin/policy-groups")
+    assert default_groups.json()["total"] == 1
+    assert default_groups.json()["items"][0]["member_count"] == 1
+    org_two_groups = await org_two_admin.get("/api/admin/policy-groups")
+    assert org_two_groups.json()["total"] == 0
+
+    audit_actions = {record.action for record in store.list_audit_logs(case_id=case_id)}
+    assert {
+        "case.policy_group.grant",
+        "case.collaborator.add",
+    }.issubset(audit_actions)
+    assert owner_id
+    assert admin_id
+
+    await owner.aclose()
+    await admin.aclose()
+    await direct.aclose()
+    await group_member.aclose()
+    await outsider.aclose()
+    await org_two_admin.aclose()
+
+
+@pytest.mark.asyncio
 async def test_admin_api_settings_are_safe_and_admin_only() -> None:
     store = InMemoryStore(
         Settings(
@@ -770,6 +928,247 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
     }
 
     await engineer.aclose()
+    await admin.aclose()
+
+
+@pytest.mark.asyncio
+async def test_scim_users_and_groups_support_bearer_and_admin_session() -> None:
+    store = InMemoryStore(Settings(scim_bearer_token="scim-secret"))
+    app = create_app(
+        store=store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    scim = AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        headers={"authorization": "Bearer scim-secret"},
+    )
+    admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    anonymous = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+
+    unauthorized = await anonymous.get("/api/scim/v2/Users")
+    assert unauthorized.status_code == 401
+
+    admin_id = await _register_and_login(
+        admin,
+        store,
+        email="scim-admin@example.com",
+        username="scim-admin",
+        role="admin",
+    )
+    admin_scim = await admin.get("/api/scim/v2/Users")
+    assert admin_scim.status_code == 200, admin_scim.text
+
+    created = await scim.post(
+        "/api/scim/v2/Users",
+        json={
+            "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+            "externalId": "ext-user-1",
+            "userName": "scim.user@example.com",
+            "name": {"formatted": "SCIM User"},
+            "emails": [{"value": "scim.user@example.com", "primary": True}],
+            "active": True,
+        },
+    )
+    assert created.status_code == 201, created.text
+    user_body = created.json()
+    scim_user_id = user_body["id"]
+    assert user_body["userName"] == "scim.user@example.com"
+    assert user_body["active"] is True
+    assert "password" not in created.text.lower()
+    assert "token" not in created.text.lower()
+    assert "secret" not in created.text.lower()
+
+    patched = await scim.patch(
+        f"/api/scim/v2/Users/{scim_user_id}",
+        json={
+            "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+            "Operations": [{"op": "replace", "path": "active", "value": False}],
+        },
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["active"] is False
+    assert store.get_user(scim_user_id).is_active is False
+
+    reactivated = await scim.put(
+        f"/api/scim/v2/Users/{scim_user_id}",
+        json={
+            "userName": "scim.user@example.com",
+            "name": {"formatted": "SCIM User Updated"},
+            "emails": [{"value": "scim.user@example.com", "primary": True}],
+            "active": True,
+        },
+    )
+    assert reactivated.status_code == 200, reactivated.text
+    assert reactivated.json()["displayName"] == "SCIM User Updated"
+    assert store.get_user(scim_user_id).is_active is True
+
+    group = await scim.post(
+        "/api/scim/v2/Groups",
+        json={
+            "displayName": "SCIM Synced Group",
+            "members": [{"value": scim_user_id}],
+        },
+    )
+    assert group.status_code == 201, group.text
+    group_id = group.json()["id"]
+    assert [member["value"] for member in group.json()["members"]] == [scim_user_id]
+    assert store.list_policy_group_members(group_id)[0].user_id == scim_user_id
+
+    removed = await scim.patch(
+        f"/api/scim/v2/Groups/{group_id}",
+        json={
+            "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+            "Operations": [
+                {"op": "remove", "path": "members", "value": [{"value": scim_user_id}]}
+            ],
+        },
+    )
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["members"] == []
+    assert store.list_policy_group_members(group_id) == []
+
+    deactivated = await scim.delete(f"/api/scim/v2/Users/{scim_user_id}")
+    assert deactivated.status_code == 204
+    assert store.get_user(scim_user_id).is_active is False
+    actions = {record.action for record in store.list_audit_logs()}
+    assert {
+        "scim.user.create",
+        "scim.user.patch",
+        "scim.user.update",
+        "scim.user.deactivate",
+        "scim.group.create",
+        "scim.group.patch",
+    }.issubset(actions)
+    serialized_audit = json.dumps(
+        [record.metadata for record in store.list_audit_logs()],
+        sort_keys=True,
+    )
+    assert "scim-secret" not in serialized_audit
+    assert admin_id
+
+    await scim.aclose()
+    await admin.aclose()
+    await anonymous.aclose()
+
+
+@pytest.mark.asyncio
+async def test_audit_export_and_metadata_redaction_block_adversarial_payloads() -> None:
+    store = InMemoryStore()
+    app = create_app(
+        store=store,
+        copilot_auth_client=MockGitHubDeviceClient(),
+        model_gateway=MockCopilotAnnotationGateway(),
+    )
+    admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    admin_id = await _register_and_login(
+        admin,
+        store,
+        email="audit-export-admin@example.com",
+        username="audit-export-admin",
+        role="admin",
+    )
+    jwt_like = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+        "eyJzdWIiOiIxMjM0NTY3ODkwIn0."
+        "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+    )
+    secret_values = [
+        "Bearer bearer-secret-token-1234567890",
+        "gho_github_secret_token_1234567890",
+        "sk-openai-secret-token-1234567890",
+        jwt_like,
+        "/root/workspace/llm-powered-log-analytic-p3/tests/fixtures/logs/auth.log",
+    ]
+    credential_values = ["password=hunter2", "api_key=abc123secret"]
+    store.record_audit(
+        action="adversarial.audit",
+        user_id=admin_id,
+        metadata={
+            "safe": " ".join(secret_values),
+            "credential_note": " ".join(credential_values),
+            "note": "raw prompt classify this raw log payload",
+            "prompt": "raw prompt should be removed",
+            "raw_text": "raw log payload should be removed",
+            "api_key": "abc123secret",
+            "file_path": "/root/workspace/secret.log",
+        },
+    )
+    case = store.create_case(
+        user_id=admin_id,
+        data={
+            "title": "Redaction case",
+            "issue_description": None,
+            "product": "security",
+            "service": "audit",
+            "environment": "test",
+            "incident_start": None,
+            "incident_end": None,
+            "timezone": "UTC",
+        },
+    )
+    event = store.record_job_event(
+        case_id=case.id,
+        analysis_run_id="run-redaction",
+        step_name="red_team",
+        event_type="completed",
+        status="completed",
+        idempotency_key="red-team",
+        metadata={
+            "files": 1,
+            "authorization": "Bearer event-secret",
+            "prompt": "raw prompt",
+            "input_path": "/root/workspace/raw.log",
+            "safe_error": "failed with sk-event-secret-token-12345 at /tmp/raw.log",
+        },
+    )
+    artifact = store.upsert_analysis_step_artifact(
+        case_id=case.id,
+        analysis_run_id="run-redaction",
+        step_name="red_team",
+        artifact_type="step_manifest",
+        object_uri="memory://artifact",
+        sha256="0" * 64,
+        size_bytes=1,
+        metadata={
+            "artifact_error": "Bearer artifact-secret /var/log/auth.log",
+            "prompt": "raw prompt",
+            "raw_log": "raw log payload",
+            "file_path": "/root/workspace/raw.log",
+        },
+    )
+
+    serialized_event_metadata = json.dumps(event.metadata, sort_keys=True)
+    serialized_artifact_metadata = json.dumps(artifact.metadata, sort_keys=True)
+    for forbidden in secret_values:
+        assert forbidden not in serialized_event_metadata
+        assert forbidden not in serialized_artifact_metadata
+    assert "prompt" not in serialized_event_metadata
+    assert "raw_log" not in serialized_artifact_metadata
+    assert "<REDACTED>" in serialized_artifact_metadata
+    assert "<REDACTED_PATH>" in serialized_artifact_metadata
+
+    for export_format in ("json", "ndjson", "csv"):
+        exported = await admin.get(
+            "/api/admin/audit-logs/export",
+            params={"format": export_format, "action": "adversarial.audit"},
+        )
+        assert exported.status_code == 200, exported.text
+        body = exported.text
+        assert "adversarial.audit" in body
+        for forbidden in secret_values:
+            assert forbidden not in body
+        for forbidden in credential_values:
+            assert forbidden not in body
+        assert "raw prompt classify this raw log payload" not in body
+        assert "raw prompt should be removed" not in body
+        assert "raw log payload should be removed" not in body
+        assert "abc123secret" not in body
+        assert "/root/workspace" not in body
+        assert "<REDACTED>" in body
+        assert "<REDACTED_PATH>" in body
+
     await admin.aclose()
 
 

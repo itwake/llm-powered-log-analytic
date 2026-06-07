@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 def to_user_out(store: MetadataStore, user: UserRecord) -> UserOut:
     return UserOut(
         id=user.id,
+        organization_id=user.organization_id,
         email=user.email,
         username=user.username,
         role=user.role,

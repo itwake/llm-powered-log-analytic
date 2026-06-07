@@ -12,7 +12,7 @@ from urllib.parse import unquote, urlparse, urlunparse
 import httpx
 
 from app.config import Settings, settings
-from app.core.security import decrypt_token
+from app.core.security import decrypt_token_for_settings
 from app.observability import record_copilot_gateway_request
 from app.store import CredentialRecord, MetadataStore
 
@@ -244,9 +244,10 @@ class CopilotModelGateway:
         if credential is None:
             return None
         try:
-            token = decrypt_token(
+            token = decrypt_token_for_settings(
                 credential.encrypted_token,
-                self.store.settings.credential_encryption_key,
+                self.store.settings,
+                key_id=credential.key_id,
             )
         except Exception as exc:
             raise CopilotCredentialError(

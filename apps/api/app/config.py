@@ -19,6 +19,12 @@ class Settings:
     credential_encryption_key: str = os.getenv(
         "LOGAN_CREDENTIAL_ENCRYPTION_KEY", "change-me-local-key"
     )
+    credential_encryption_key_id: str = os.getenv(
+        "LOGAN_CREDENTIAL_ENCRYPTION_KEY_ID", "default"
+    )
+    credential_encryption_keyring: str = os.getenv(
+        "LOGAN_CREDENTIAL_ENCRYPTION_KEYRING", "{}"
+    )
     llm_provider: str = os.getenv("LOGAN_LLM_PROVIDER", "github_copilot")
     copilot_model: str = os.getenv("LOGAN_COPILOT_MODEL", "gpt-5.4")
     copilot_reasoning_effort: str = os.getenv("LOGAN_COPILOT_REASONING_EFFORT", "high")
@@ -101,6 +107,7 @@ class Settings:
     analytics_sink_failure_mode: str = os.getenv(
         "LOGAN_ANALYTICS_SINK_FAILURE_MODE", "warn"
     ).lower()
+    scim_bearer_token: str | None = os.getenv("LOGAN_SCIM_BEARER_TOKEN") or None
 
 
 settings = Settings()

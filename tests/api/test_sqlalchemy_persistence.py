@@ -213,6 +213,7 @@ def test_sqlalchemy_credentials_persist_expiration_and_revocation(tmp_path: Path
     assert decrypt_token(
         active_plugin.encrypted_token, store.settings.credential_encryption_key
     ) == "persisted-plugin-token"
+    assert active_plugin.key_id == store.settings.credential_encryption_key_id
     assert store.has_credential(user.id) is True
 
     store.save_credential(
@@ -360,6 +361,18 @@ def test_sqlalchemy_case_collaborators_persist_and_filter_access(tmp_path: Path)
         full_name=None,
         password="password123",
     )
+    store.ensure_organization(
+        organization_id="sql-org-two",
+        name="SQL Org Two",
+        slug="sql-org-two",
+    )
+    org_two_user = store.register_user(
+        email="sql-org-two@example.com",
+        username="sql-org-two",
+        full_name=None,
+        password="password123",
+        organization_id="sql-org-two",
+    )
     case = store.create_case(
         user_id=owner.id,
         data={
@@ -379,6 +392,14 @@ def test_sqlalchemy_case_collaborators_persist_and_filter_access(tmp_path: Path)
     assert store.user_can_access_case(owner.id, case.id, "owner") is True
     assert store.user_can_access_case(collaborator.id, case.id, "view") is False
     assert store.list_cases_for_user(collaborator)[1] == 0
+    assert store.user_can_access_case(org_two_user.id, case.id, "view") is False
+    with pytest.raises(ValueError):
+        store.upsert_case_collaborator(
+            case_id=case.id,
+            user_id=org_two_user.id,
+            role="viewer",
+            added_by=owner.id,
+        )
 
     added = store.upsert_case_collaborator(
         case_id=case.id,
@@ -402,8 +423,54 @@ def test_sqlalchemy_case_collaborators_persist_and_filter_access(tmp_path: Path)
         removed_by=owner.id,
     ) is True
     assert recreated.user_can_access_case(collaborator.id, case.id, "view") is False
+
+    group = recreated.create_policy_group(
+        organization_id=owner.organization_id,
+        name="SQL SRE",
+        created_by=owner.id,
+    )
+    recreated.upsert_policy_group_member(
+        group_id=group.id,
+        user_id=collaborator.id,
+        role="viewer",
+        added_by=owner.id,
+    )
+    recreated.upsert_case_group_access(
+        case_id=case.id,
+        group_id=group.id,
+        role="viewer",
+        granted_by=owner.id,
+    )
+    persisted_groups = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    assert persisted_groups.user_can_access_case(collaborator.id, case.id, "view") is True
+    assert persisted_groups.user_can_access_case(collaborator.id, case.id, "edit") is False
+    persisted_groups.upsert_case_group_access(
+        case_id=case.id,
+        group_id=group.id,
+        role="editor",
+        granted_by=owner.id,
+    )
+    assert persisted_groups.user_can_access_case(collaborator.id, case.id, "edit") is True
+    assert persisted_groups.user_can_access_case(outsider.id, case.id, "view") is False
+    other_group = persisted_groups.create_policy_group(
+        organization_id="sql-org-two",
+        name="Other Org Group",
+        created_by=org_two_user.id,
+    )
+    with pytest.raises(ValueError):
+        persisted_groups.upsert_case_group_access(
+            case_id=case.id,
+            group_id=other_group.id,
+            role="viewer",
+            granted_by=owner.id,
+        )
     actions = {record.action for record in recreated.list_audit_logs(case_id=case.id)}
-    assert {"case.collaborator.add", "case.collaborator.remove"}.issubset(actions)
+    actions |= {record.action for record in persisted_groups.list_audit_logs(case_id=case.id)}
+    assert {
+        "case.collaborator.add",
+        "case.collaborator.remove",
+        "case.policy_group.grant",
+    }.issubset(actions)
 
 
 @pytest.mark.asyncio
