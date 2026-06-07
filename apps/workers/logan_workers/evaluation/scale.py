@@ -113,6 +113,8 @@ class ScaleBenchmarkReport(BaseModel):
     pipeline_counts: ScalePipelineCountSummary
     performance: ScalePerformanceSummary
     model_call_count: int
+    annotation_model_call_count: int
+    summary_model_call_count: int
     review_load_reduction: float
     causal_summary: ScaleCausalSummary
     safety: ReportSafetySummary = Field(default_factory=ReportSafetySummary)
@@ -429,6 +431,19 @@ def _current_rss_bytes_linux() -> int | None:
     return None
 
 
+def _model_call_counts(calls: list[dict[str, Any]]) -> tuple[int, int]:
+    annotation_calls = 0
+    summary_calls = 0
+    for call in calls:
+        metadata = call.get("metadata") if isinstance(call.get("metadata"), dict) else {}
+        purpose = metadata.get("purpose")
+        if purpose == "template_annotation":
+            annotation_calls += 1
+        elif purpose == "causal_summary":
+            summary_calls += 1
+    return annotation_calls, summary_calls
+
+
 async def run_scale_benchmark(
     *,
     profile: str = "quick",
@@ -479,6 +494,7 @@ async def run_scale_benchmark(
         if peak_rss is not None and baseline_rss is not None
         else None
     )
+    annotation_call_count, summary_call_count = _model_call_counts(gateway.calls)
 
     report = ScaleBenchmarkReport(
         benchmark_id="logan.scale.synthetic",
@@ -506,6 +522,8 @@ async def run_scale_benchmark(
             linux_peak_rss=platform.system().lower() == "linux",
         ),
         model_call_count=len(gateway.calls),
+        annotation_model_call_count=annotation_call_count,
+        summary_model_call_count=summary_call_count,
         review_load_reduction=review_load_reduction(
             raw_items=len(result.raw_entries),
             review_items=len(result.samples),
@@ -592,6 +610,8 @@ def scale_report_to_markdown(report: ScaleBenchmarkReport) -> str:
             f"| Peak RSS bytes | {_format_bytes(report.performance.peak_rss_bytes)} |",
             f"| Peak RSS delta bytes | {_format_bytes(report.performance.peak_rss_delta_bytes)} |",
             f"| Model calls | {report.model_call_count} |",
+            f"| Annotation model calls | {report.annotation_model_call_count} |",
+            f"| Summary model calls | {report.summary_model_call_count} |",
             f"| Review-load reduction | {report.review_load_reduction:.6f} |",
             "",
             "## Causal Summary",

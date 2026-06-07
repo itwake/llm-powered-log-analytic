@@ -106,10 +106,10 @@ the gzip and zip portions are compressed. The JSON report is written to
 Scale reports include generated fixture size, input file count, raw line count, ingested file
 count, source entries, normalized logs, templates, representative samples, annotations, time
 windows, causal nodes and edges, wall time, Linux peak RSS when available, model call count,
-review-load reduction, and Causal Summary presence/confidence/counts. They intentionally omit raw
-log bodies, local absolute paths, prompt/model input payloads, credentials, tokens, secrets, and
-passwords. Report rendering fails closed if those leak-shaped fields or terms appear in JSON or
-Markdown.
+annotation model call count, Causal Summary model call count, review-load reduction, and Causal
+Summary presence/confidence/counts. They intentionally omit raw log bodies, local absolute paths,
+prompt/model input payloads, credentials, tokens, secrets, and passwords. Report rendering fails
+closed if those leak-shaped fields or terms appear in JSON or Markdown.
 
 Run Playwright browser E2E after installing browser dependencies:
 
