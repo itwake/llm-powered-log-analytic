@@ -25,6 +25,15 @@ corepack prepare pnpm@10.13.1 --activate
 pnpm install
 ```
 
+Drain3 templating is optional because upstream `drain3` pins legacy `jsonpickle`
+versions that are not available from every package mirror or Python environment.
+The default install uses the deterministic `StableDrainAdapter` fallback. To use
+real Drain3 where the dependency set is available, install:
+
+```bash
+python3 -m pip install -e ".[drain3]"
+```
+
 Copy `.env.example` to `.env` for local services. The tests do not require Docker, GitHub Copilot credentials, or real external services.
 
 ## Test Commands
