@@ -57,6 +57,11 @@ Treat a non-zero exit code as a release blocker for changes that alter parsing, 
 annotation, causal graph ranking, or summary generation. Store the JSON report as a CI artifact
 for score trend review; the Markdown file is intended for quick human inspection in staging.
 
+Drain3 is an optional parser extra rather than a default dependency because upstream `drain3`
+currently pins legacy `jsonpickle` releases that some mirrors and Python environments do not
+publish. Default installs use `StableDrainAdapter` and still run the full pipeline. Install
+`python -m pip install -e ".[drain3]"` only in environments where that dependency set resolves.
+
 ## Synthetic Scale Benchmark
 
 Use the scale benchmark when validating worker ingestion and pipeline behavior on larger generated

@@ -22,7 +22,11 @@ dependencies = [
   "opentelemetry-api>=1.24",
   "opentelemetry-sdk>=1.24",
   "opentelemetry-instrumentation-fastapi>=0.45b0",
-  "opentelemetry-exporter-otlp>=1.24",
+  "opentelemetry-exporter-otlp>=1.24"
+]
+
+[project.optional-dependencies]
+drain3 = [
   "drain3>=0.9,<1.0"
 ]
 
