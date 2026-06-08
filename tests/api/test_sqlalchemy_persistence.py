@@ -537,7 +537,10 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     app_settings = Settings(
         database_url=database_url,
         store_backend="sqlalchemy",
+        object_store_backend="local",
         local_object_store_dir=str(tmp_path / "object-store"),
+        step_artifacts_enabled=True,
+        step_artifact_failure_mode="fail",
     )
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     client = await _client(store)

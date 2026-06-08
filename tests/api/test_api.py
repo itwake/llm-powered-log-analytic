@@ -1343,7 +1343,12 @@ async def test_disconnect_revokes_credentials_for_gateway_use() -> None:
 @pytest.mark.asyncio
 async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     client, store, _ = await _authenticated_client(
-        Settings(local_object_store_dir=str(tmp_path / "object-store"))
+        Settings(
+            object_store_backend="local",
+            local_object_store_dir=str(tmp_path / "object-store"),
+            step_artifacts_enabled=True,
+            step_artifact_failure_mode="fail",
+        )
     )
     case_id = await _create_case(client)
 
