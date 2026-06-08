@@ -282,9 +282,8 @@ Step artifact manifests use the same object-store backend:
 
 Each completed pipeline step writes a small `step_manifest` JSON object and upserts
 `analysis_step_artifacts` by `(analysis_run_id, step_name, artifact_type)`. Local manifests are
-stored under
-`.logan/object-store/cases/{case_id}/analysis-runs/{run_id}/steps/{step_name}.json`; S3/MinIO
-manifests are stored under
+stored under `.logan/object-store/step-artifacts/{hash}.json` to keep Windows paths short;
+S3/MinIO manifests are stored under
 `s3://{bucket}/cases/{case_id}/analysis-runs/{run_id}/steps/{step_name}.json`. Manifest bodies
 contain only case/run ids, step name, artifact type, timestamp, and sanitized completed-event
 metadata. They do not include raw log text, `raw_text_redacted`, model prompts, model inputs,

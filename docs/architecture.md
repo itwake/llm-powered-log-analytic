@@ -32,7 +32,7 @@ model inputs, source tokens, and credential material are not stored in event met
 After each `completed` event, the API or worker process also writes a safe step-level
 `step_manifest` artifact to the configured object store and upserts a row in
 `analysis_step_artifacts`. Local manifests use
-`.logan/object-store/cases/{case_id}/analysis-runs/{run_id}/steps/{step_name}.json` by default;
+`.logan/object-store/step-artifacts/{hash}.json` by default to keep Windows paths short;
 S3/MinIO manifests use
 `s3://{bucket}/cases/{case_id}/analysis-runs/{run_id}/steps/{step_name}.json`. Manifest bodies
 contain case/run ids, step name, artifact type, created timestamp, and sanitized completed-event
