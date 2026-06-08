@@ -5,6 +5,7 @@ import json
 import zipfile
 from pathlib import Path
 
+import logan_workers.evaluation.scale as scale_module
 from logan_workers.evaluation.reporting import (
     find_unsafe_report_terms,
 )
@@ -47,6 +48,12 @@ def test_scale_fixture_generator_mixes_formats_without_committing_fixture(tmp_pa
         assert names == ["region-a/auth-payment.log", "region-b/gateway.jsonl"]
         json_line = archive.read("region-b/gateway.jsonl").decode("utf-8").splitlines()[0]
     assert json.loads(json_line)["service"] == "auth-service"
+
+
+def test_peak_rss_measurement_is_optional_on_windows(monkeypatch) -> None:
+    monkeypatch.setattr(scale_module, "resource_module", None)
+
+    assert scale_module._peak_rss_bytes() is None
 
 
 def test_report_sanitizer_rejects_scale_leak_shapes() -> None:
