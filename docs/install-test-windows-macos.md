@@ -47,6 +47,10 @@ Remove-Item Env:LOGAN_STORE_BACKEND -ErrorAction SilentlyContinue
 Remove-Item Env:LOGAN_LLM_PROVIDER -ErrorAction SilentlyContinue
 ```
 
+With those variables cleared, the API defaults to SQLite at `.logan/logan.db`
+and the test suite overrides individual tests to use isolated temporary stores
+where needed.
+
 Run Python checks:
 
 ```powershell
@@ -121,6 +125,10 @@ unset LOGAN_DATABASE_URL
 unset LOGAN_STORE_BACKEND
 unset LOGAN_LLM_PROVIDER
 ```
+
+With those variables cleared, the API defaults to SQLite at `.logan/logan.db`
+and the test suite overrides individual tests to use isolated temporary stores
+where needed.
 
 Run Python checks:
 
@@ -209,4 +217,5 @@ python -m pytest -q tests/staging/test_copilot_smoke.py
 - Docker smoke times out: allocate at least 6 GiB memory to Docker Desktop and
   run `docker compose down --remove-orphans -v` before retrying.
 - Existing local services on ports 3000 or 8000 can affect E2E reuse behavior.
-  Stop them or ensure they use the same memory-store/mock-LLM settings.
+  Stop them or ensure they use the same E2E settings, including
+  `LOGAN_STORE_BACKEND=memory` and `LOGAN_LLM_PROVIDER=mock`.

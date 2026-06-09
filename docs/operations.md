@@ -196,6 +196,9 @@ LOGAN_FULL_STACK_S3_PUBLIC_ENDPOINT=http://localhost:9000 python3 scripts/full_s
 The default exposed ports are API `8000`, web `3000`, PostgreSQL `5432`, MinIO `9000/9001`,
 ClickHouse `8123/9002`, OpenSearch `9200`, Redis `6379`, and Temporal `7233`. Override with the
 `LOGAN_*_PORT` variables in `docker-compose.yml` if a VM already uses those ports.
+Compose intentionally uses `LOGAN_COMPOSE_DATABASE_URL` for API/worker database overrides so a
+developer `.env` with the default local `LOGAN_DATABASE_URL=sqlite:///.logan/logan.db` does not
+disable the full-stack PostgreSQL path.
 
 OpenSearch is capped at `-Xms512m -Xmx512m` in compose. On small VMs, leave several GiB free for
 Docker or lower other local workloads before running the smoke. The compose credentials are local
@@ -216,7 +219,7 @@ make migrate
 
 The command calls `scripts/run_migrations.py`. It creates the SQLAlchemy schema for SQLite and
 PostgreSQL stores, applies PostgreSQL incremental SQL migrations with `schema_migrations`
-tracking, and exits as a no-op for the explicit in-memory store.
+tracking, and exits as a no-op only for the explicit in-memory store.
 
 The pytest wrapper is opt-in:
 
@@ -241,11 +244,17 @@ Run the API locally:
 uvicorn app.main:app --reload --app-dir apps/api
 ```
 
-By default the API uses the lightweight in-memory store unless a database URL is configured.
-Set `LOGAN_DATABASE_URL=sqlite:////tmp/logan.db` for local durable metadata, or use a
-PostgreSQL URL such as `postgresql+psycopg://logan:logan@postgres:5432/logan`.
-`LOGAN_STORE_BACKEND=auto` selects SQLAlchemy when `LOGAN_DATABASE_URL` is set; `memory`
-and `sqlalchemy` force a backend explicitly.
+By default the API uses durable SQLite metadata at `.logan/logan.db` through SQLAlchemy:
+
+```bash
+LOGAN_DATABASE_URL=sqlite:///.logan/logan.db
+LOGAN_STORE_BACKEND=auto
+```
+
+Set `LOGAN_DATABASE_URL=sqlite:////tmp/logan.db` for a different local path, or use a PostgreSQL
+URL such as `postgresql+psycopg://logan:logan@postgres:5432/logan`. `LOGAN_STORE_BACKEND=auto`
+selects SQLAlchemy with SQLite/PostgreSQL; `memory` is still available for explicit ephemeral
+tests, and `sqlalchemy` requires a configured database URL.
 Set `LOGAN_CORS_ALLOWED_ORIGINS` to a comma-separated list of browser origins allowed to send
 credentialed API requests. The default is `http://localhost:3000`; production deployments should
 set it to the deployed web origin, such as `https://logan.example.com`.

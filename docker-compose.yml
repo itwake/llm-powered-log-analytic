@@ -5,7 +5,7 @@ x-logan-env: &logan-env
   LOGAN_SECRET_KEY: ${LOGAN_SECRET_KEY:-logan-local-dev-secret}
   LOGAN_CREDENTIAL_ENCRYPTION_KEY: ${LOGAN_CREDENTIAL_ENCRYPTION_KEY:-logan-local-dev-credential-key}
   LOGAN_STORE_BACKEND: sqlalchemy
-  LOGAN_DATABASE_URL: ${LOGAN_DATABASE_URL:-postgresql+psycopg://logan:logan@postgres:5432/logan}
+  LOGAN_DATABASE_URL: ${LOGAN_COMPOSE_DATABASE_URL:-postgresql+psycopg://logan:logan@postgres:5432/logan}
   LOGAN_OBJECT_STORE_BACKEND: minio
   LOGAN_LOCAL_OBJECT_STORE_DIR: /data/object-store
   LOGAN_ANALYSIS_INPUT_TMP_DIR: /tmp/logan-analysis-inputs

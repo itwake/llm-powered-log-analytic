@@ -47,6 +47,7 @@ STANDARD_PROXY_ENV_NAMES = (
     "ALL_PROXY",
     "all_proxy",
 )
+DEFAULT_SQLITE_DATABASE_URL = "sqlite:///.logan/logan.db"
 
 
 def _is_unsafe_production_secret(value: str, unsafe_values: Iterable[str]) -> bool:
@@ -85,7 +86,7 @@ class Settings:
     copilot_token_cache_skew_seconds: int = int(
         os.getenv("LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS", "60")
     )
-    database_url: str | None = os.getenv("LOGAN_DATABASE_URL") or None
+    database_url: str | None = _env_first("LOGAN_DATABASE_URL") or DEFAULT_SQLITE_DATABASE_URL
     store_backend: str = os.getenv("LOGAN_STORE_BACKEND", "auto")
     analysis_orchestrator: str = os.getenv("LOGAN_ANALYSIS_ORCHESTRATOR", "local")
     temporal_address: str = os.getenv("LOGAN_TEMPORAL_ADDRESS", "temporal:7233")

@@ -18,3 +18,13 @@ def test_kubernetes_config_exposes_deployment_runtime_settings() -> None:
 
     assert "LOGAN_CORS_ALLOWED_ORIGINS" in manifest
     assert "LOGAN_API_WORKERS" in manifest
+
+
+def test_docker_compose_preserves_postgres_default_despite_local_sqlite_env() -> None:
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert (
+        "LOGAN_COMPOSE_DATABASE_URL:-postgresql+psycopg://logan:logan@postgres:5432/logan"
+        in compose
+    )
+    assert "LOGAN_DATABASE_URL: ${LOGAN_DATABASE_URL" not in compose

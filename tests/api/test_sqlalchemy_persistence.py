@@ -1320,3 +1320,13 @@ def test_create_store_auto_uses_sqlalchemy_when_database_url_is_set(tmp_path: Pa
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
     store = create_store(Settings(database_url=database_url, store_backend="auto"))
     assert isinstance(store, SQLAlchemyStore)
+
+
+def test_create_store_auto_defaults_to_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    store = create_store(Settings(store_backend="auto"))
+
+    assert isinstance(store, SQLAlchemyStore)
+    assert store.database_url == "sqlite:///.logan/logan.db"
+    assert (tmp_path / ".logan" / "logan.db").exists()

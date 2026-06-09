@@ -133,6 +133,9 @@ The smoke stack starts PostgreSQL, MinIO, ClickHouse, OpenSearch, Temporal, the 
 worker. It uses durable SQLAlchemy/PostgreSQL metadata, MinIO presigned uploads, Temporal
 orchestration, mock LLM annotation, and real ClickHouse/OpenSearch sink/query paths. It does not
 use or require Copilot credentials.
+Docker Compose keeps this PostgreSQL path by using `LOGAN_COMPOSE_DATABASE_URL`, so the default
+local SQLite `LOGAN_DATABASE_URL=sqlite:///.logan/logan.db` in `.env` does not affect full-stack
+smoke runs.
 
 Run the real Copilot staging smoke only when explicitly opted in:
 
@@ -164,7 +167,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev --workspace @logan/we
 Set `LOGAN_CORS_ALLOWED_ORIGINS` on the API to the comma-separated browser origins that may send
 credentialed requests, for example `https://logan.example.com,http://localhost:3000`.
 Containerized API deployments can set `LOGAN_API_WORKERS` to control Uvicorn worker count.
-The default local API uses in-memory metadata unless `LOGAN_DATABASE_URL` is set.
+The default local API uses durable SQLite metadata at `.logan/logan.db`.
 Uploaded bytes use the local object store by default and are written under
 `.logan/object-store` unless `LOGAN_LOCAL_OBJECT_STORE_DIR` is set.
 External analytics sinks and service-backed report queries are disabled by default,
@@ -218,8 +221,8 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_LLM_PROVIDER=github_copilot`
 - `LOGAN_LLM_PROVIDER=mock` is supported for deterministic local/CI E2E analysis only; production
   paths should keep `github_copilot`.
-- `LOGAN_DATABASE_URL=` unset by default for lightweight local memory mode; set to `sqlite:///...` for local durable tests or `postgresql+psycopg://user:pass@host:5432/db` for PostgreSQL.
-- `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy when `LOGAN_DATABASE_URL` is set and memory otherwise. Use `memory` or `sqlalchemy` to force a backend.
+- `LOGAN_DATABASE_URL=sqlite:///.logan/logan.db` by default for local durable metadata; set it to another `sqlite:///...` path or `postgresql+psycopg://user:pass@host:5432/db` for PostgreSQL.
+- `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy with SQLite/PostgreSQL. Use `memory` only for explicit ephemeral tests, or `sqlalchemy` to require a configured database URL.
 - `LOGAN_ANALYSIS_ORCHESTRATOR=local`; set to `temporal` to have the API create the SQLAlchemy run and start `AnalyzeCaseWorkflow`.
 - `LOGAN_TEMPORAL_ADDRESS=temporal:7233`, `LOGAN_TEMPORAL_NAMESPACE=default`, and `LOGAN_TEMPORAL_TASK_QUEUE=logan-analysis` configure the Temporal API client and worker.
 - `LOGAN_TEMPORAL_ACTIVITY_START_TO_CLOSE_SECONDS=3600` and `LOGAN_TEMPORAL_ACTIVITY_MAX_ATTEMPTS=3` are copied into replay-safe workflow params and used for the analysis activity timeout/retry policy.
