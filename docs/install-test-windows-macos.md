@@ -9,7 +9,7 @@ Drain3's legacy `jsonpickle` pin.
 
 - Git
 - Python 3.11 or newer, Python 3.12 recommended
-- Node.js 20 or newer with Corepack enabled
+- Node.js 20 or newer with npm
 - Docker Desktop for full-stack smoke tests
 
 The Python unit tests do not require Docker, GitHub Copilot credentials, MinIO,
@@ -26,8 +26,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -e . pytest pytest-asyncio ruff
-corepack enable
-corepack prepare pnpm@10.13.1 --activate
+npm install -g pnpm@10.13.1
 pnpm install
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
@@ -70,8 +69,8 @@ Run web checks:
 ```powershell
 pnpm --filter @logan/web build
 pnpm --filter @logan/web test
-corepack pnpm exec playwright install chromium
-corepack pnpm e2e
+pnpm exec playwright install chromium
+pnpm e2e
 ```
 
 Run the full-stack Docker smoke from PowerShell. This is the Makefile-equivalent
@@ -110,8 +109,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e . pytest pytest-asyncio ruff
-corepack enable
-corepack prepare pnpm@10.13.1 --activate
+npm install -g pnpm@10.13.1
 pnpm install
 cp -n .env.example .env
 ```
@@ -147,8 +145,8 @@ Run web checks:
 ```bash
 pnpm --filter @logan/web build
 pnpm --filter @logan/web test
-corepack pnpm exec playwright install chromium
-corepack pnpm e2e
+pnpm exec playwright install chromium
+pnpm e2e
 ```
 
 Run the full-stack Docker smoke after starting Docker Desktop:
@@ -199,8 +197,7 @@ python -m pytest -q tests/staging/test_copilot_smoke.py
   `null` on platforms without the Unix `resource` module.
 - Step artifact path errors on Windows: pull the latest `master`; local step
   manifests use short hashed paths under `.logan/object-store/step-artifacts/`.
-- Playwright cannot find Chromium: rerun
-  `corepack pnpm exec playwright install chromium`.
+- Playwright cannot find Chromium: rerun `pnpm exec playwright install chromium`.
 - Docker smoke times out: allocate at least 6 GiB memory to Docker Desktop and
   run `docker compose down --remove-orphans -v` before retrying.
 - Existing local services on ports 3000 or 8000 can affect E2E reuse behavior.

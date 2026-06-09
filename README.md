@@ -22,8 +22,7 @@ For platform-specific setup, see
 
 ```bash
 python3 -m pip install -e . pytest pytest-asyncio
-corepack enable
-corepack prepare pnpm@10.13.1 --activate
+npm install -g pnpm@10.13.1
 pnpm install
 ```
 
@@ -63,13 +62,13 @@ pnpm --filter @logan/web lint
 Install the Chromium browser and system packages for Playwright once on a VM:
 
 ```bash
-corepack pnpm exec playwright install --with-deps chromium
+pnpm exec playwright install --with-deps chromium
 ```
 
 Run the browser E2E suite from the repository root:
 
 ```bash
-corepack pnpm e2e
+pnpm e2e
 ```
 
 The Playwright config starts FastAPI on `127.0.0.1:8000` and the Next.js workbench on
@@ -115,7 +114,7 @@ uvicorn app.main:app --reload --app-dir apps/api
 Start the Next.js workbench in another shell:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web dev
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 pnpm --filter @logan/web dev
 ```
 
 `NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. Browser API calls use

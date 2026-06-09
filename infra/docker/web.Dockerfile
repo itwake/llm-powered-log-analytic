@@ -1,7 +1,7 @@
 FROM mirror.gcr.io/library/node:24-alpine AS builder
 
 WORKDIR /app
-RUN corepack enable
+RUN npm install -g pnpm@10.13.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/package.json
 RUN pnpm install --frozen-lockfile
@@ -12,7 +12,7 @@ FROM mirror.gcr.io/library/node:24-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
-RUN corepack enable
+RUN npm install -g pnpm@10.13.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/package.json
 RUN pnpm install --frozen-lockfile --prod

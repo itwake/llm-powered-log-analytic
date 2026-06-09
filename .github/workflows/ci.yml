@@ -38,10 +38,8 @@ jobs:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-      - name: Enable pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.13.1 --activate
+      - name: Install pnpm
+        run: npm install -g pnpm@10.13.1
       - name: Install web dependencies
         run: pnpm install --frozen-lockfile
       - name: Build web

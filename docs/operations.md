@@ -122,8 +122,8 @@ closed if those leak-shaped fields or terms appear in JSON or Markdown.
 Run Playwright browser E2E after installing browser dependencies:
 
 ```bash
-corepack pnpm exec playwright install --with-deps chromium
-corepack pnpm e2e
+pnpm exec playwright install --with-deps chromium
+pnpm e2e
 ```
 
 The E2E config starts the API with:
@@ -138,7 +138,7 @@ The E2E config starts the API with:
 
 It starts the web app with:
 
-- `corepack pnpm --filter @logan/web dev --hostname 127.0.0.1 --port 3000`
+- `pnpm --filter @logan/web dev --hostname 127.0.0.1 --port 3000`
 - `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`
 
 Tests navigate with `http://localhost:3000`, matching the API CORS allow-list. Existing local
@@ -537,7 +537,7 @@ API starts without tracing.
 Run the web workspace against the local API:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web dev
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 pnpm --filter @logan/web dev
 ```
 
 `NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. The web client sends

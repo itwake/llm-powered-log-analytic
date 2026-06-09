@@ -1,14 +1,14 @@
 COMPOSE ?= docker compose
 PYTHON ?= python3
+PNPM ?= pnpm
 SCALE_PROFILE ?= quick
 SCALE_TARGET_BYTES ?=
 
 .PHONY: setup up migrate test evaluate scale-benchmark e2e lint api worker web full-stack-up full-stack-smoke full-stack-down copilot-staging-smoke temporal-retry-smoke openapi-snapshot
 
 setup:
-	corepack enable
-	corepack prepare pnpm@10.13.1 --activate
-	pnpm install
+	npm install -g pnpm@10.13.1
+	$(PNPM) install
 	$(PYTHON) -m pip install -e .
 
 up:
@@ -35,11 +35,11 @@ scale-benchmark:
 		$(if $(SCALE_TARGET_BYTES),--target-bytes $(SCALE_TARGET_BYTES),)
 
 e2e:
-	corepack pnpm e2e
+	$(PNPM) e2e
 
 lint:
 	$(PYTHON) -m compileall apps/api apps/workers
-	pnpm --filter @logan/web lint
+	$(PNPM) --filter @logan/web lint
 
 api:
 	uvicorn app.main:app --reload --app-dir apps/api --host 0.0.0.0 --port 8000
@@ -48,7 +48,7 @@ worker:
 	python3 -m logan_workers.workflows.analyze_case_workflow
 
 web:
-	pnpm --filter @logan/web dev
+	$(PNPM) --filter @logan/web dev
 
 full-stack-up:
 	$(COMPOSE) up -d --build postgres redis minio minio-init clickhouse opensearch temporal api worker
