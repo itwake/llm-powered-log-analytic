@@ -9,7 +9,7 @@ Drain3's legacy `jsonpickle` pin.
 
 - Git
 - Python 3.11 or newer, Python 3.12 recommended
-- Node.js 20 or newer with npm
+- Node.js 20.9 or newer with npm
 - Docker Desktop for full-stack smoke tests
 
 The Python unit tests do not require Docker, GitHub Copilot credentials, MinIO,
