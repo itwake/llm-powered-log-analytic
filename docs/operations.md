@@ -8,6 +8,9 @@ Run Python tests without external services:
 python3 -m pytest tests
 ```
 
+For complete Windows PowerShell and macOS Terminal install/test procedures, see
+[`docs/install-test-windows-macos.md`](install-test-windows-macos.md).
+
 ## Offline Benchmark Evaluation
 
 The repository includes a deterministic LogAn-style checkout incident benchmark under

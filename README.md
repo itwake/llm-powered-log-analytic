@@ -17,6 +17,8 @@ This repository is the staged foundation for the final product. The current impl
 ## Local Setup
 
 Python 3.11+ is required. Node 20+ with pnpm is recommended for the web workspace.
+For platform-specific setup, see
+[`docs/install-test-windows-macos.md`](docs/install-test-windows-macos.md).
 
 ```bash
 python3 -m pip install -e . pytest pytest-asyncio
