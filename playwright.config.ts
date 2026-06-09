@@ -42,7 +42,8 @@ export default defineConfig({
       },
     },
     {
-      command: "pnpm --filter @logan/web dev --hostname 127.0.0.1 --port 3000",
+      command:
+        "npm run dev --workspace @logan/web -- --hostname 127.0.0.1 --port 3000",
       url: "http://127.0.0.1:3000",
       reuseExistingServer: !isCI,
       timeout: 120_000,

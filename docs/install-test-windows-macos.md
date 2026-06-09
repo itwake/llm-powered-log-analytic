@@ -26,8 +26,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -e . pytest pytest-asyncio ruff
-npm install -g pnpm@10.13.1
-pnpm install
+npm install
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
@@ -67,10 +66,10 @@ python -m logan_workers.evaluation.scale `
 Run web checks:
 
 ```powershell
-pnpm --filter @logan/web build
-pnpm --filter @logan/web test
-pnpm exec playwright install chromium
-pnpm e2e
+npm run build --workspace @logan/web
+npm run test --workspace @logan/web
+npm run e2e:install
+npm run e2e
 ```
 
 Run the full-stack Docker smoke from PowerShell. This is the Makefile-equivalent
@@ -109,8 +108,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e . pytest pytest-asyncio ruff
-npm install -g pnpm@10.13.1
-pnpm install
+npm install
 cp -n .env.example .env
 ```
 
@@ -143,10 +141,10 @@ python -m logan_workers.evaluation.scale \
 Run web checks:
 
 ```bash
-pnpm --filter @logan/web build
-pnpm --filter @logan/web test
-pnpm exec playwright install chromium
-pnpm e2e
+npm run build --workspace @logan/web
+npm run test --workspace @logan/web
+npm run e2e:install
+npm run e2e
 ```
 
 Run the full-stack Docker smoke after starting Docker Desktop:
@@ -197,7 +195,7 @@ python -m pytest -q tests/staging/test_copilot_smoke.py
   `null` on platforms without the Unix `resource` module.
 - Step artifact path errors on Windows: pull the latest `master`; local step
   manifests use short hashed paths under `.logan/object-store/step-artifacts/`.
-- Playwright cannot find Chromium: rerun `pnpm exec playwright install chromium`.
+- Playwright cannot find Chromium: rerun `npm run e2e:install`.
 - Docker smoke times out: allocate at least 6 GiB memory to Docker Desktop and
   run `docker compose down --remove-orphans -v` before retrying.
 - Existing local services on ports 3000 or 8000 can affect E2E reuse behavior.

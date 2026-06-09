@@ -16,14 +16,13 @@ This repository is the staged foundation for the final product. The current impl
 
 ## Local Setup
 
-Python 3.11+ is required. Node 20+ with pnpm is recommended for the web workspace.
+Python 3.11+ is required. Node 20+ with npm is recommended for the web workspace.
 For platform-specific setup, see
 [`docs/install-test-windows-macos.md`](docs/install-test-windows-macos.md).
 
 ```bash
 python3 -m pip install -e . pytest pytest-asyncio
-npm install -g pnpm@10.13.1
-pnpm install
+npm install
 ```
 
 Drain3 templating is optional because upstream `drain3` pins legacy `jsonpickle`
@@ -55,20 +54,20 @@ python -m logan_workers.evaluation.run \
 Optional web checks after installing dependencies:
 
 ```bash
-pnpm --filter @logan/web test
-pnpm --filter @logan/web lint
+npm run test --workspace @logan/web
+npm run lint --workspace @logan/web
 ```
 
-Install the Chromium browser and system packages for Playwright once on a VM:
+Install the Chromium browser for Playwright once on a workstation or VM:
 
 ```bash
-pnpm exec playwright install --with-deps chromium
+npm run e2e:install
 ```
 
 Run the browser E2E suite from the repository root:
 
 ```bash
-pnpm e2e
+npm run e2e
 ```
 
 The Playwright config starts FastAPI on `127.0.0.1:8000` and the Next.js workbench on
@@ -114,7 +113,7 @@ uvicorn app.main:app --reload --app-dir apps/api
 Start the Next.js workbench in another shell:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 pnpm --filter @logan/web dev
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev --workspace @logan/web
 ```
 
 `NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. Browser API calls use

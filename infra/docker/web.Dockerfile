@@ -1,23 +1,21 @@
 FROM mirror.gcr.io/library/node:24-alpine AS builder
 
 WORKDIR /app
-RUN npm install -g pnpm@10.13.1
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/package.json
-RUN pnpm install --frozen-lockfile
+RUN npm ci
 COPY apps/web ./apps/web
-RUN pnpm --filter @logan/web build
+RUN npm run build --workspace @logan/web
 
 FROM mirror.gcr.io/library/node:24-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
-RUN npm install -g pnpm@10.13.1
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/package.json
-RUN pnpm install --frozen-lockfile --prod
+RUN npm ci --omit=dev
 COPY --from=builder /app/apps/web/.next ./apps/web/.next
 COPY --from=builder /app/apps/web/next.config.ts ./apps/web/next.config.ts
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-CMD ["pnpm", "--filter", "@logan/web", "start", "--hostname", "0.0.0.0"]
+CMD ["npm", "run", "start", "--workspace", "@logan/web", "--", "--hostname", "0.0.0.0"]
