@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 
+from app.config import Settings
 from app.core.security import decrypt_token
 from app.services.copilot_auth_service import (
     DEVICE_CODE_GRANT_TYPE,
@@ -60,6 +61,27 @@ def test_device_code_start_success_uses_github_payload_and_headers() -> None:
     assert response.device_code == "device-code-1"
     assert response.user_code == "ABCD-EFGH"
     assert response.interval == 5
+
+
+def test_device_code_client_uses_configured_copilot_ca_bundle(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class CapturingClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "app.services.copilot_auth_service.httpx.Client",
+        CapturingClient,
+    )
+
+    GitHubDeviceCodeClient(
+        app_settings=Settings(copilot_ca_bundle="/etc/ssl/corp-root-ca.pem")
+    )
+
+    assert captured["verify"] == "/etc/ssl/corp-root-ca.pem"
 
 
 def test_device_code_start_ignores_request_base_url() -> None:

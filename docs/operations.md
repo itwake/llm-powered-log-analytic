@@ -301,6 +301,26 @@ The default API path uses real GitHub Copilot auth and model calls:
 - analysis runs use `CopilotModelGateway` and require a stored credential or one of `LOGAN_GITHUB_COPILOT_TOKEN` / `LOGAN_GITHUB_SOURCE_TOKEN`.
 - case workspace chat uses `POST /api/chat/stream` to stream Copilot answers over SSE when a completed analysis result is available.
 
+If Copilot auth or model calls fail with
+`[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate`, the API process is
+usually behind an enterprise TLS inspection proxy or missing the corporate root CA. Export the
+corporate CA chain as a PEM file and point the Copilot HTTP clients at it:
+
+```bash
+LOGAN_COPILOT_CA_BUNDLE=/etc/ssl/certs/corp-root-ca.pem uvicorn app.main:app --app-dir apps/api
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:LOGAN_COPILOT_CA_BUNDLE="C:\certs\corp-root-ca.pem"
+uvicorn app.main:app --app-dir apps/api
+```
+
+`SSL_CERT_FILE` or `REQUESTS_CA_BUNDLE` are also honored when `LOGAN_COPILOT_CA_BUNDLE` is not
+set. Keep `LOGAN_COPILOT_TLS_VERIFY=true` for normal use. `LOGAN_COPILOT_TLS_VERIFY=false` is
+available only for short local network diagnosis and is rejected when `LOGAN_ENV=production`.
+
 When stored source credentials are used, the gateway exchanges them for Copilot plugin tokens,
 persists the plugin token with its `expires_at`, and reuses it until expiration. Set
 `LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS=60` to control the pre-expiration refresh window.

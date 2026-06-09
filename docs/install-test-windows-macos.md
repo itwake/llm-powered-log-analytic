@@ -196,6 +196,10 @@ python -m pytest -q tests/staging/test_copilot_smoke.py
 - Step artifact path errors on Windows: pull the latest `master`; local step
   manifests use short hashed paths under `.logan/object-store/step-artifacts/`.
 - Playwright cannot find Chromium: rerun `npm run e2e:install`.
+- Copilot auth fails with `CERTIFICATE_VERIFY_FAILED`: export your corporate
+  root CA chain as a PEM file and set `LOGAN_COPILOT_CA_BUNDLE` to that path
+  before starting the API. `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` are also
+  honored when `LOGAN_COPILOT_CA_BUNDLE` is not set.
 - Docker smoke times out: allocate at least 6 GiB memory to Docker Desktop and
   run `docker compose down --remove-orphans -v` before retrying.
 - Existing local services on ports 3000 or 8000 can affect E2E reuse behavior.

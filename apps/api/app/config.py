@@ -55,6 +55,13 @@ class Settings:
     github_copilot_token: str | None = os.getenv("LOGAN_GITHUB_COPILOT_TOKEN") or None
     github_source_token: str | None = os.getenv("LOGAN_GITHUB_SOURCE_TOKEN") or None
     copilot_timeout_seconds: float = float(os.getenv("LOGAN_COPILOT_TIMEOUT_SECONDS", "30"))
+    copilot_ca_bundle: str | None = (
+        os.getenv("LOGAN_COPILOT_CA_BUNDLE")
+        or os.getenv("SSL_CERT_FILE")
+        or os.getenv("REQUESTS_CA_BUNDLE")
+        or None
+    )
+    copilot_tls_verify: bool = _env_bool("LOGAN_COPILOT_TLS_VERIFY", True)
     copilot_token_cache_skew_seconds: int = int(
         os.getenv("LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS", "60")
     )
@@ -150,11 +157,18 @@ class Settings:
                 "LOGAN_CREDENTIAL_ENCRYPTION_KEY must be set to a non-default value "
                 "with at least 32 characters"
             )
+        if not self.copilot_tls_verify:
+            errors.append("LOGAN_COPILOT_TLS_VERIFY must not be false in production")
         if errors:
             raise ValueError("Invalid production configuration: " + "; ".join(errors))
 
     def cors_origins(self) -> list[str]:
         return _origin_list(self.cors_allowed_origins) or ["http://localhost:3000"]
+
+    def copilot_httpx_verify(self) -> bool | str:
+        if not self.copilot_tls_verify:
+            return False
+        return self.copilot_ca_bundle or True
 
 
 def validate_runtime_settings(app_settings: Settings) -> None:
