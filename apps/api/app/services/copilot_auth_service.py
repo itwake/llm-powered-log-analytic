@@ -53,10 +53,7 @@ class GitHubDeviceCodeClient:
         http_client: httpx.Client | None = None,
     ) -> None:
         self.settings = app_settings
-        self.http_client = http_client or httpx.Client(
-            timeout=app_settings.copilot_timeout_seconds,
-            verify=app_settings.copilot_httpx_verify(),
-        )
+        self.http_client = http_client or httpx.Client(**app_settings.copilot_httpx_client_kwargs())
 
     def start(self, github_base_url: str) -> DeviceCodeResponse:
         response = self.http_client.post(

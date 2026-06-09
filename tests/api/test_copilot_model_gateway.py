@@ -43,9 +43,17 @@ def test_model_gateway_uses_configured_copilot_tls_verify(
         CapturingAsyncClient,
     )
 
-    CopilotModelGateway(app_settings=Settings(copilot_tls_verify=False))
+    CopilotModelGateway(
+        app_settings=Settings(
+            copilot_tls_verify=False,
+            copilot_proxy_url="http://proxy.example:8080",
+            copilot_trust_env=False,
+        )
+    )
 
     assert captured["verify"] is False
+    assert captured["proxy"] == "http://proxy.example:8080"
+    assert captured["trust_env"] is False
 
 
 @pytest.mark.asyncio

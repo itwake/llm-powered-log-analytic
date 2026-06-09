@@ -62,6 +62,8 @@ class Settings:
         or None
     )
     copilot_tls_verify: bool = _env_bool("LOGAN_COPILOT_TLS_VERIFY", True)
+    copilot_proxy_url: str | None = os.getenv("LOGAN_COPILOT_PROXY_URL") or None
+    copilot_trust_env: bool = _env_bool("LOGAN_COPILOT_TRUST_ENV", True)
     copilot_token_cache_skew_seconds: int = int(
         os.getenv("LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS", "60")
     )
@@ -169,6 +171,16 @@ class Settings:
         if not self.copilot_tls_verify:
             return False
         return self.copilot_ca_bundle or True
+
+    def copilot_httpx_client_kwargs(self) -> dict[str, object]:
+        kwargs: dict[str, object] = {
+            "timeout": self.copilot_timeout_seconds,
+            "verify": self.copilot_httpx_verify(),
+            "trust_env": self.copilot_trust_env,
+        }
+        if self.copilot_proxy_url:
+            kwargs["proxy"] = self.copilot_proxy_url
+        return kwargs
 
 
 def validate_runtime_settings(app_settings: Settings) -> None:

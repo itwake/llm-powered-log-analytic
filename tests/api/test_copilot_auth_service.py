@@ -78,10 +78,15 @@ def test_device_code_client_uses_configured_copilot_ca_bundle(
     )
 
     GitHubDeviceCodeClient(
-        app_settings=Settings(copilot_ca_bundle="/etc/ssl/corp-root-ca.pem")
+        app_settings=Settings(
+            copilot_ca_bundle="/etc/ssl/corp-root-ca.pem",
+            copilot_proxy_url="http://proxy.example:8080",
+        )
     )
 
     assert captured["verify"] == "/etc/ssl/corp-root-ca.pem"
+    assert captured["proxy"] == "http://proxy.example:8080"
+    assert captured["trust_env"] is True
 
 
 def test_device_code_start_ignores_request_base_url() -> None:

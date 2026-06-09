@@ -68,8 +68,7 @@ class CopilotModelGateway:
         self.store = store
         self.settings = app_settings
         self.http_client = http_client or httpx.AsyncClient(
-            timeout=app_settings.copilot_timeout_seconds,
-            verify=app_settings.copilot_httpx_verify(),
+            **app_settings.copilot_httpx_client_kwargs()
         )
 
     async def responses(

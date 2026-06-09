@@ -107,6 +107,23 @@ def test_copilot_httpx_verify_can_be_disabled_outside_production() -> None:
     assert Settings(copilot_tls_verify=False).copilot_httpx_verify() is False
 
 
+def test_copilot_httpx_client_kwargs_enable_env_proxy_by_default() -> None:
+    kwargs = Settings().copilot_httpx_client_kwargs()
+
+    assert kwargs["trust_env"] is True
+    assert "proxy" not in kwargs
+
+
+def test_copilot_httpx_client_kwargs_include_explicit_proxy() -> None:
+    kwargs = Settings(
+        copilot_proxy_url="http://proxy.example:8080",
+        copilot_trust_env=False,
+    ).copilot_httpx_client_kwargs()
+
+    assert kwargs["proxy"] == "http://proxy.example:8080"
+    assert kwargs["trust_env"] is False
+
+
 def test_production_settings_reject_disabled_copilot_tls_verification() -> None:
     app_settings = Settings(
         env="production",

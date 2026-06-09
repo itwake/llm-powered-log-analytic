@@ -321,6 +321,27 @@ uvicorn app.main:app --app-dir apps/api
 set. Keep `LOGAN_COPILOT_TLS_VERIFY=true` for normal use. `LOGAN_COPILOT_TLS_VERIFY=false` is
 available only for short local network diagnosis and is rejected when `LOGAN_ENV=production`.
 
+Copilot auth and `/responses` calls use `httpx` with environment proxy support enabled by
+default, so the API process honors `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, and `NO_PROXY` when
+those variables are present in the process environment. To configure a proxy only for Copilot
+traffic, set:
+
+```bash
+LOGAN_COPILOT_PROXY_URL=http://proxy.example.com:8080
+LOGAN_COPILOT_TIMEOUT_SECONDS=60
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:LOGAN_COPILOT_PROXY_URL="http://proxy.example.com:8080"
+$env:LOGAN_COPILOT_TIMEOUT_SECONDS="60"
+```
+
+Use `http://user:password@proxy.example.com:8080` only in local shells or secret managers, never
+in committed files. Set `LOGAN_COPILOT_TRUST_ENV=false` when the API should ignore process-level
+proxy environment variables and use only `LOGAN_COPILOT_PROXY_URL`.
+
 When stored source credentials are used, the gateway exchanges them for Copilot plugin tokens,
 persists the plugin token with its `expires_at`, and reuses it until expiration. Set
 `LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS=60` to control the pre-expiration refresh window.
