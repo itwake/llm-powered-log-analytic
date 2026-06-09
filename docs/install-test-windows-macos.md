@@ -203,7 +203,9 @@ python -m pytest -q tests/staging/test_copilot_smoke.py
 - Copilot calls fail with `ReadTimeout`: make sure the API process inherits
   `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, and `NO_PROXY`, or set
   `LOGAN_COPILOT_PROXY_URL` explicitly. Increase `LOGAN_COPILOT_TIMEOUT_SECONDS`
-  for slow enterprise proxies.
+  for slow enterprise proxies. On Windows, restart PowerShell after changing
+  System Properties or `setx`, then verify with
+  `python -c "import os; print(os.getenv('HTTPS_PROXY'))"`.
 - Docker smoke times out: allocate at least 6 GiB memory to Docker Desktop and
   run `docker compose down --remove-orphans -v` before retrying.
 - Existing local services on ports 3000 or 8000 can affect E2E reuse behavior.

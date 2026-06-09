@@ -19,6 +19,19 @@ def _origin_list(value: str | None) -> list[str]:
     return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
+def _env_first(*names: str) -> str | None:
+    for name in names:
+        value = os.getenv(name)
+        if value and value.strip():
+            return value.strip()
+    env_by_lower = {key.lower(): value for key, value in os.environ.items()}
+    for name in names:
+        value = env_by_lower.get(name.lower())
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
 PRODUCTION_ENV_NAMES = {"prod", "production"}
 DEFAULT_SECRET_KEYS = {"", "change-me", "logan-local-dev-secret"}
 DEFAULT_CREDENTIAL_ENCRYPTION_KEYS = {
@@ -26,6 +39,14 @@ DEFAULT_CREDENTIAL_ENCRYPTION_KEYS = {
     "change-me-local-key",
     "logan-local-dev-credential-key",
 }
+STANDARD_PROXY_ENV_NAMES = (
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+)
 
 
 def _is_unsafe_production_secret(value: str, unsafe_values: Iterable[str]) -> bool:
@@ -55,14 +76,11 @@ class Settings:
     github_copilot_token: str | None = os.getenv("LOGAN_GITHUB_COPILOT_TOKEN") or None
     github_source_token: str | None = os.getenv("LOGAN_GITHUB_SOURCE_TOKEN") or None
     copilot_timeout_seconds: float = float(os.getenv("LOGAN_COPILOT_TIMEOUT_SECONDS", "30"))
-    copilot_ca_bundle: str | None = (
-        os.getenv("LOGAN_COPILOT_CA_BUNDLE")
-        or os.getenv("SSL_CERT_FILE")
-        or os.getenv("REQUESTS_CA_BUNDLE")
-        or None
+    copilot_ca_bundle: str | None = _env_first(
+        "LOGAN_COPILOT_CA_BUNDLE", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"
     )
     copilot_tls_verify: bool = _env_bool("LOGAN_COPILOT_TLS_VERIFY", True)
-    copilot_proxy_url: str | None = os.getenv("LOGAN_COPILOT_PROXY_URL") or None
+    copilot_proxy_url: str | None = _env_first("LOGAN_COPILOT_PROXY_URL")
     copilot_trust_env: bool = _env_bool("LOGAN_COPILOT_TRUST_ENV", True)
     copilot_token_cache_skew_seconds: int = int(
         os.getenv("LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS", "60")
@@ -172,14 +190,22 @@ class Settings:
             return False
         return self.copilot_ca_bundle or True
 
+    def copilot_effective_proxy_url(self) -> str | None:
+        if self.copilot_proxy_url:
+            return self.copilot_proxy_url
+        if not self.copilot_trust_env:
+            return None
+        return _env_first(*STANDARD_PROXY_ENV_NAMES)
+
     def copilot_httpx_client_kwargs(self) -> dict[str, object]:
         kwargs: dict[str, object] = {
             "timeout": self.copilot_timeout_seconds,
             "verify": self.copilot_httpx_verify(),
             "trust_env": self.copilot_trust_env,
         }
-        if self.copilot_proxy_url:
-            kwargs["proxy"] = self.copilot_proxy_url
+        proxy_url = self.copilot_effective_proxy_url()
+        if proxy_url:
+            kwargs["proxy"] = proxy_url
         return kwargs
 
 

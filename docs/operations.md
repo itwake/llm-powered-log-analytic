@@ -321,10 +321,9 @@ uvicorn app.main:app --app-dir apps/api
 set. Keep `LOGAN_COPILOT_TLS_VERIFY=true` for normal use. `LOGAN_COPILOT_TLS_VERIFY=false` is
 available only for short local network diagnosis and is rejected when `LOGAN_ENV=production`.
 
-Copilot auth and `/responses` calls use `httpx` with environment proxy support enabled by
-default, so the API process honors `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, and `NO_PROXY` when
-those variables are present in the process environment. To configure a proxy only for Copilot
-traffic, set:
+Copilot auth and `/responses` calls explicitly read `LOGAN_COPILOT_PROXY_URL` first, then
+`HTTPS_PROXY`, `HTTP_PROXY`, and `ALL_PROXY` when `LOGAN_COPILOT_TRUST_ENV=true`. To configure a
+proxy only for Copilot traffic, set:
 
 ```bash
 LOGAN_COPILOT_PROXY_URL=http://proxy.example.com:8080
@@ -340,7 +339,16 @@ $env:LOGAN_COPILOT_TIMEOUT_SECONDS="60"
 
 Use `http://user:password@proxy.example.com:8080` only in local shells or secret managers, never
 in committed files. Set `LOGAN_COPILOT_TRUST_ENV=false` when the API should ignore process-level
-proxy environment variables and use only `LOGAN_COPILOT_PROXY_URL`.
+proxy environment variables and use only `LOGAN_COPILOT_PROXY_URL`. If Copilot should bypass a
+proxy, clear `LOGAN_COPILOT_PROXY_URL` plus `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` for the API
+process, or set `LOGAN_COPILOT_TRUST_ENV=false`.
+
+On Windows, environment variables changed through System Properties or `setx` are visible only to
+new shells and child processes. Restart the PowerShell window and the FastAPI process, then verify:
+
+```powershell
+python -c "import os; print(os.getenv('HTTPS_PROXY'))"
+```
 
 When stored source credentials are used, the gateway exchanges them for Copilot plugin tokens,
 persists the plugin token with its `expires_at`, and reuses it until expiration. Set
