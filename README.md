@@ -20,6 +20,49 @@ Python 3.11+ is required. Node 20.9+ with npm is recommended for the web workspa
 For platform-specific setup, see
 [`docs/install-test-windows-macos.md`](docs/install-test-windows-macos.md).
 
+### Fast Local Install And Test
+
+Use this path when you only need the quickest local confidence check. It installs
+the Python package, installs the npm workspace, runs the backend tests, and checks
+the web workspace.
+
+Windows PowerShell:
+
+```powershell
+cd C:\Work\llm-powered-log-analytic
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e . pytest pytest-asyncio ruff
+npm install
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+python -m pytest -q
+npm run test --workspace @logan/web
+npm run build --workspace @logan/web
+```
+
+macOS or Linux shell:
+
+```bash
+cd /path/to/llm-powered-log-analytic
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e . pytest pytest-asyncio ruff
+npm install
+cp -n .env.example .env
+python -m pytest -q
+npm run test --workspace @logan/web
+npm run build --workspace @logan/web
+```
+
+Optional browser E2E:
+
+```bash
+npm run e2e:install
+npm run e2e
+```
+
 ```bash
 python3 -m pip install -e . pytest pytest-asyncio
 npm install
