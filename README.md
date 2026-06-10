@@ -14,6 +14,45 @@ This repository is the staged foundation for the final product. The current impl
   and honor `LOGAN_API_WORKERS` for Uvicorn process count.
 - `infra/k8s`: coherent Kubernetes manifests for namespace, config, secrets examples, deployments, services, ingress, PVCs, migration job, and network policy.
 
+### Deployment Architecture
+
+```mermaid
+flowchart LR
+    user["Support / SRE user"] --> browser["Browser"]
+    browser --> web["Next.js workbench"]
+    web --> api["FastAPI API"]
+
+    api --> auth["Session auth / RBAC"]
+    api --> meta["SQLAlchemy metadata store"]
+    meta --> sqlite["SQLite local default"]
+    meta --> postgres["PostgreSQL compose / production"]
+
+    api --> objects["Object storage"]
+    objects --> localfs["Local object store"]
+    objects --> minio["S3 / MinIO uploads"]
+
+    api --> orchestrator["Analysis orchestrator"]
+    orchestrator --> localrun["Local synchronous run"]
+    orchestrator --> temporal["Temporal workflow"]
+    temporal --> worker["Python analysis worker"]
+    localrun --> pipeline["LogAn analysis pipeline"]
+    worker --> pipeline
+
+    pipeline --> artifacts["Step artifact manifests"]
+    pipeline --> reports["Report data"]
+    reports --> views["Summary / Temporal / Logs / Causal Graph / Causal Summary"]
+    views --> web
+
+    pipeline --> sinks["Optional analytics sinks"]
+    sinks --> clickhouse["ClickHouse"]
+    sinks --> opensearch["OpenSearch"]
+    api --> copilot["GitHub Copilot /responses"]
+    pipeline --> copilot
+
+    api --> metrics["Prometheus metrics"]
+    api --> traces["OpenTelemetry traces"]
+```
+
 ## Local Setup
 
 Python 3.11+ is required. Node 20.9+ with npm is recommended for the web workspace.
