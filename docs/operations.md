@@ -199,6 +199,10 @@ ClickHouse `8123/9002`, OpenSearch `9200`, Redis `6379`, and Temporal `7233`. Ov
 Compose intentionally uses `LOGAN_COMPOSE_DATABASE_URL` for API/worker database overrides so a
 developer `.env` with the default local `LOGAN_DATABASE_URL=sqlite:///.logan/logan.db` does not
 disable the full-stack PostgreSQL path.
+All project Dockerfiles use Ubuntu 24.04 as the external base image. They default to
+`mirror.gcr.io/library/ubuntu:24.04` and the Aliyun Ubuntu apt mirror for LAN/China-friendly
+builds; override `UBUNTU_APT_MIRROR` and `UBUNTU_SECURITY_APT_MIRROR` at build time when a
+deployment environment requires another Ubuntu mirror.
 
 OpenSearch is capped at `-Xms512m -Xmx512m` in compose. On small VMs, leave several GiB free for
 Docker or lower other local workloads before running the smoke. The compose credentials are local
