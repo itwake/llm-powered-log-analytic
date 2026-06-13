@@ -13,7 +13,7 @@ from logan_workers.activities.export import export_analysis
 from logan_workers.models import AnalysisResult, OFFENDING_SIGNALS
 from logan_workers.pipeline import AnalyzeCasePipeline
 from sqlalchemy import create_engine, delete, func, or_, select, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -189,6 +189,16 @@ def _sqlite_connect_args(database_url: str) -> dict[str, Any]:
     return {"check_same_thread": False} if database_url.startswith("sqlite") else {}
 
 
+def _ensure_sqlite_parent_dir(database_url: str) -> None:
+    url = make_url(database_url)
+    if not url.drivername.startswith("sqlite"):
+        return
+    database = url.database
+    if not database or database == ":memory:":
+        return
+    Path(database).expanduser().parent.mkdir(parents=True, exist_ok=True)
+
+
 def _sync_database_url(database_url: str) -> str:
     if database_url.startswith("postgresql+asyncpg://"):
         return database_url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
@@ -243,6 +253,7 @@ class SQLAlchemyStore:
         self.analytics_sink_publisher = analytics_sink_publisher
         self.analytics_query_client = analytics_query_client
         self.database_url = _sync_database_url(database_url)
+        _ensure_sqlite_parent_dir(self.database_url)
         self.engine = engine or create_engine(
             self.database_url,
             future=True,

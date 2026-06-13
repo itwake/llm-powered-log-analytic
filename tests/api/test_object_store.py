@@ -354,6 +354,31 @@ def test_step_manifest_writer_puts_s3_object_with_safe_json_body() -> None:
         assert forbidden not in serialized
 
 
+def test_step_manifest_writer_uses_short_local_object_path(tmp_path: Path) -> None:
+    app_settings = Settings(local_object_store_dir=str(tmp_path / "object-store"))
+    event = JobEventRecord(
+        id="event-1",
+        case_id="case-" + "1" * 64,
+        analysis_run_id="run-" + "2" * 64,
+        step_name="representative_sampling",
+        event_type="completed",
+        status="completed",
+        attempt=1,
+        idempotency_key="representative_sampling:attempt:1",
+        metadata={"samples": 3},
+    )
+
+    written = write_step_manifest(event=event, app_settings=app_settings)
+    artifact_path = file_uri_to_path(written.object_uri)
+
+    assert artifact_path.exists()
+    assert artifact_path.parent.name == "step-artifacts"
+    assert artifact_path.name.endswith(".json")
+    assert "analysis-runs" not in written.object_uri
+    assert len(str(artifact_path)) < len(str(tmp_path / "object-store")) + 100
+    assert written.sha256 == hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+
+
 def test_step_artifact_error_sanitizer_removes_paths_and_tokens() -> None:
     app_settings = Settings(local_object_store_dir="/tmp/customer/acme/object-store")
     message = analysis_artifacts._sanitize_artifact_error(

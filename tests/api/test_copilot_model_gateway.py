@@ -29,6 +29,33 @@ def _store_and_user() -> tuple[InMemoryStore, str]:
     return store, user.id
 
 
+def test_model_gateway_uses_configured_copilot_tls_verify(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class CapturingAsyncClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "app.services.copilot_model_gateway.httpx.AsyncClient",
+        CapturingAsyncClient,
+    )
+
+    CopilotModelGateway(
+        app_settings=Settings(
+            copilot_tls_verify=False,
+            copilot_proxy_url="http://proxy.example:8080",
+            copilot_trust_env=False,
+        )
+    )
+
+    assert captured["verify"] is False
+    assert captured["proxy"] == "http://proxy.example:8080"
+    assert captured["trust_env"] is False
+
+
 @pytest.mark.asyncio
 async def test_source_token_exchange_proxy_base_responses_payload_and_output_parsing() -> None:
     store, user_id = _store_and_user()

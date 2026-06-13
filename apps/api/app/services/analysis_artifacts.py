@@ -67,6 +67,15 @@ def _step_artifact_key(*, case_id: str, analysis_run_id: str, step_name: str) ->
     )
 
 
+def _local_step_artifact_key(
+    *, case_id: str, analysis_run_id: str, step_name: str
+) -> str:
+    digest = hashlib.sha256(
+        f"{case_id}:{analysis_run_id}:{step_name}".encode("utf-8")
+    ).hexdigest()
+    return "/".join(["step-artifacts", f"{digest}.json"])
+
+
 def step_artifact_object_uri(
     *,
     case_id: str,
@@ -80,7 +89,11 @@ def step_artifact_object_uri(
         step_name=step_name,
     )
     if is_local_backend(app_settings):
-        path = Path(app_settings.local_object_store_dir) / key
+        path = Path(app_settings.local_object_store_dir) / _local_step_artifact_key(
+            case_id=case_id,
+            analysis_run_id=analysis_run_id,
+            step_name=step_name,
+        )
         return path_to_file_uri(path)
     if is_s3_backend(app_settings):
         if not app_settings.s3_bucket:

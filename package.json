@@ -1,12 +1,14 @@
 {
   "name": "logan-platform",
   "private": true,
-  "packageManager": "pnpm@10.13.1",
+  "workspaces": [
+    "apps/web"
+  ],
   "scripts": {
-    "test": "pnpm --filter @logan/web test",
-    "lint": "pnpm --filter @logan/web lint",
+    "test": "npm run test --workspace @logan/web",
+    "lint": "npm run lint --workspace @logan/web",
     "e2e": "playwright test",
-    "e2e:install": "playwright install --with-deps chromium"
+    "e2e:install": "playwright install chromium"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0"

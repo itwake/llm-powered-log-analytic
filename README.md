@@ -14,15 +14,97 @@ This repository is the staged foundation for the final product. The current impl
   and honor `LOGAN_API_WORKERS` for Uvicorn process count.
 - `infra/k8s`: coherent Kubernetes manifests for namespace, config, secrets examples, deployments, services, ingress, PVCs, migration job, and network policy.
 
+### Deployment Architecture
+
+```mermaid
+flowchart LR
+    user["Support / SRE user"] --> browser["Browser"]
+    browser --> web["Next.js workbench"]
+    web --> api["FastAPI API"]
+
+    api --> auth["Session auth / RBAC"]
+    api --> meta["SQLAlchemy metadata store"]
+    meta --> sqlite["SQLite local default"]
+    meta --> postgres["PostgreSQL compose / production"]
+
+    api --> objects["Object storage"]
+    objects --> localfs["Local object store"]
+    objects --> minio["S3 / MinIO uploads"]
+
+    api --> orchestrator["Analysis orchestrator"]
+    orchestrator --> localrun["Local synchronous run"]
+    orchestrator --> temporal["Temporal workflow"]
+    temporal --> worker["Python analysis worker"]
+    localrun --> pipeline["LogAn analysis pipeline"]
+    worker --> pipeline
+
+    pipeline --> artifacts["Step artifact manifests"]
+    pipeline --> reports["Report data"]
+    reports --> views["Summary / Temporal / Logs / Causal Graph / Causal Summary"]
+    views --> web
+
+    pipeline --> sinks["Optional analytics sinks"]
+    sinks --> clickhouse["ClickHouse"]
+    sinks --> opensearch["OpenSearch"]
+    api --> copilot["GitHub Copilot /responses"]
+    pipeline --> copilot
+
+    api --> metrics["Prometheus metrics"]
+    api --> traces["OpenTelemetry traces"]
+```
+
 ## Local Setup
 
-Python 3.11+ is required. Node 20+ with pnpm is recommended for the web workspace.
+Python 3.11+ is required. Node 20.9+ with npm is recommended for the web workspace.
+For platform-specific setup, see
+[`docs/install-test-windows-macos.md`](docs/install-test-windows-macos.md).
+
+### Fast Local Install And Test
+
+Use this path when you only need the quickest local confidence check. It installs
+the Python package, installs the npm workspace, runs the backend tests, and checks
+the web workspace.
+
+Windows PowerShell:
+
+```powershell
+cd C:\Work\llm-powered-log-analytic
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e . pytest pytest-asyncio ruff
+npm install
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+python -m pytest -q
+npm run test --workspace @logan/web
+npm run build --workspace @logan/web
+```
+
+macOS or Linux shell:
+
+```bash
+cd /path/to/llm-powered-log-analytic
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e . pytest pytest-asyncio ruff
+npm install
+cp -n .env.example .env
+python -m pytest -q
+npm run test --workspace @logan/web
+npm run build --workspace @logan/web
+```
+
+Optional browser E2E:
+
+```bash
+npm run e2e:install
+npm run e2e
+```
 
 ```bash
 python3 -m pip install -e . pytest pytest-asyncio
-corepack enable
-corepack prepare pnpm@10.13.1 --activate
-pnpm install
+npm install
 ```
 
 Drain3 templating is optional because upstream `drain3` pins legacy `jsonpickle`
@@ -54,20 +136,20 @@ python -m logan_workers.evaluation.run \
 Optional web checks after installing dependencies:
 
 ```bash
-pnpm --filter @logan/web test
-pnpm --filter @logan/web lint
+npm run test --workspace @logan/web
+npm run lint --workspace @logan/web
 ```
 
-Install the Chromium browser and system packages for Playwright once on a VM:
+Install the Chromium browser for Playwright once on a workstation or VM:
 
 ```bash
-corepack pnpm exec playwright install --with-deps chromium
+npm run e2e:install
 ```
 
 Run the browser E2E suite from the repository root:
 
 ```bash
-corepack pnpm e2e
+npm run e2e
 ```
 
 The Playwright config starts FastAPI on `127.0.0.1:8000` and the Next.js workbench on
@@ -90,6 +172,9 @@ The smoke stack starts PostgreSQL, MinIO, ClickHouse, OpenSearch, Temporal, the 
 worker. It uses durable SQLAlchemy/PostgreSQL metadata, MinIO presigned uploads, Temporal
 orchestration, mock LLM annotation, and real ClickHouse/OpenSearch sink/query paths. It does not
 use or require Copilot credentials.
+Docker Compose keeps this PostgreSQL path by using `LOGAN_COMPOSE_DATABASE_URL`, so the default
+local SQLite `LOGAN_DATABASE_URL=sqlite:///.logan/logan.db` in `.env` does not affect full-stack
+smoke runs.
 
 Run the real Copilot staging smoke only when explicitly opted in:
 
@@ -113,7 +198,7 @@ uvicorn app.main:app --reload --app-dir apps/api
 Start the Next.js workbench in another shell:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web dev
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev --workspace @logan/web
 ```
 
 `NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. Browser API calls use
@@ -121,7 +206,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web
 Set `LOGAN_CORS_ALLOWED_ORIGINS` on the API to the comma-separated browser origins that may send
 credentialed requests, for example `https://logan.example.com,http://localhost:3000`.
 Containerized API deployments can set `LOGAN_API_WORKERS` to control Uvicorn worker count.
-The default local API uses in-memory metadata unless `LOGAN_DATABASE_URL` is set.
+The default local API uses durable SQLite metadata at `.logan/logan.db`.
 Uploaded bytes use the local object store by default and are written under
 `.logan/object-store` unless `LOGAN_LOCAL_OBJECT_STORE_DIR` is set.
 External analytics sinks and service-backed report queries are disabled by default,
@@ -175,8 +260,8 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_LLM_PROVIDER=github_copilot`
 - `LOGAN_LLM_PROVIDER=mock` is supported for deterministic local/CI E2E analysis only; production
   paths should keep `github_copilot`.
-- `LOGAN_DATABASE_URL=` unset by default for lightweight local memory mode; set to `sqlite:///...` for local durable tests or `postgresql+psycopg://user:pass@host:5432/db` for PostgreSQL.
-- `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy when `LOGAN_DATABASE_URL` is set and memory otherwise. Use `memory` or `sqlalchemy` to force a backend.
+- `LOGAN_DATABASE_URL=sqlite:///.logan/logan.db` by default for local durable metadata; set it to another `sqlite:///...` path or `postgresql+psycopg://user:pass@host:5432/db` for PostgreSQL.
+- `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy with SQLite/PostgreSQL. Use `memory` only for explicit ephemeral tests, or `sqlalchemy` to require a configured database URL.
 - `LOGAN_ANALYSIS_ORCHESTRATOR=local`; set to `temporal` to have the API create the SQLAlchemy run and start `AnalyzeCaseWorkflow`.
 - `LOGAN_TEMPORAL_ADDRESS=temporal:7233`, `LOGAN_TEMPORAL_NAMESPACE=default`, and `LOGAN_TEMPORAL_TASK_QUEUE=logan-analysis` configure the Temporal API client and worker.
 - `LOGAN_TEMPORAL_ACTIVITY_START_TO_CLOSE_SECONDS=3600` and `LOGAN_TEMPORAL_ACTIVITY_MAX_ATTEMPTS=3` are copied into replay-safe workflow params and used for the analysis activity timeout/retry policy.

@@ -5,7 +5,6 @@ import asyncio
 import gzip
 import json
 import platform
-import resource
 import time
 import zipfile
 from collections.abc import Callable, Iterable
@@ -21,6 +20,11 @@ from logan_workers.evaluation.metrics import review_load_reduction
 from logan_workers.evaluation.reporting import ensure_report_text_is_safe
 from logan_workers.evaluation.schemas import ReportSafetySummary
 from logan_workers.pipeline import AnalyzeCasePipeline
+
+try:
+    import resource as resource_module
+except ModuleNotFoundError:  # pragma: no cover - exercised on Windows.
+    resource_module = None
 
 
 PROFILE_TARGET_BYTES = {
@@ -411,7 +415,9 @@ def _fixture_summary(fixture: GeneratedScaleFixture) -> ScaleFixtureSummary:
 
 
 def _peak_rss_bytes() -> int | None:
-    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if resource_module is None:
+        return None
+    usage = resource_module.getrusage(resource_module.RUSAGE_SELF).ru_maxrss
     if usage <= 0:
         return None
     if platform.system().lower() == "darwin":

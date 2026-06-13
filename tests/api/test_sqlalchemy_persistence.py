@@ -537,7 +537,10 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     app_settings = Settings(
         database_url=database_url,
         store_backend="sqlalchemy",
+        object_store_backend="local",
         local_object_store_dir=str(tmp_path / "object-store"),
+        step_artifacts_enabled=True,
+        step_artifact_failure_mode="fail",
     )
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     client = await _client(store)
@@ -1317,3 +1320,13 @@ def test_create_store_auto_uses_sqlalchemy_when_database_url_is_set(tmp_path: Pa
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
     store = create_store(Settings(database_url=database_url, store_backend="auto"))
     assert isinstance(store, SQLAlchemyStore)
+
+
+def test_create_store_auto_defaults_to_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    store = create_store(Settings(store_backend="auto"))
+
+    assert isinstance(store, SQLAlchemyStore)
+    assert store.database_url == "sqlite:///.logan/logan.db"
+    assert (tmp_path / ".logan" / "logan.db").exists()

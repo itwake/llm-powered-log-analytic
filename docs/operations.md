@@ -8,6 +8,9 @@ Run Python tests without external services:
 python3 -m pytest tests
 ```
 
+For complete Windows PowerShell and macOS Terminal install/test procedures, see
+[`docs/install-test-windows-macos.md`](install-test-windows-macos.md).
+
 ## Offline Benchmark Evaluation
 
 The repository includes a deterministic LogAn-style checkout incident benchmark under
@@ -119,8 +122,8 @@ closed if those leak-shaped fields or terms appear in JSON or Markdown.
 Run Playwright browser E2E after installing browser dependencies:
 
 ```bash
-corepack pnpm exec playwright install --with-deps chromium
-corepack pnpm e2e
+npm run e2e:install
+npm run e2e
 ```
 
 The E2E config starts the API with:
@@ -135,7 +138,7 @@ The E2E config starts the API with:
 
 It starts the web app with:
 
-- `corepack pnpm --filter @logan/web dev --hostname 127.0.0.1 --port 3000`
+- `npm run dev --workspace @logan/web -- --hostname 127.0.0.1 --port 3000`
 - `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`
 
 Tests navigate with `http://localhost:3000`, matching the API CORS allow-list. Existing local
@@ -193,6 +196,13 @@ LOGAN_FULL_STACK_S3_PUBLIC_ENDPOINT=http://localhost:9000 python3 scripts/full_s
 The default exposed ports are API `8000`, web `3000`, PostgreSQL `5432`, MinIO `9000/9001`,
 ClickHouse `8123/9002`, OpenSearch `9200`, Redis `6379`, and Temporal `7233`. Override with the
 `LOGAN_*_PORT` variables in `docker-compose.yml` if a VM already uses those ports.
+Compose intentionally uses `LOGAN_COMPOSE_DATABASE_URL` for API/worker database overrides so a
+developer `.env` with the default local `LOGAN_DATABASE_URL=sqlite:///.logan/logan.db` does not
+disable the full-stack PostgreSQL path.
+All project Dockerfiles use Ubuntu 24.04 as the external base image. They default to
+`mirror.gcr.io/library/ubuntu:24.04` and the Aliyun Ubuntu apt mirror for LAN/China-friendly
+builds; override `UBUNTU_APT_MIRROR` and `UBUNTU_SECURITY_APT_MIRROR` at build time when a
+deployment environment requires another Ubuntu mirror.
 
 OpenSearch is capped at `-Xms512m -Xmx512m` in compose. On small VMs, leave several GiB free for
 Docker or lower other local workloads before running the smoke. The compose credentials are local
@@ -213,7 +223,7 @@ make migrate
 
 The command calls `scripts/run_migrations.py`. It creates the SQLAlchemy schema for SQLite and
 PostgreSQL stores, applies PostgreSQL incremental SQL migrations with `schema_migrations`
-tracking, and exits as a no-op for the explicit in-memory store.
+tracking, and exits as a no-op only for the explicit in-memory store.
 
 The pytest wrapper is opt-in:
 
@@ -238,11 +248,17 @@ Run the API locally:
 uvicorn app.main:app --reload --app-dir apps/api
 ```
 
-By default the API uses the lightweight in-memory store unless a database URL is configured.
-Set `LOGAN_DATABASE_URL=sqlite:////tmp/logan.db` for local durable metadata, or use a
-PostgreSQL URL such as `postgresql+psycopg://logan:logan@postgres:5432/logan`.
-`LOGAN_STORE_BACKEND=auto` selects SQLAlchemy when `LOGAN_DATABASE_URL` is set; `memory`
-and `sqlalchemy` force a backend explicitly.
+By default the API uses durable SQLite metadata at `.logan/logan.db` through SQLAlchemy:
+
+```bash
+LOGAN_DATABASE_URL=sqlite:///.logan/logan.db
+LOGAN_STORE_BACKEND=auto
+```
+
+Set `LOGAN_DATABASE_URL=sqlite:////tmp/logan.db` for a different local path, or use a PostgreSQL
+URL such as `postgresql+psycopg://logan:logan@postgres:5432/logan`. `LOGAN_STORE_BACKEND=auto`
+selects SQLAlchemy with SQLite/PostgreSQL; `memory` is still available for explicit ephemeral
+tests, and `sqlalchemy` requires a configured database URL.
 Set `LOGAN_CORS_ALLOWED_ORIGINS` to a comma-separated list of browser origins allowed to send
 credentialed API requests. The default is `http://localhost:3000`; production deployments should
 set it to the deployed web origin, such as `https://logan.example.com`.
@@ -282,9 +298,8 @@ Step artifact manifests use the same object-store backend:
 
 Each completed pipeline step writes a small `step_manifest` JSON object and upserts
 `analysis_step_artifacts` by `(analysis_run_id, step_name, artifact_type)`. Local manifests are
-stored under
-`.logan/object-store/cases/{case_id}/analysis-runs/{run_id}/steps/{step_name}.json`; S3/MinIO
-manifests are stored under
+stored under `.logan/object-store/step-artifacts/{hash}.json` to keep Windows paths short;
+S3/MinIO manifests are stored under
 `s3://{bucket}/cases/{case_id}/analysis-runs/{run_id}/steps/{step_name}.json`. Manifest bodies
 contain only case/run ids, step name, artifact type, timestamp, and sanitized completed-event
 metadata. They do not include raw log text, `raw_text_redacted`, model prompts, model inputs,
@@ -298,6 +313,55 @@ The default API path uses real GitHub Copilot auth and model calls:
 - `DELETE /api/copilot/auth/credential` disconnects the current user by revoking stored source and plugin credentials.
 - analysis runs use `CopilotModelGateway` and require a stored credential or one of `LOGAN_GITHUB_COPILOT_TOKEN` / `LOGAN_GITHUB_SOURCE_TOKEN`.
 - case workspace chat uses `POST /api/chat/stream` to stream Copilot answers over SSE when a completed analysis result is available.
+
+If Copilot auth or model calls fail with
+`[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate`, the API process is
+usually behind an enterprise TLS inspection proxy or missing the corporate root CA. Export the
+corporate CA chain as a PEM file and point the Copilot HTTP clients at it:
+
+```bash
+LOGAN_COPILOT_CA_BUNDLE=/etc/ssl/certs/corp-root-ca.pem uvicorn app.main:app --app-dir apps/api
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:LOGAN_COPILOT_CA_BUNDLE="C:\certs\corp-root-ca.pem"
+uvicorn app.main:app --app-dir apps/api
+```
+
+`SSL_CERT_FILE` or `REQUESTS_CA_BUNDLE` are also honored when `LOGAN_COPILOT_CA_BUNDLE` is not
+set. Keep `LOGAN_COPILOT_TLS_VERIFY=true` for normal use. `LOGAN_COPILOT_TLS_VERIFY=false` is
+available only for short local network diagnosis and is rejected when `LOGAN_ENV=production`.
+
+Copilot auth and `/responses` calls explicitly read `LOGAN_COPILOT_PROXY_URL` first, then
+`HTTPS_PROXY`, `HTTP_PROXY`, and `ALL_PROXY` when `LOGAN_COPILOT_TRUST_ENV=true`. To configure a
+proxy only for Copilot traffic, set:
+
+```bash
+LOGAN_COPILOT_PROXY_URL=http://proxy.example.com:8080
+LOGAN_COPILOT_TIMEOUT_SECONDS=60
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:LOGAN_COPILOT_PROXY_URL="http://proxy.example.com:8080"
+$env:LOGAN_COPILOT_TIMEOUT_SECONDS="60"
+```
+
+Use `http://user:password@proxy.example.com:8080` only in local shells or secret managers, never
+in committed files. Set `LOGAN_COPILOT_TRUST_ENV=false` when the API should ignore process-level
+proxy environment variables and use only `LOGAN_COPILOT_PROXY_URL`. If Copilot should bypass a
+proxy, clear `LOGAN_COPILOT_PROXY_URL` plus `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` for the API
+process, or set `LOGAN_COPILOT_TRUST_ENV=false`.
+
+On Windows, environment variables changed through System Properties or `setx` are visible only to
+new shells and child processes. Restart the PowerShell window and the FastAPI process, then verify:
+
+```powershell
+python -c "import os; print(os.getenv('HTTPS_PROXY'))"
+```
 
 When stored source credentials are used, the gateway exchanges them for Copilot plugin tokens,
 persists the plugin token with its `expires_at`, and reuses it until expiration. Set
@@ -550,7 +614,7 @@ API starts without tracing.
 Run the web workspace against the local API:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 corepack pnpm --filter @logan/web dev
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev --workspace @logan/web
 ```
 
 `NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. The web client sends

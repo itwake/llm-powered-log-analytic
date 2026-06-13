@@ -36,18 +36,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-      - name: Enable pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.13.1 --activate
+          cache: npm
+          cache-dependency-path: package-lock.json
       - name: Install web dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
       - name: Build web
-        run: pnpm --filter @logan/web build
+        run: npm run build --workspace @logan/web
       - name: Typecheck web
-        run: pnpm --filter @logan/web test
+        run: npm run test --workspace @logan/web
       - name: Build production web image
         run: docker build -f infra/docker/web.Dockerfile -t logan-web-ci .
 
