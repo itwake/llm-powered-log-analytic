@@ -22,3 +22,22 @@ spec:
                 name: logan-config
             - secretRef:
                 name: logan-secrets
+          startupProbe:
+            exec:
+              command: ["python", "-m", "logan_workers.healthcheck", "--timeout", "3"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command: ["python", "-m", "logan_workers.healthcheck", "--timeout", "3"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["python", "-m", "logan_workers.healthcheck", "--timeout", "3"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3

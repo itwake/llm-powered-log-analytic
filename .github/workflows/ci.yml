@@ -23,7 +23,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e . pytest ruff
+          python -m pip install -e . pytest pytest-asyncio ruff
       - name: Ruff
         run: ruff check apps tests scripts
       - name: Pytest
@@ -74,7 +74,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e . pytest
+          python -m pip install -e . pytest pytest-asyncio
       - name: Copilot staging smoke
         env:
           LOGAN_RUN_COPILOT_STAGING_SMOKE: "true"

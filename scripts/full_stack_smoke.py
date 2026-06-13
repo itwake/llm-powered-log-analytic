@@ -165,6 +165,27 @@ def _request_json(
     return payload
 
 
+def _request_non_empty_report(
+    client: httpx.Client,
+    path: str,
+    *,
+    report_name: str,
+    is_non_empty: Callable[[dict[str, Any]], bool],
+) -> dict[str, Any]:
+    def call() -> dict[str, Any]:
+        payload = _request_json(client, "GET", path)
+        if not is_non_empty(payload):
+            raise RuntimeError(f"{report_name} report was empty")
+        return payload
+
+    return _retry(
+        f"{report_name} report",
+        call,
+        timeout_seconds=90,
+        interval_seconds=3,
+    )
+
+
 def _api_base_url() -> str:
     return _env("LOGAN_FULL_STACK_API_BASE_URL", "http://localhost:8000").rstrip("/")
 
@@ -524,7 +545,12 @@ def main() -> int:
         _log("checking reports and job events")
         summary = _request_json(client, "GET", f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
         temporal = _request_json(client, "GET", f"/api/cases/{case_id}/analysis-runs/{run_id}/temporal")
-        logs = _request_json(client, "GET", f"/api/cases/{case_id}/analysis-runs/{run_id}/logs")
+        logs = _request_non_empty_report(
+            client,
+            f"/api/cases/{case_id}/analysis-runs/{run_id}/logs",
+            report_name="logs",
+            is_non_empty=lambda payload: int(payload.get("total", 0) or 0) > 0,
+        )
         graph = _request_json(client, "GET", f"/api/cases/{case_id}/analysis-runs/{run_id}/causal-graph")
         causal_summary = _request_json(
             client,

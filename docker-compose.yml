@@ -101,6 +101,12 @@ services:
       dockerfile: infra/docker/worker.Dockerfile
     environment:
       <<: *logan-env
+    healthcheck:
+      test: ["CMD", "python", "-m", "logan_workers.healthcheck", "--timeout", "3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
     depends_on:
       api:
         condition: service_healthy
@@ -146,7 +152,7 @@ services:
       api:
         condition: service_healthy
       worker:
-        condition: service_started
+        condition: service_healthy
       clickhouse:
         condition: service_healthy
       opensearch:
