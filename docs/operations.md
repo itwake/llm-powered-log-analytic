@@ -420,6 +420,21 @@ with sanitized error text before re-raising for Temporal retry/failure handling.
 retries after the database commit succeeded but before the workflow observed the result, the
 activity returns the existing completed summary without rerunning the pipeline.
 
+The worker is a Temporal task-queue consumer, not an HTTP server. It does not expose a container
+port and does not need a Kubernetes Service; the API starts workflows, and workers poll
+`LOGAN_TEMPORAL_TASK_QUEUE` from Temporal. Deployment health is checked with an exec probe:
+
+```bash
+python3 -m logan_workers.healthcheck --timeout 3
+```
+
+The check verifies that the pod can connect to `LOGAN_TEMPORAL_ADDRESS` in
+`LOGAN_TEMPORAL_NAMESPACE`. Docker Compose uses the same command as the worker healthcheck and the
+Kubernetes deployment wires it as startup, readiness, and liveness probes. Keep this probe focused
+on Temporal connectivity and the running process; downstream stores and analytics sinks are
+validated by full-stack smoke tests and run-level failure handling so transient ClickHouse,
+OpenSearch, S3, or model-provider issues do not trigger unnecessary worker restarts.
+
 External analytics sinks can be enabled for SQLAlchemy-backed runs with:
 
 - `LOGAN_ANALYTICS_SINKS_ENABLED=true`
