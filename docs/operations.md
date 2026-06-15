@@ -625,6 +625,18 @@ views from API endpoints, renders Temporal View with Apache ECharts, renders Cau
 Cytoscape.js, streams case-workspace Copilot answers with fetch-based SSE parsing, submits
 feedback/exports, and drives Copilot device auth start/check through the backend.
 
+The case workspace shows upload and analysis progress before reports are ready. Browser uploads
+emit per-file progress with bytes, percentage, multipart part number when available, hashing, and
+object-store verification phases. After a run starts, the workspace polls
+`GET /api/cases/{case_id}/analysis-runs/{run_id}` and
+`GET /api/cases/{case_id}/analysis-runs/{run_id}/events` every two seconds until the run reaches
+`completed` or `failed`, rendering the pipeline step timeline and recent `job_events`.
+
+In Kubernetes, API pods and Temporal workers must write to the same metadata store for progress to
+be visible. PostgreSQL is recommended for multi-pod deployments. If SQLite is used, keep API and
+worker replicas constrained and mount the same PVC path referenced by `LOGAN_DATABASE_URL`; separate
+SQLite files will make the UI appear stuck because the API cannot see worker-written `job_events`.
+
 Run the full service skeleton:
 
 ```bash

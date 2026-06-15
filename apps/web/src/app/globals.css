@@ -168,6 +168,40 @@ select {
   overflow-wrap: anywhere;
 }
 
+.upload-progress-list {
+  display: grid;
+  gap: 10px;
+  margin: -2px 0 12px;
+}
+
+.upload-progress-row {
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.upload-progress-header,
+.upload-progress-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.upload-progress-header strong {
+  overflow-wrap: anywhere;
+}
+
+.upload-progress-meta {
+  color: var(--muted);
+  font-size: 12px;
+  justify-content: flex-start;
+}
+
 .button {
   align-items: center;
   background: var(--green);
@@ -391,6 +425,151 @@ th {
   min-width: 2px;
 }
 
+.progress-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.progress-header,
+.progress-footer {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.progress-header h2,
+.progress-header p {
+  margin: 0;
+}
+
+.progress-header h2 {
+  margin-bottom: 4px;
+}
+
+.progress-track {
+  background: #e5ebe7;
+  border-radius: 6px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.progress-track.compact {
+  height: 8px;
+}
+
+.progress-fill {
+  background: var(--green);
+  height: 100%;
+  min-width: 2px;
+  transition: width 180ms ease;
+}
+
+.progress-fill.failed {
+  background: var(--red);
+}
+
+.progress-metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.progress-metric {
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.progress-metric span,
+.progress-footer span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.progress-metric strong,
+.progress-footer strong {
+  overflow-wrap: anywhere;
+}
+
+.step-timeline {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.step-item {
+  align-items: flex-start;
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 12px minmax(0, 1fr);
+  min-height: 82px;
+  padding: 10px;
+}
+
+.step-dot {
+  background: var(--line);
+  border-radius: 999px;
+  height: 10px;
+  margin-top: 4px;
+  width: 10px;
+}
+
+.step-item.completed .step-dot {
+  background: var(--green);
+}
+
+.step-item.processing .step-dot {
+  background: var(--amber);
+}
+
+.step-item.failed .step-dot {
+  background: var(--red);
+}
+
+.step-item div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.step-item span,
+.step-item small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.event-log {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.event-log h3 {
+  font-size: 14px;
+  margin: 0;
+}
+
+.event-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 92px minmax(0, 1fr) 168px;
+}
+
+.event-row span {
+  overflow-wrap: anywhere;
+}
+
 .stacked-row {
   display: grid;
   gap: 6px;
@@ -612,6 +791,17 @@ th {
 
   .selection-summary,
   .filter-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .progress-metrics,
+  .step-timeline,
+  .event-row {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-footer {
     align-items: flex-start;
     flex-direction: column;
   }
