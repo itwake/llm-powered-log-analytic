@@ -457,7 +457,7 @@ def request_upload(
     expires_in = 900
     object_uri: str | None = upload.object_uri
     if is_local_backend(store.settings):
-        upload_url = str(request.url_for("upload_content", case_id=case_id, file_id=upload.id))
+        upload_url = f"/api/cases/{case_id}/uploads/{upload.id}/content"
     elif is_s3_backend(store.settings):
         use_multipart = (
             payload.multipart is True

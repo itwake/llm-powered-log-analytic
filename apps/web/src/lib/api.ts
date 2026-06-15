@@ -1,5 +1,5 @@
 export const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
+  process.env.NEXT_PUBLIC_API_BASE_URL || ""
 ).replace(/\/$/, "");
 
 type QueryValue = string | number | boolean | null | undefined;
@@ -641,6 +641,7 @@ export interface ChatStreamHandlers {
 
 export interface CopilotStartResponse {
   auth_id: string;
+  device_code: string;
   user_code: string;
   verification_uri: string;
   verification_uri_complete: string;
@@ -1013,10 +1014,10 @@ export const copilotAuthApi = {
       method: "POST",
       body: {github_base_url},
     }),
-  check: (auth_id: string) =>
+  check: (auth_id: string, device_code?: string) =>
     request<CopilotCheckResponse>("/api/copilot/auth/check", {
       method: "POST",
-      body: {auth_id},
+      body: {auth_id, ...(device_code ? {device_code} : {})},
     }),
   disconnect: () =>
     request<CopilotDisconnectResponse>("/api/copilot/auth/credential", {

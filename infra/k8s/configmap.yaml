@@ -27,4 +27,4 @@ data:
   LOGAN_OTEL_ENABLED: "false"
   LOGAN_OTEL_SERVICE_NAME: "logan-api"
   LOGAN_OTEL_EXPORTER_OTLP_ENDPOINT: ""
-  NEXT_PUBLIC_API_BASE_URL: "https://logan.example.com"
+  NEXT_PUBLIC_API_BASE_URL: ""

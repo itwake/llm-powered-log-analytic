@@ -265,9 +265,20 @@ credentialed API requests. The default is `http://localhost:3000`; production de
 set it to the deployed web origin, such as `https://logan.example.com`.
 Containerized API deployments can set `LOGAN_API_WORKERS` to control the number of Uvicorn worker
 processes. Keep it low for local smoke runs and size it from CPU limits in Kubernetes.
+Set `LOGAN_LOG_LEVEL=debug` on the API deployment to enable Uvicorn debug logging while
+investigating request failures:
+
+```bash
+kubectl -n logan set env deploy/logan-api LOGAN_LOG_LEVEL=debug
+kubectl -n logan rollout restart deploy/logan-api
+kubectl -n logan logs deploy/logan-api -f
+```
+
+Set the same variable on `deploy/logan-worker` when diagnosing Temporal worker execution or
+analysis progress logs.
 
 Uploads use `LOGAN_OBJECT_STORE_BACKEND=local` by default. The API returns an authenticated
-`PUT /api/cases/{case_id}/uploads/{file_id}/content` URL, writes raw bytes to
+same-origin relative `PUT /api/cases/{case_id}/uploads/{file_id}/content` URL, writes raw bytes to
 `LOGAN_LOCAL_OBJECT_STORE_DIR` or `.logan/object-store`, records a `file://` object URI, and
 passes completed upload paths to the worker pipeline through `input_file_ids`.
 
@@ -281,6 +292,9 @@ size. Completed S3-backed `input_file_ids` are accepted for analysis: the local 
 or Temporal worker downloads each `s3://` object into `LOGAN_ANALYSIS_INPUT_TMP_DIR` (default
 `.logan/analysis-inputs`) immediately before pipeline ingestion and deletes the temporary files
 after the pipeline call exits.
+When the web app is served over HTTPS, any public S3/MinIO presigned upload endpoint returned to
+the browser must also be HTTPS. Local API-backed uploads avoid mixed content by returning the
+relative `/api/.../content` route through the same ingress origin.
 
 Large S3/MinIO raw uploads use multipart/resumable sessions when the client asks with
 `multipart=true` or when the declared size reaches `LOGAN_S3_MULTIPART_THRESHOLD_BYTES`
@@ -314,6 +328,13 @@ The default API path uses real GitHub Copilot auth and model calls:
 - `DELETE /api/copilot/auth/credential` disconnects the current user by revoking stored source and plugin credentials.
 - analysis runs use `CopilotModelGateway` and require a stored credential or one of `LOGAN_GITHUB_COPILOT_TOKEN` / `LOGAN_GITHUB_SOURCE_TOKEN`.
 - case workspace chat uses `POST /api/chat/stream` to stream Copilot answers over SSE when a completed analysis result is available.
+
+Device-code polling must follow the `interval` returned by GitHub. If GitHub returns
+`slow_down` or `429 Too Many Requests`, the API keeps the auth status pending and returns
+`next_poll_after_seconds` so the browser can back off instead of surfacing a server error.
+Requests that arrive before the stored wait window expires return the current pending status from
+the API without polling GitHub again. The web settings page keeps scheduling the next poll after
+every pending response, and manual checks are harmless because the backend enforces the wait.
 
 If Copilot auth or model calls fail with
 `[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate`, the API process is
@@ -640,9 +661,14 @@ Run the web workspace against the local API:
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev --workspace @logan/web
 ```
 
-`NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. The web client sends
-browser requests with `credentials: "include"` for the `logan_session` cookie. The current
-workbench creates cases, uploads selected log/archive files, starts analysis by
+`NEXT_PUBLIC_API_BASE_URL` defaults to an empty same-origin base, so production browser requests
+go to `/api/...` on the current host and match the Kubernetes ingress route. Set it explicitly for
+local development when the API runs on another origin. Because `NEXT_PUBLIC_*` values are compiled
+into the browser bundle by Next.js, Kubernetes runtime environment changes do not rewrite an
+already-built image; rebuild the web image with the desired build arg if an absolute API origin is
+needed. The web client sends browser requests with `credentials: "include"` for the
+`logan_session` cookie. The current workbench creates cases, uploads selected log/archive files,
+starts analysis by
 `input_file_ids`, preserves a sample/local fixture run action, lists real runs, loads report
 views from API endpoints, renders Temporal View with Apache ECharts, renders Causal Graph with
 Cytoscape.js, streams case-workspace Copilot answers with fetch-based SSE parsing, submits
@@ -653,15 +679,9 @@ emit per-file progress with bytes, percentage, multipart part number when availa
 object-store verification phases. After a run starts, the workspace polls
 `GET /api/cases/{case_id}/analysis-runs/{run_id}` and
 `GET /api/cases/{case_id}/analysis-runs/{run_id}/events` every two seconds until the run reaches
-`completed` or `failed`, rendering the pipeline step timeline and recent `job_events`.
-The backend also writes one `analysis_event` log line for each new `job_event`, so Kubernetes
-operators can correlate a stuck UI state with API or worker pod logs without querying the database
-directly.
-
-In Kubernetes, API pods and Temporal workers must write to the same metadata store for progress to
-be visible. PostgreSQL is recommended for multi-pod deployments. If SQLite is used, keep API and
-worker replicas constrained and mount the same PVC path referenced by `LOGAN_DATABASE_URL`; separate
-SQLite files will make the UI appear stuck because the API cannot see worker-written `job_events`.
+`completed` or `failed`, rendering the pipeline step timeline and recent `job_events`. The backend
+also writes one `analysis_event` log line for each new `job_event`, so Kubernetes operators can
+correlate a stuck UI state with API or worker pod logs without querying the database directly.
 
 Run the full service skeleton:
 
