@@ -41,3 +41,7 @@ class CopilotStartRequest(BaseModel):
 
 class CopilotCheckRequest(BaseModel):
     auth_id: str
+    device_code: str | None = Field(
+        default=None,
+        description="Optional device code echoed from /start; accepted for EFP portal compatibility.",
+    )

@@ -40,7 +40,11 @@ def check(
     store: MetadataStore = Depends(get_store),
     client: DeviceCodeClient = Depends(get_copilot_auth_client),
 ) -> dict[str, object]:
-    return CopilotAuthService(store, client=client).check(user=user, auth_id=payload.auth_id)
+    return CopilotAuthService(store, client=client).check(
+        user=user,
+        auth_id=payload.auth_id,
+        device_code=payload.device_code,
+    )
 
 
 @router.delete("/credential")
