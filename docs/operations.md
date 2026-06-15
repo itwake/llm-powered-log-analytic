@@ -264,6 +264,14 @@ credentialed API requests. The default is `http://localhost:3000`; production de
 set it to the deployed web origin, such as `https://logan.example.com`.
 Containerized API deployments can set `LOGAN_API_WORKERS` to control the number of Uvicorn worker
 processes. Keep it low for local smoke runs and size it from CPU limits in Kubernetes.
+Set `LOGAN_LOG_LEVEL=debug` on the API deployment to enable Uvicorn debug logging while
+investigating request failures:
+
+```bash
+kubectl -n logan set env deploy/logan-api LOGAN_LOG_LEVEL=debug
+kubectl -n logan rollout restart deploy/logan-api
+kubectl -n logan logs deploy/logan-api -f
+```
 
 Uploads use `LOGAN_OBJECT_STORE_BACKEND=local` by default. The API returns an authenticated
 `PUT /api/cases/{case_id}/uploads/{file_id}/content` URL, writes raw bytes to
@@ -617,9 +625,14 @@ Run the web workspace against the local API:
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev --workspace @logan/web
 ```
 
-`NEXT_PUBLIC_API_BASE_URL` defaults to `http://localhost:8000`. The web client sends
-browser requests with `credentials: "include"` for the `logan_session` cookie. The current
-workbench creates cases, uploads selected log/archive files, starts analysis by
+`NEXT_PUBLIC_API_BASE_URL` defaults to an empty same-origin base, so production browser requests
+go to `/api/...` on the current host and match the Kubernetes ingress route. Set it explicitly for
+local development when the API runs on another origin. Because `NEXT_PUBLIC_*` values are compiled
+into the browser bundle by Next.js, Kubernetes runtime environment changes do not rewrite an
+already-built image; rebuild the web image with the desired build arg if an absolute API origin is
+needed. The web client sends browser requests with `credentials: "include"` for the
+`logan_session` cookie. The current workbench creates cases, uploads selected log/archive files,
+starts analysis by
 `input_file_ids`, preserves a sample/local fixture run action, lists real runs, loads report
 views from API endpoints, renders Temporal View with Apache ECharts, renders Causal Graph with
 Cytoscape.js, streams case-workspace Copilot answers with fetch-based SSE parsing, submits
