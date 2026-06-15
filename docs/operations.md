@@ -325,6 +325,12 @@ The default API path uses real GitHub Copilot auth and model calls:
 - analysis runs use `CopilotModelGateway` and require a stored credential or one of `LOGAN_GITHUB_COPILOT_TOKEN` / `LOGAN_GITHUB_SOURCE_TOKEN`.
 - case workspace chat uses `POST /api/chat/stream` to stream Copilot answers over SSE when a completed analysis result is available.
 
+Device-code polling must follow the `interval` returned by GitHub. If GitHub returns
+`slow_down` or `429 Too Many Requests`, the API keeps the auth status pending and returns
+`next_poll_after_seconds` so the browser can back off instead of surfacing a server error. The
+web settings page disables manual checks while that wait is active and relies on the scheduled
+poll.
+
 If Copilot auth or model calls fail with
 `[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate`, the API process is
 usually behind an enterprise TLS inspection proxy or missing the corporate root CA. Export the

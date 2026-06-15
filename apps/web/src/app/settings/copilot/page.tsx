@@ -176,11 +176,11 @@ export default function CopilotSettingsPage() {
               {pollStatus === "pending" && (
                 <button
                   className="button secondary"
-                  disabled={checking}
+                  disabled={checking || Boolean(nextPollSeconds)}
                   type="button"
                   onClick={() => void checkAuth(deviceAuth.auth_id)}
                 >
-                  Check now
+                  {checking ? "Checking" : nextPollSeconds ? "Waiting" : "Check now"}
                 </button>
               )}
             </>

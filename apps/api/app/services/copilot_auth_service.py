@@ -83,7 +83,22 @@ class GitHubDeviceCodeClient:
             },
             headers=self._headers(),
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                retry_after = _retry_after_seconds(exc.response)
+                interval_delta = (
+                    max(5, retry_after - record.interval)
+                    if retry_after is not None
+                    else 30
+                )
+                return DeviceCodePollResult(
+                    status="pending",
+                    message="rate_limited",
+                    interval_delta_seconds=interval_delta,
+                )
+            raise
         data = response.json()
         access_token = data.get("access_token")
         if access_token:
@@ -182,18 +197,21 @@ class CopilotAuthService:
         if self._is_expired(record):
             return {"status": "expired", "message": "expired_token"}
 
+        poll_started_at = self._now()
         if self.client.enforce_poll_interval:
-            wait_seconds = self._wait_seconds(record)
+            wait_seconds = self._wait_seconds(record, now=poll_started_at)
             if wait_seconds > 0:
                 return {
                     "status": "pending",
                     "message": "authorization_pending",
                     "next_poll_after_seconds": wait_seconds,
                 }
+            record.updated_at = poll_started_at
+            self.store.update_copilot_auth(record)
 
         result = self.client.check(record)
         record.poll_count += 1
-        if result.message == "slow_down":
+        if result.interval_delta_seconds > 0:
             record.interval += result.interval_delta_seconds or 5
         record.updated_at = self._now()
         self.store.update_copilot_auth(record)
@@ -229,7 +247,19 @@ class CopilotAuthService:
     def _is_expired(self, record: CopilotAuthRecord) -> bool:
         return record.created_at + timedelta(seconds=record.expires_in) <= self._now()
 
-    def _wait_seconds(self, record: CopilotAuthRecord) -> int:
-        last_poll_at = record.updated_at if record.poll_count > 0 else record.created_at
+    def _wait_seconds(self, record: CopilotAuthRecord, *, now: datetime | None = None) -> int:
+        last_poll_at = record.updated_at
         next_poll_at = last_poll_at + timedelta(seconds=record.interval)
-        return max(0, math.ceil((next_poll_at - self._now()).total_seconds()))
+        current_time = now or self._now()
+        return max(0, math.ceil((next_poll_at - current_time).total_seconds()))
+
+
+def _retry_after_seconds(response: httpx.Response) -> int | None:
+    retry_after = response.headers.get("Retry-After")
+    if not retry_after:
+        return None
+    try:
+        parsed = int(retry_after)
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
