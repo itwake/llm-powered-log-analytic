@@ -87,6 +87,7 @@ from app.store import (
     merge_analysis_result_progress,
     _validate_policy_group_role,
     _slugify,
+    log_job_event,
     model_invocation_audit_metadata,
     merge_recorded_progress,
     sanitize_error_message,
@@ -1596,6 +1597,7 @@ class SQLAlchemyStore:
         sanitized_error = sanitize_error_message(error_message) if error_message else None
         event_record: JobEventRecord | None = None
         integrity_error: IntegrityError | None = None
+        event_created = False
         try:
             with self._session() as session:
                 existing = session.scalar(
@@ -1624,6 +1626,7 @@ class SQLAlchemyStore:
                     session.add(event)
                     session.flush()
                     event_record = self._job_event_record(event)
+                    event_created = True
         except IntegrityError as exc:
             integrity_error = exc
             with self._session() as session:
@@ -1640,6 +1643,8 @@ class SQLAlchemyStore:
             if integrity_error is not None:
                 raise integrity_error
             raise RuntimeError("job event could not be recorded")
+        if event_created:
+            log_job_event(event_record)
         self._materialize_step_artifact_for_event(event_record)
         return event_record
 

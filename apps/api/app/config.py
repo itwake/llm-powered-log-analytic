@@ -131,6 +131,7 @@ class Settings:
     rate_limit_requests_per_minute: int = int(
         os.getenv("LOGAN_RATE_LIMIT_REQUESTS_PER_MINUTE", "120")
     )
+    log_level: str = os.getenv("LOGAN_LOG_LEVEL", "INFO")
     metrics_enabled: bool = _env_bool("LOGAN_METRICS_ENABLED", True)
     metrics_path: str = os.getenv("LOGAN_METRICS_PATH", "/metrics")
     cors_allowed_origins: str = os.getenv(

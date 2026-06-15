@@ -133,6 +133,7 @@ The E2E config starts the API with:
 - `LOGAN_OBJECT_STORE_BACKEND=local`
 - `LOGAN_LOCAL_OBJECT_STORE_DIR=.logan/e2e-object-store`
 - `LOGAN_RATE_LIMIT_ENABLED=false`
+- `LOGAN_LOG_LEVEL=INFO`
 - `LOGAN_METRICS_ENABLED=true`
 - `LOGAN_LLM_PROVIDER=mock`
 
@@ -272,6 +273,9 @@ kubectl -n logan set env deploy/logan-api LOGAN_LOG_LEVEL=debug
 kubectl -n logan rollout restart deploy/logan-api
 kubectl -n logan logs deploy/logan-api -f
 ```
+
+Set the same variable on `deploy/logan-worker` when diagnosing Temporal worker execution or
+analysis progress logs.
 
 Uploads use `LOGAN_OBJECT_STORE_BACKEND=local` by default. The API returns an authenticated
 same-origin relative `PUT /api/cases/{case_id}/uploads/{file_id}/content` URL, writes raw bytes to
@@ -594,6 +598,28 @@ per-minute limit is exceeded.
 
 ## Observability
 
+Application logs use `LOGAN_LOG_LEVEL=INFO` by default. Set `LOGAN_LOG_LEVEL=DEBUG` on the API
+and worker pods when diagnosing deployment or model gateway issues, then return it to `INFO` to
+keep container logs compact. Each newly persisted analysis `job_event` emits one safe structured
+log entry from logger `logan.analysis.progress` with the `analysis_event` prefix, including
+`case_id`, `analysis_run_id`, `step`, `event`, `status`, `attempt`, and sanitized step metadata.
+The same metadata allow-list used for stored job events is reused for logs: raw log text, prompts,
+model inputs, representative line text, credentials, tokens, secrets, and file paths are omitted;
+error messages are redacted before logging.
+
+For local orchestration, these progress logs appear in the API pod:
+
+```bash
+kubectl logs deploy/logan-api -n logan | grep analysis_event
+```
+
+For Temporal orchestration, worker-authored progress logs appear in the worker pod while the API
+still exposes the persisted events through the run events endpoint:
+
+```bash
+kubectl logs deploy/logan-worker -n logan | grep analysis_event
+```
+
 Prometheus metrics are enabled by default:
 
 - `LOGAN_METRICS_ENABLED=true`
@@ -647,6 +673,15 @@ starts analysis by
 views from API endpoints, renders Temporal View with Apache ECharts, renders Causal Graph with
 Cytoscape.js, streams case-workspace Copilot answers with fetch-based SSE parsing, submits
 feedback/exports, and drives Copilot device auth start/check through the backend.
+
+The case workspace shows upload and analysis progress before reports are ready. Browser uploads
+emit per-file progress with bytes, percentage, multipart part number when available, hashing, and
+object-store verification phases. After a run starts, the workspace polls
+`GET /api/cases/{case_id}/analysis-runs/{run_id}` and
+`GET /api/cases/{case_id}/analysis-runs/{run_id}/events` every two seconds until the run reaches
+`completed` or `failed`, rendering the pipeline step timeline and recent `job_events`. The backend
+also writes one `analysis_event` log line for each new `job_event`, so Kubernetes operators can
+correlate a stuck UI state with API or worker pod logs without querying the database directly.
 
 Run the full service skeleton:
 

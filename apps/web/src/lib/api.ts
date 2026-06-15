@@ -10,6 +10,43 @@ type ApiOptions = Omit<RequestInit, "body" | "credentials"> & {
   query?: QueryParams;
 };
 
+export type UploadProgressPhase =
+  | "queued"
+  | "preparing"
+  | "hashing"
+  | "uploading"
+  | "verifying"
+  | "completed"
+  | "failed";
+
+export interface UploadProgressEvent {
+  file: File;
+  fileId?: string;
+  fileIndex: number;
+  totalFiles: number;
+  phase: UploadProgressPhase;
+  bytesSent: number;
+  totalBytes: number;
+  partNumber?: number;
+  partCount?: number;
+  message?: string;
+}
+
+export type UploadProgressCallback = (event: UploadProgressEvent) => void;
+
+interface UploadProgressContext {
+  fileIndex: number;
+  totalFiles: number;
+  onProgress?: UploadProgressCallback;
+}
+
+interface UploadContentOptions {
+  fileIndex?: number;
+  totalFiles?: number;
+  onProgress?: UploadProgressCallback;
+  multipart?: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
   detail: unknown;
@@ -89,22 +126,88 @@ async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
   return (await parseResponse(response)) as T;
 }
 
-async function uploadRawFile(uploadUrl: string, file: File): Promise<UploadContentResponse> {
+function parseXhrPayload(xhr: XMLHttpRequest): unknown {
+  const contentType = xhr.getResponseHeader("content-type") || "";
+  if (contentType.includes("application/json")) {
+    try {
+      return JSON.parse(xhr.responseText || "null");
+    } catch {
+      return xhr.responseText;
+    }
+  }
+  return xhr.responseText;
+}
+
+function xhrUpload(
+  url: string,
+  body: Blob,
+  options: {
+    headers?: HeadersInit;
+    withCredentials?: boolean;
+    onProgress?: (loaded: number, total: number) => void;
+  } = {},
+): Promise<XMLHttpRequest> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.withCredentials = Boolean(options.withCredentials);
+    new Headers(options.headers).forEach((value, key) => {
+      xhr.setRequestHeader(key, value);
+    });
+    xhr.upload.onprogress = (event) => {
+      const total = event.lengthComputable ? event.total : body.size;
+      options.onProgress?.(event.loaded, total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr);
+        return;
+      }
+      const payload = parseXhrPayload(xhr);
+      reject(new ApiError(xhr.status, errorMessage(xhr.status, payload), payload));
+    };
+    xhr.onerror = () => reject(new Error("upload failed"));
+    xhr.onabort = () => reject(new Error("upload aborted"));
+    xhr.send(body);
+  });
+}
+
+function emitUploadProgress(
+  context: UploadProgressContext,
+  file: File,
+  event: Omit<UploadProgressEvent, "file" | "fileIndex" | "totalFiles" | "totalBytes"> & {
+    totalBytes?: number;
+  },
+) {
+  context.onProgress?.({
+    file,
+    fileIndex: context.fileIndex,
+    totalFiles: context.totalFiles,
+    totalBytes: event.totalBytes ?? file.size,
+    ...event,
+  });
+}
+
+async function uploadRawFile(
+  uploadUrl: string,
+  file: File,
+  context: UploadProgressContext,
+  fileId?: string,
+): Promise<UploadContentResponse> {
   const headers = new Headers();
   if (file.type) {
     headers.set("content-type", file.type);
   }
-  const response = await fetch(apiUrl(uploadUrl), {
-    method: "PUT",
-    body: file,
-    credentials: "include",
+  const xhr = await xhrUpload(apiUrl(uploadUrl), file, {
     headers,
+    withCredentials: true,
+    onProgress: (loaded) => emitUploadProgress(context, file, {
+      fileId,
+      phase: "uploading",
+      bytesSent: loaded,
+    }),
   });
-  if (!response.ok) {
-    const payload = await parseResponse(response);
-    throw new ApiError(response.status, errorMessage(response.status, payload), payload);
-  }
-  return (await parseResponse(response)) as UploadContentResponse;
+  return parseXhrPayload(xhr) as UploadContentResponse;
 }
 
 async function sha256File(file: File): Promise<string> {
@@ -112,51 +215,62 @@ async function sha256File(file: File): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function uploadPresignedFile(upload: UploadStartResponse, file: File): Promise<void> {
+async function uploadPresignedFile(
+  upload: UploadStartResponse,
+  file: File,
+  context: UploadProgressContext,
+): Promise<void> {
   if (!upload.upload_url) {
     throw new Error("upload response did not include an upload URL");
   }
   const headers = new Headers(upload.upload_headers || {});
-  const response = await fetch(upload.upload_url, {
-    method: "PUT",
-    body: file,
-    credentials: "omit",
+  await xhrUpload(upload.upload_url, file, {
     headers,
+    onProgress: (loaded) => emitUploadProgress(context, file, {
+      fileId: upload.file_id,
+      phase: "uploading",
+      bytesSent: loaded,
+    }),
   });
-  if (!response.ok) {
-    const payload = await parseResponse(response);
-    throw new ApiError(response.status, errorMessage(response.status, payload), payload);
-  }
 }
 
 async function uploadMultipartFile(
   upload: UploadStartResponse,
   file: File,
+  context: UploadProgressContext,
 ): Promise<{sha256: string; parts: MultipartCompletePart[]}> {
   if (!upload.multipart_upload_id || !upload.part_size_bytes || !upload.parts?.length) {
     throw new Error("multipart upload response is incomplete");
   }
   const completedParts: MultipartCompletePart[] = [];
   const sortedParts = [...upload.parts].sort((left, right) => left.part_number - right.part_number);
+  let completedBytes = 0;
   for (const part of sortedParts) {
     const start = (part.part_number - 1) * upload.part_size_bytes;
     const end = Math.min(start + upload.part_size_bytes, file.size);
-    const response = await fetch(part.upload_url, {
-      method: "PUT",
-      body: file.slice(start, end),
-      credentials: "omit",
+    const chunk = file.slice(start, end);
+    const xhr = await xhrUpload(part.upload_url, chunk, {
       headers: new Headers(part.upload_headers || {}),
+      onProgress: (loaded) => emitUploadProgress(context, file, {
+        fileId: upload.file_id,
+        phase: "uploading",
+        bytesSent: completedBytes + loaded,
+        partNumber: part.part_number,
+        partCount: sortedParts.length,
+      }),
     });
-    if (!response.ok) {
-      const payload = await parseResponse(response);
-      throw new ApiError(response.status, errorMessage(response.status, payload), payload);
-    }
-    const etag = response.headers.get("etag");
+    const etag = xhr.getResponseHeader("etag");
     if (!etag) {
       throw new Error(`multipart part ${part.part_number} did not return an ETag`);
     }
     completedParts.push({part_number: part.part_number, etag});
+    completedBytes += chunk.size;
   }
+  emitUploadProgress(context, file, {
+    fileId: upload.file_id,
+    phase: "hashing",
+    bytesSent: file.size,
+  });
   return {sha256: await sha256File(file), parts: completedParts};
 }
 
@@ -315,6 +429,25 @@ export interface AnalysisRunResponse {
 
 export interface AnalysisRunListResponse {
   items: AnalysisRunResponse[];
+  total: number;
+}
+
+export interface JobEventResponse {
+  id: string;
+  case_id: string;
+  analysis_run_id: string;
+  step_name: string;
+  event_type: string;
+  status: string;
+  attempt: number;
+  idempotency_key: string;
+  metadata: Record<string, unknown>;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface JobEventListResponse {
+  items: JobEventResponse[];
   total: number;
 }
 
@@ -689,37 +822,97 @@ export const casesApi = {
       method: "POST",
       body: multipart ? {sha256, ...multipart} : {sha256},
   }),
-  uploadContent: async (caseId: string, upload: UploadStartResponse, file: File) => {
+  uploadContent: async (
+    caseId: string,
+    upload: UploadStartResponse,
+    file: File,
+    options?: UploadContentOptions,
+  ) => {
+    const context: UploadProgressContext = {
+      fileIndex: options?.fileIndex ?? 0,
+      totalFiles: options?.totalFiles ?? 1,
+      onProgress: options?.onProgress,
+    };
     if (upload.upload_mode === "multipart") {
       if (!upload.multipart_upload_id) {
         throw new Error("multipart upload response is missing an upload id");
       }
       const multipartUploadId = upload.multipart_upload_id;
-      const completed = await uploadMultipartFile(upload, file);
+      const completed = await uploadMultipartFile(upload, file, context);
+      emitUploadProgress(context, file, {
+        fileId: upload.file_id,
+        phase: "verifying",
+        bytesSent: file.size,
+        message: "Completing multipart upload",
+      });
       return casesApi.completeUpload(caseId, upload.file_id, completed.sha256, {
         multipart_upload_id: multipartUploadId,
         parts: completed.parts,
       });
     }
     if (upload.upload_backend === "s3" || upload.upload_backend === "minio") {
+      emitUploadProgress(context, file, {
+        fileId: upload.file_id,
+        phase: "hashing",
+        bytesSent: 0,
+      });
       const sha256 = await sha256File(file);
-      await uploadPresignedFile(upload, file);
+      await uploadPresignedFile(upload, file, context);
+      emitUploadProgress(context, file, {
+        fileId: upload.file_id,
+        phase: "verifying",
+        bytesSent: file.size,
+        message: "Verifying object storage upload",
+      });
       return casesApi.completeUpload(caseId, upload.file_id, sha256);
     }
     if (!upload.upload_url) {
       throw new Error("upload response did not include an upload URL");
     }
-    return uploadRawFile(upload.upload_url, file);
+    return uploadRawFile(upload.upload_url, file, context, upload.file_id);
   },
-  uploadFiles: async (caseId: string, files: File[]) => {
+  uploadFiles: async (
+    caseId: string,
+    files: File[],
+    options?: {
+      multipart?: boolean;
+      onProgress?: UploadProgressCallback;
+    },
+  ) => {
     const uploaded: UploadContentResponse[] = [];
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
+      const context: UploadProgressContext = {
+        fileIndex: index,
+        totalFiles: files.length,
+        onProgress: options?.onProgress,
+      };
+      emitUploadProgress(context, file, {
+        phase: "preparing",
+        bytesSent: 0,
+        message: "Preparing upload",
+      });
       const upload = await casesApi.requestUpload(caseId, {
         filename: file.name || "upload.bin",
         content_type: file.type || null,
         size_bytes: file.size,
+        multipart: options?.multipart || null,
       });
-      uploaded.push(await casesApi.uploadContent(caseId, upload, file));
+      emitUploadProgress(context, file, {
+        fileId: upload.file_id,
+        phase: "uploading",
+        bytesSent: 0,
+      });
+      const completed = await casesApi.uploadContent(caseId, upload, file, {
+        ...context,
+        multipart: options?.multipart,
+      });
+      emitUploadProgress(context, file, {
+        fileId: upload.file_id,
+        phase: "completed",
+        bytesSent: completed.size_bytes || file.size,
+        message: "Upload complete",
+      });
+      uploaded.push(completed);
     }
     return uploaded;
   },
@@ -734,6 +927,8 @@ export const runsApi = {
     }),
   get: (caseId: string, runId: string) =>
     request<AnalysisRunResponse>(`/api/cases/${caseId}/analysis-runs/${runId}`),
+  events: (caseId: string, runId: string) =>
+    request<JobEventListResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/events`),
 };
 
 export const reportsApi = {
