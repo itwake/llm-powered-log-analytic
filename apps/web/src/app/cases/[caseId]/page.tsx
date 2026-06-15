@@ -1,18 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   AnalysisRunResponse,
   CaseResponse,
   EvidenceRef,
+  JobEventResponse,
+  UploadProgressEvent,
   casesApi,
   chatApi,
   runsApi,
 } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
+import { AnalysisProgressPanel } from "@/components/AnalysisProgressPanel";
 import { Metric, Shell } from "@/components/Shell";
+
+type UploadItemStatus = "queued" | "preparing" | "hashing" | "uploading" | "verifying" | "completed" | "failed";
+
+interface UploadItem {
+  key: string;
+  name: string;
+  size: number;
+  status: UploadItemStatus;
+  bytesSent: number;
+  fileId?: string;
+  partNumber?: number;
+  partCount?: number;
+  message?: string;
+}
 
 function statusClass(status: string): string {
   if (status === "ready" || status === "completed") {
@@ -36,12 +53,55 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
+function uploadKey(file: File, index: number): string {
+  return `${index}:${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function uploadItemsFromFiles(files: File[]): UploadItem[] {
+  return files.map((file, index) => ({
+    key: uploadKey(file, index),
+    name: file.name || "upload.bin",
+    size: file.size,
+    status: "queued",
+    bytesSent: 0,
+  }));
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  if (value < 1024 * 1024 * 1024) {
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function uploadPercent(item: UploadItem): number {
+  if (item.status === "completed") {
+    return 100;
+  }
+  if (item.size <= 0) {
+    return item.bytesSent > 0 ? 100 : 0;
+  }
+  return Math.max(0, Math.min(100, Math.round((item.bytesSent / item.size) * 100)));
+}
+
+function terminalRunStatus(status: string): boolean {
+  return status === "completed" || status === "failed";
+}
+
 export default function CaseWorkspacePage() {
   const {caseId} = useParams<{caseId: string}>();
-  const router = useRouter();
   const [caseRecord, setCaseRecord] = useState<CaseResponse | null>(null);
   const [runs, setRuns] = useState<AnalysisRunResponse[]>([]);
+  const [runEvents, setRunEvents] = useState<Record<string, JobEventResponse[]>>({});
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState<"files" | "sample" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,11 +122,59 @@ export default function CaseWorkspacePage() {
       ]);
       setCaseRecord(caseResponse);
       setRuns(runResponse.items);
+      if (runResponse.items[0]) {
+        setActiveRunId((current) => current || runResponse.items[0].analysis_run_id);
+      }
     } catch (caught) {
       setError(apiErrorMessage(caught));
     } finally {
       setLoading(false);
     }
+  }
+
+  function upsertRun(run: AnalysisRunResponse) {
+    setRuns((current) => {
+      const existing = current.findIndex((item) => item.analysis_run_id === run.analysis_run_id);
+      const next = existing >= 0 ? [...current] : [run, ...current];
+      if (existing >= 0) {
+        next[existing] = run;
+      }
+      return next.sort((left, right) => right.run_number - left.run_number);
+    });
+  }
+
+  async function refreshRunProgress(runId: string) {
+    const [run, events] = await Promise.all([
+      runsApi.get(caseId, runId),
+      runsApi.events(caseId, runId),
+    ]);
+    upsertRun(run);
+    setRunEvents((current) => ({...current, [runId]: events.items}));
+    return run;
+  }
+
+  function handleUploadProgress(event: UploadProgressEvent) {
+    setUploadItems((current) => {
+      const key = uploadKey(event.file, event.fileIndex);
+      const existing = current.findIndex((item) => item.key === key);
+      const nextItem: UploadItem = {
+        key,
+        name: event.file.name || "upload.bin",
+        size: event.totalBytes,
+        status: event.phase,
+        bytesSent: Math.min(event.bytesSent, event.totalBytes),
+        fileId: event.fileId,
+        partNumber: event.partNumber,
+        partCount: event.partCount,
+        message: event.message,
+      };
+      if (existing < 0) {
+        return [...current, nextItem];
+      }
+      const next = [...current];
+      next[existing] = {...next[existing], ...nextItem};
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -77,6 +185,44 @@ export default function CaseWorkspacePage() {
     askAbortRef.current?.abort();
   }, []);
 
+  const latestRun = runs[0] || null;
+  const trackedRun = runs.find((run) => run.analysis_run_id === activeRunId) || latestRun;
+
+  useEffect(() => {
+    if (!trackedRun) {
+      return;
+    }
+    let cancelled = false;
+    const runId = trackedRun.analysis_run_id;
+    async function refresh() {
+      try {
+        await refreshRunProgress(runId);
+      } catch {
+        if (!cancelled) {
+          setRunEvents((current) => ({...current, [runId]: current[runId] || []}));
+        }
+      }
+    }
+    void refresh();
+    if (terminalRunStatus(trackedRun.status)) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [caseId, trackedRun?.analysis_run_id, trackedRun?.status]);
+
+  function handleFileSelection(files: File[]) {
+    setSelectedFiles(files);
+    setUploadItems(uploadItemsFromFiles(files));
+  }
+
   async function startUploadedAnalysis() {
     if (selectedFiles.length === 0) {
       setError("Select at least one log or archive file to upload.");
@@ -84,14 +230,23 @@ export default function CaseWorkspacePage() {
     }
     setStarting("files");
     setError(null);
+    setUploadItems(uploadItemsFromFiles(selectedFiles));
     try {
-      const uploaded = await casesApi.uploadFiles(caseId, selectedFiles);
+      const uploaded = await casesApi.uploadFiles(caseId, selectedFiles, {
+        onProgress: handleUploadProgress,
+      });
       const run = await runsApi.start(caseId, {
         input_file_ids: uploaded.map((file) => file.file_id),
         config: {default_window_size_seconds: 60},
       });
-      router.push(`/cases/${caseId}/runs/${run.analysis_run_id}/summary`);
+      setActiveRunId(run.analysis_run_id);
+      await refreshRunProgress(run.analysis_run_id);
     } catch (caught) {
+      setUploadItems((current) =>
+        current.map((item) =>
+          item.status === "completed" ? item : {...item, status: "failed", message: apiErrorMessage(caught)}
+        )
+      );
       setError(apiErrorMessage(caught));
     } finally {
       setStarting(null);
@@ -106,7 +261,8 @@ export default function CaseWorkspacePage() {
         input_paths: [],
         config: {default_window_size_seconds: 60},
       });
-      router.push(`/cases/${caseId}/runs/${run.analysis_run_id}/summary`);
+      setActiveRunId(run.analysis_run_id);
+      await refreshRunProgress(run.analysis_run_id);
     } catch (caught) {
       setError(apiErrorMessage(caught));
     } finally {
@@ -158,7 +314,7 @@ export default function CaseWorkspacePage() {
     setAskStreaming(false);
   }
 
-  const latestRun = runs[0] || null;
+  const trackedEvents = trackedRun ? runEvents[trackedRun.analysis_run_id] || [] : [];
 
   return (
     <Shell caseId={caseId} runId={latestRun?.analysis_run_id} caseTitle={caseRecord?.title}>
@@ -193,14 +349,33 @@ export default function CaseWorkspacePage() {
                 accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
                 multiple
                 type="file"
-                onChange={(event) => setSelectedFiles(Array.from(event.target.files || []))}
+                onChange={(event) => handleFileSelection(Array.from(event.target.files || []))}
               />
             </label>
-            {selectedFiles.length > 0 && (
-              <div className="file-list">
-                {selectedFiles.map((file) => (
-                  <div key={`${file.name}-${file.size}`}>{file.name}</div>
-                ))}
+            {uploadItems.length > 0 && (
+              <div className="upload-progress-list">
+                {uploadItems.map((item) => {
+                  const percent = uploadPercent(item);
+                  return (
+                    <div className="upload-progress-row" key={item.key}>
+                      <div className="upload-progress-header">
+                        <strong>{item.name}</strong>
+                        <span className={`pill ${statusClass(item.status)}`}>{item.status}</span>
+                      </div>
+                      <div className="progress-track compact" aria-label={`${item.name} upload progress`}>
+                        <div className="progress-fill" style={{width: `${percent}%`}} />
+                      </div>
+                      <div className="upload-progress-meta">
+                        <span>{percent}%</span>
+                        <span>{formatBytes(item.bytesSent)} / {formatBytes(item.size)}</span>
+                        {item.partNumber && item.partCount && (
+                          <span>part {item.partNumber}/{item.partCount}</span>
+                        )}
+                        {item.message && <span>{item.message}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
             <div className="form-actions">
@@ -225,6 +400,10 @@ export default function CaseWorkspacePage() {
               Uploaded files run through the local object store. The sample/local action uses the
               deterministic fixture set.
             </p>
+          </section>
+
+          <section style={{marginTop: 14}}>
+            <AnalysisProgressPanel caseId={caseId} run={trackedRun} events={trackedEvents} />
           </section>
 
           {latestRun && (
