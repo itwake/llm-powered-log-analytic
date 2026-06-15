@@ -18,6 +18,25 @@ def test_kubernetes_config_exposes_deployment_runtime_settings() -> None:
 
     assert "LOGAN_CORS_ALLOWED_ORIGINS" in manifest
     assert "LOGAN_API_WORKERS" in manifest
+    assert "LOGAN_LOG_LEVEL" in manifest
+    assert 'NEXT_PUBLIC_API_BASE_URL: ""' in manifest
+
+
+def test_web_client_uses_same_origin_api_by_default() -> None:
+    api_client = (REPO_ROOT / "apps" / "web" / "src" / "lib" / "api.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'process.env.NEXT_PUBLIC_API_BASE_URL || ""' in api_client
+    assert "http://localhost:8000" not in api_client
+
+
+def test_api_container_can_enable_debug_logging() -> None:
+    dockerfile = (REPO_ROOT / "infra" / "docker" / "api.Dockerfile").read_text(
+        encoding="utf-8"
+    )
+
+    assert "--log-level ${LOGAN_LOG_LEVEL:-info}" in dockerfile
 
 
 def test_docker_compose_preserves_postgres_default_despite_local_sqlite_env() -> None:

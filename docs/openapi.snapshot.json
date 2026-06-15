@@ -1302,6 +1302,18 @@
           "auth_id": {
             "title": "Auth Id",
             "type": "string"
+          },
+          "device_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional device code echoed from /start; accepted for EFP portal compatibility.",
+            "title": "Device Code"
           }
         },
         "required": [

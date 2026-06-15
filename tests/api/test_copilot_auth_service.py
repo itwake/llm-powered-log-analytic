@@ -188,6 +188,44 @@ def test_device_code_poll_slow_down_updates_service_interval() -> None:
     assert store.get_copilot_auth(record.auth_id).interval == 10  # type: ignore[union-attr]
 
 
+def test_device_code_poll_rate_limit_updates_service_interval() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if request.url.path == "/login/device/code":
+            return httpx.Response(
+                200,
+                json={
+                    "device_code": "device-code-1",
+                    "user_code": "ABCD-EFGH",
+                    "verification_uri": "https://github.com/login/device",
+                    "expires_in": 900,
+                    "interval": 5,
+                },
+            )
+        return httpx.Response(429, headers={"Retry-After": "30"})
+
+    store = InMemoryStore()
+    user = _user(store)
+    client = GitHubDeviceCodeClient(http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    current_time = [datetime(2026, 6, 6, 10, 0, tzinfo=UTC)]
+    service = CopilotAuthService(store, client=client, now_factory=lambda: current_time[0])
+    record = service.start(user=user, github_base_url="https://github.com")
+    current_time[0] += timedelta(seconds=record.interval)
+
+    response = service.check(user=user, auth_id=record.auth_id)
+
+    assert calls == 2
+    assert response == {
+        "status": "pending",
+        "message": "rate_limited",
+        "next_poll_after_seconds": 30,
+    }
+    assert store.get_copilot_auth(record.auth_id).interval == 30  # type: ignore[union-attr]
+
+
 def test_service_stores_public_github_base_url_for_arbitrary_start_request() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -313,6 +351,71 @@ def test_service_respects_interval_before_polling_real_client() -> None:
         "next_poll_after_seconds": 5,
     }
     assert calls == 0
+
+
+def test_service_rejects_mismatched_device_code_without_polling_client() -> None:
+    store = InMemoryStore()
+    user = _user(store)
+    calls = 0
+
+    class DeviceCodeCheckingClient(MockGitHubDeviceClient):
+        enforce_poll_interval = True
+
+        def check(self, record: CopilotAuthRecord) -> DeviceCodePollResult:
+            nonlocal calls
+            calls += 1
+            return super().check(record)
+
+    service = CopilotAuthService(store, client=DeviceCodeCheckingClient())
+    record = service.start(user=user, github_base_url="https://github.com")
+
+    response = service.check(
+        user=user,
+        auth_id=record.auth_id,
+        device_code="wrong-device-code",
+    )
+
+    assert response == {"status": "not_found", "message": "auth_id not found"}
+    assert calls == 0
+
+
+def test_service_reserves_poll_slot_before_calling_real_client() -> None:
+    store = InMemoryStore()
+    user = _user(store)
+    calls = 0
+    now = [datetime(2026, 6, 6, 10, 0, tzinfo=UTC)]
+    service: CopilotAuthService
+
+    class ReentrantClient(MockGitHubDeviceClient):
+        enforce_poll_interval = True
+
+        def check(self, record: CopilotAuthRecord) -> DeviceCodePollResult:
+            nonlocal calls
+            calls += 1
+            blocked = service.check(user=user, auth_id=record.auth_id)
+            assert blocked == {
+                "status": "pending",
+                "message": "authorization_pending",
+                "next_poll_after_seconds": 5,
+            }
+            return DeviceCodePollResult(status="pending", message="authorization_pending")
+
+    service = CopilotAuthService(
+        store,
+        client=ReentrantClient(),
+        now_factory=lambda: now[0],
+    )
+    record = service.start(user=user, github_base_url="https://github.com")
+    now[0] += timedelta(seconds=record.interval)
+
+    response = service.check(user=user, auth_id=record.auth_id)
+
+    assert calls == 1
+    assert response == {
+        "status": "pending",
+        "message": "authorization_pending",
+        "next_poll_after_seconds": 5,
+    }
 
 
 def _auth_record(github_base_url: str = GITHUB_COPILOT_OAUTH_BASE_URL) -> CopilotAuthRecord:

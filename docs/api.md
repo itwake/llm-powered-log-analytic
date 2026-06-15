@@ -45,8 +45,12 @@ Default app construction uses GitHub's real device-code flow with client id `Iv1
 `github_base_url` is accepted in `/start` requests for backwards compatibility only. Copilot OAuth
 always uses public `https://github.com`, and auth records store that public GitHub base URL.
 
-`/check` polls `https://github.com/login/oauth/access_token`, respects GitHub `interval` and
-`slow_down`, and returns pending, authorized, declined, expired, or not-found status fields.
+`/check` accepts `auth_id` and an optional `device_code` echoed from `/start`, matching the EFP
+portal flow while preserving older `auth_id`-only clients. It polls
+`https://github.com/login/oauth/access_token` only after the stored GitHub `interval` has elapsed;
+early checks return pending from the API without calling GitHub. It also respects `slow_down` and
+`429 Retry-After` backoff, and returns pending, authorized, declined, expired, or not-found status
+fields.
 Authorized responses return `token_type=github_source_oauth`, `runtime_type=github_copilot`,
 and `expires_at`; they never include source tokens, plugin tokens, or encrypted bytes.
 
