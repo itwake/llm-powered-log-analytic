@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import time
 from typing import Any
@@ -34,6 +35,7 @@ PIPELINE_STEP_NAMES = frozenset(
 )
 
 _SAFE_LABEL_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 _HTTP_REQUESTS_TOTAL = Counter(
     "logan_http_requests_total",
@@ -95,6 +97,17 @@ _ANALYTICS_SINK_ROWS_TOTAL = Counter(
     "Analytics sink rows written by sink and status.",
     ("sink_name", "status"),
 )
+
+
+def configure_logging(app_settings: Settings) -> int:
+    level_name = (app_settings.log_level or "INFO").strip().upper()
+    level = getattr(logging, level_name, logging.INFO)
+    if not isinstance(level, int):
+        level = logging.INFO
+    logging.getLogger("logan").setLevel(level)
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=level, format=_LOG_FORMAT)
+    return level
 
 
 def install_metrics(app: FastAPI, app_settings: Settings) -> bool:

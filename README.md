@@ -286,6 +286,7 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_AUDIT_RETENTION_DAYS=730`
 - `LOGAN_RATE_LIMIT_ENABLED=false`
 - `LOGAN_RATE_LIMIT_REQUESTS_PER_MINUTE=120`
+- `LOGAN_LOG_LEVEL=INFO`; set `DEBUG` on API and worker pods while diagnosing deployment issues.
 - `LOGAN_METRICS_ENABLED=true`
 - `LOGAN_METRICS_PATH=/metrics`
 - `LOGAN_OTEL_ENABLED=false`

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -48,6 +50,7 @@ DEFAULT_ORGANIZATION_SLUG = "default"
 DEFAULT_ORGANIZATION_NAME = "Default Organization"
 RAW_LOG_RETAINED_MARKER = "[raw log text scrubbed by retention policy]"
 MODEL_INVOCATION_AUDIT_ACTION = "model.invocation"
+_JOB_EVENT_LOGGER = logging.getLogger("logan.analysis.progress")
 
 
 _SENSITIVE_ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -214,6 +217,37 @@ def sanitize_job_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
         if sanitized_value is not None:
             sanitized[key_text] = sanitized_value
     return sanitized
+
+
+def log_job_event(record: "JobEventRecord") -> None:
+    metadata = sanitize_job_metadata(record.metadata)
+    fields: dict[str, Any] = {
+        "case_id": record.case_id,
+        "analysis_run_id": record.analysis_run_id,
+        "step_name": record.step_name,
+        "event_type": record.event_type,
+        "status": record.status,
+        "attempt": record.attempt,
+        "metadata": metadata,
+    }
+    error_message = sanitize_error_message(record.error_message) if record.error_message else None
+    if error_message:
+        fields["error_message"] = error_message
+    metadata_text = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+    error_text = f" error_message={json.dumps(error_message)}" if error_message else ""
+    _JOB_EVENT_LOGGER.info(
+        "analysis_event case_id=%s analysis_run_id=%s step=%s event=%s "
+        "status=%s attempt=%s metadata=%s%s",
+        record.case_id,
+        record.analysis_run_id,
+        record.step_name,
+        record.event_type,
+        record.status,
+        record.attempt,
+        metadata_text,
+        error_text,
+        extra={"logan_analysis_event": fields},
+    )
 
 
 def _is_sensitive_artifact_key(key: str) -> bool:
@@ -1981,6 +2015,7 @@ class InMemoryStore:
         )
         self.job_events[record.id] = record
         self.job_event_keys[key] = record.id
+        log_job_event(record)
         self._materialize_step_artifact_for_event(record)
         return record
 

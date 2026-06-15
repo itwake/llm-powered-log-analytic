@@ -133,6 +133,7 @@ The E2E config starts the API with:
 - `LOGAN_OBJECT_STORE_BACKEND=local`
 - `LOGAN_LOCAL_OBJECT_STORE_DIR=.logan/e2e-object-store`
 - `LOGAN_RATE_LIMIT_ENABLED=false`
+- `LOGAN_LOG_LEVEL=INFO`
 - `LOGAN_METRICS_ENABLED=true`
 - `LOGAN_LLM_PROVIDER=mock`
 
@@ -576,6 +577,28 @@ per-minute limit is exceeded.
 
 ## Observability
 
+Application logs use `LOGAN_LOG_LEVEL=INFO` by default. Set `LOGAN_LOG_LEVEL=DEBUG` on the API
+and worker pods when diagnosing deployment or model gateway issues, then return it to `INFO` to
+keep container logs compact. Each newly persisted analysis `job_event` emits one safe structured
+log entry from logger `logan.analysis.progress` with the `analysis_event` prefix, including
+`case_id`, `analysis_run_id`, `step`, `event`, `status`, `attempt`, and sanitized step metadata.
+The same metadata allow-list used for stored job events is reused for logs: raw log text, prompts,
+model inputs, representative line text, credentials, tokens, secrets, and file paths are omitted;
+error messages are redacted before logging.
+
+For local orchestration, these progress logs appear in the API pod:
+
+```bash
+kubectl logs deploy/logan-api -n logan | grep analysis_event
+```
+
+For Temporal orchestration, worker-authored progress logs appear in the worker pod while the API
+still exposes the persisted events through the run events endpoint:
+
+```bash
+kubectl logs deploy/logan-worker -n logan | grep analysis_event
+```
+
 Prometheus metrics are enabled by default:
 
 - `LOGAN_METRICS_ENABLED=true`
@@ -631,6 +654,9 @@ object-store verification phases. After a run starts, the workspace polls
 `GET /api/cases/{case_id}/analysis-runs/{run_id}` and
 `GET /api/cases/{case_id}/analysis-runs/{run_id}/events` every two seconds until the run reaches
 `completed` or `failed`, rendering the pipeline step timeline and recent `job_events`.
+The backend also writes one `analysis_event` log line for each new `job_event`, so Kubernetes
+operators can correlate a stuck UI state with API or worker pod logs without querying the database
+directly.
 
 In Kubernetes, API pods and Temporal workers must write to the same metadata store for progress to
 be visible. PostgreSQL is recommended for multi-pod deployments. If SQLite is used, keep API and

@@ -52,6 +52,63 @@ def test_merge_analysis_result_progress_preserves_orchestrator() -> None:
     }
 
 
+def test_job_event_progress_logs_are_safe(caplog: pytest.LogCaptureFixture) -> None:
+    store = InMemoryStore()
+
+    with caplog.at_level("INFO", logger="logan.analysis.progress"):
+        event = store.record_job_event(
+            case_id="case-1",
+            analysis_run_id="run-1",
+            step_name="ingest_paths",
+            event_type="completed",
+            status="completed",
+            idempotency_key="ingest_paths:completed:1",
+            metadata={
+                "files": 2,
+                "raw_lines": 100,
+                "authorization": "Bearer bearer-secret-token-1234567890",
+                "input_path": "/tmp/secret.log",
+                "token": "gho_SECRET12345678",
+                "export_types": ["json", "markdown", "unsafe"],
+                "artifacts": {"safe_count": 1, "prompt": "raw prompt"},
+            },
+            error_message="failed token=gho_SECRET12345678 at /tmp/secret.log",
+        )
+
+    records = [record for record in caplog.records if record.name == "logan.analysis.progress"]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert "analysis_event case_id=case-1" in message
+    assert "step=ingest_paths" in message
+    assert '"raw_lines":100' in message
+    assert "gho_SECRET12345678" not in message
+    assert "/tmp/secret.log" not in message
+    extra = records[0].logan_analysis_event
+    assert extra["metadata"] == {
+        "files": 2,
+        "raw_lines": 100,
+        "export_types": ["json", "markdown"],
+        "artifacts": {"safe_count": 1},
+    }
+    assert extra["error_message"] == "failed token=<REDACTED> at <PATH>"
+    assert event.metadata == extra["metadata"]
+
+    caplog.clear()
+    with caplog.at_level("INFO", logger="logan.analysis.progress"):
+        duplicate = store.record_job_event(
+            case_id="case-1",
+            analysis_run_id="run-1",
+            step_name="ingest_paths",
+            event_type="completed",
+            status="completed",
+            idempotency_key="ingest_paths:completed:1",
+            metadata={"files": 99},
+        )
+
+    assert duplicate.id == event.id
+    assert [record for record in caplog.records if record.name == "logan.analysis.progress"] == []
+
+
 @pytest.mark.asyncio
 async def test_cors_allowed_origins_are_configurable() -> None:
     app_settings = Settings(cors_allowed_origins="https://logan.example.com, http://localhost:3000")
