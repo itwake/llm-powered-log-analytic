@@ -274,7 +274,7 @@ kubectl -n logan logs deploy/logan-api -f
 ```
 
 Uploads use `LOGAN_OBJECT_STORE_BACKEND=local` by default. The API returns an authenticated
-`PUT /api/cases/{case_id}/uploads/{file_id}/content` URL, writes raw bytes to
+same-origin relative `PUT /api/cases/{case_id}/uploads/{file_id}/content` URL, writes raw bytes to
 `LOGAN_LOCAL_OBJECT_STORE_DIR` or `.logan/object-store`, records a `file://` object URI, and
 passes completed upload paths to the worker pipeline through `input_file_ids`.
 
@@ -288,6 +288,9 @@ size. Completed S3-backed `input_file_ids` are accepted for analysis: the local 
 or Temporal worker downloads each `s3://` object into `LOGAN_ANALYSIS_INPUT_TMP_DIR` (default
 `.logan/analysis-inputs`) immediately before pipeline ingestion and deletes the temporary files
 after the pipeline call exits.
+When the web app is served over HTTPS, any public S3/MinIO presigned upload endpoint returned to
+the browser must also be HTTPS. Local API-backed uploads avoid mixed content by returning the
+relative `/api/.../content` route through the same ingress origin.
 
 Large S3/MinIO raw uploads use multipart/resumable sessions when the client asks with
 `multipart=true` or when the declared size reaches `LOGAN_S3_MULTIPART_THRESHOLD_BYTES`

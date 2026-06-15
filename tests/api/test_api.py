@@ -302,7 +302,7 @@ async def _upload_content(
         json={"filename": filename, "content_type": content_type, "size_bytes": len(content)},
     )
     assert upload.status_code == 200, upload.text
-    assert upload.json()["upload_url"].startswith("http://testserver/api/cases/")
+    assert upload.json()["upload_url"].startswith("/api/cases/")
     put = await client.put(
         upload.json()["upload_url"],
         content=content,
