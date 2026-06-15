@@ -190,9 +190,17 @@ class CopilotAuthService:
         )
         return self.store.create_copilot_auth(record)
 
-    def check(self, *, user: UserRecord, auth_id: str) -> dict[str, object]:
+    def check(
+        self,
+        *,
+        user: UserRecord,
+        auth_id: str,
+        device_code: str | None = None,
+    ) -> dict[str, object]:
         record = self.store.get_copilot_auth(auth_id)
         if not record or record.user_id != user.id:
+            return {"status": "not_found", "message": "auth_id not found"}
+        if device_code and device_code.strip() != record.device_code:
             return {"status": "not_found", "message": "auth_id not found"}
         if self._is_expired(record):
             return {"status": "expired", "message": "expired_token"}

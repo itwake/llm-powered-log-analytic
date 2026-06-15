@@ -442,10 +442,18 @@ async def test_auth_and_copilot_auth_api() -> None:
 
     started = await client.post("/api/copilot/auth/start", json={"github_base_url": "https://github.com"})
     assert started.status_code == 200
-    auth_id = started.json()["auth_id"]
-    pending = await client.post("/api/copilot/auth/check", json={"auth_id": auth_id})
+    started_payload = started.json()
+    auth_id = started_payload["auth_id"]
+    device_code = started_payload["device_code"]
+    pending = await client.post(
+        "/api/copilot/auth/check",
+        json={"auth_id": auth_id, "device_code": device_code},
+    )
     assert pending.json()["status"] == "pending"
-    authorized = await client.post("/api/copilot/auth/check", json={"auth_id": auth_id})
+    authorized = await client.post(
+        "/api/copilot/auth/check",
+        json={"auth_id": auth_id, "device_code": device_code},
+    )
     assert authorized.json()["status"] == "authorized"
     assert "token" not in authorized.text.lower().replace("token_type", "")
 
@@ -491,7 +499,14 @@ async def test_copilot_auth_api_responses_never_include_token_material() -> None
     )
 
     started = await client.post("/api/copilot/auth/start", json={"github_base_url": "https://github.com"})
-    checked = await client.post("/api/copilot/auth/check", json={"auth_id": started.json()["auth_id"]})
+    started_payload = started.json()
+    checked = await client.post(
+        "/api/copilot/auth/check",
+        json={
+            "auth_id": started_payload["auth_id"],
+            "device_code": started_payload["device_code"],
+        },
+    )
     me = await client.get("/api/auth/me")
     user_id = store.users_by_username["no-token"]
     plugin_token = "copilot_api_response_secret_token"

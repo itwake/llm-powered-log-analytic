@@ -353,6 +353,32 @@ def test_service_respects_interval_before_polling_real_client() -> None:
     assert calls == 0
 
 
+def test_service_rejects_mismatched_device_code_without_polling_client() -> None:
+    store = InMemoryStore()
+    user = _user(store)
+    calls = 0
+
+    class DeviceCodeCheckingClient(MockGitHubDeviceClient):
+        enforce_poll_interval = True
+
+        def check(self, record: CopilotAuthRecord) -> DeviceCodePollResult:
+            nonlocal calls
+            calls += 1
+            return super().check(record)
+
+    service = CopilotAuthService(store, client=DeviceCodeCheckingClient())
+    record = service.start(user=user, github_base_url="https://github.com")
+
+    response = service.check(
+        user=user,
+        auth_id=record.auth_id,
+        device_code="wrong-device-code",
+    )
+
+    assert response == {"status": "not_found", "message": "auth_id not found"}
+    assert calls == 0
+
+
 def test_service_reserves_poll_slot_before_calling_real_client() -> None:
     store = InMemoryStore()
     user = _user(store)

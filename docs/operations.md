@@ -327,9 +327,10 @@ The default API path uses real GitHub Copilot auth and model calls:
 
 Device-code polling must follow the `interval` returned by GitHub. If GitHub returns
 `slow_down` or `429 Too Many Requests`, the API keeps the auth status pending and returns
-`next_poll_after_seconds` so the browser can back off instead of surfacing a server error. The
-web settings page disables manual checks while that wait is active and relies on the scheduled
-poll.
+`next_poll_after_seconds` so the browser can back off instead of surfacing a server error.
+Requests that arrive before the stored wait window expires return the current pending status from
+the API without polling GitHub again. The web settings page keeps scheduling the next poll after
+every pending response, and manual checks are harmless because the backend enforces the wait.
 
 If Copilot auth or model calls fail with
 `[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate`, the API process is

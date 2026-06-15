@@ -1,21 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authApi, copilotAuthApi, CopilotStartResponse, UserOut } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
 import { Shell } from "@/components/Shell";
+
+function pollMessage(message?: string | null) {
+  if (message === "authorization_pending" || message === "slow_down" || message === "rate_limited") {
+    return "Waiting for GitHub authorization";
+  }
+  return message || "Authorization pending";
+}
 
 export default function CopilotSettingsPage() {
   const [user, setUser] = useState<UserOut | null>(null);
   const [deviceAuth, setDeviceAuth] = useState<CopilotStartResponse | null>(null);
   const [pollStatus, setPollStatus] = useState<"idle" | "pending" | "authorized" | "stopped">("idle");
   const [nextPollSeconds, setNextPollSeconds] = useState<number | null>(null);
+  const [pollAttempt, setPollAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [checking, setChecking] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const checkingRef = useRef(false);
 
   async function loadMe() {
     setLoading(true);
@@ -44,6 +53,7 @@ export default function CopilotSettingsPage() {
       setDeviceAuth(response);
       setPollStatus("pending");
       setNextPollSeconds(response.interval);
+      setPollAttempt((value) => value + 1);
       setMessage("Waiting for GitHub authorization");
     } catch (caught) {
       setError(apiErrorMessage(caught));
@@ -61,6 +71,7 @@ export default function CopilotSettingsPage() {
       setDeviceAuth(null);
       setPollStatus("idle");
       setNextPollSeconds(null);
+      setPollAttempt(0);
       setMessage("Copilot disconnected");
       await loadMe();
     } catch (caught) {
@@ -70,32 +81,41 @@ export default function CopilotSettingsPage() {
     }
   }
 
-  async function checkAuth(authId: string) {
+  async function checkAuth(auth: CopilotStartResponse) {
+    if (checkingRef.current) {
+      return;
+    }
+    checkingRef.current = true;
     setChecking(true);
     setError(null);
     try {
-      const response = await copilotAuthApi.check(authId);
+      const response = await copilotAuthApi.check(auth.auth_id, auth.device_code);
       if (response.status === "authorized") {
         setPollStatus("authorized");
         setMessage("Copilot connected");
         setNextPollSeconds(null);
+        setPollAttempt(0);
         await loadMe();
         return;
       }
       if (response.status === "pending") {
         setPollStatus("pending");
-        setMessage(response.message || "Authorization pending");
-        setNextPollSeconds(response.next_poll_after_seconds || deviceAuth?.interval || 5);
+        setMessage(pollMessage(response.message));
+        setNextPollSeconds(response.next_poll_after_seconds ?? auth.interval ?? 5);
+        setPollAttempt((value) => value + 1);
         return;
       }
       setPollStatus("stopped");
       setMessage(response.message || response.status);
       setNextPollSeconds(null);
+      setPollAttempt(0);
     } catch (caught) {
       setPollStatus("stopped");
       setError(apiErrorMessage(caught));
       setNextPollSeconds(null);
+      setPollAttempt(0);
     } finally {
+      checkingRef.current = false;
       setChecking(false);
     }
   }
@@ -106,10 +126,10 @@ export default function CopilotSettingsPage() {
     }
     const delay = Math.max(1, nextPollSeconds || deviceAuth.interval);
     const timer = window.setTimeout(() => {
-      void checkAuth(deviceAuth.auth_id);
+      void checkAuth(deviceAuth);
     }, delay * 1000);
     return () => window.clearTimeout(timer);
-  }, [deviceAuth, nextPollSeconds, pollStatus]);
+  }, [deviceAuth, nextPollSeconds, pollStatus, pollAttempt]);
 
   return (
     <Shell>
@@ -176,11 +196,11 @@ export default function CopilotSettingsPage() {
               {pollStatus === "pending" && (
                 <button
                   className="button secondary"
-                  disabled={checking || Boolean(nextPollSeconds)}
+                  disabled={checking}
                   type="button"
-                  onClick={() => void checkAuth(deviceAuth.auth_id)}
+                  onClick={() => void checkAuth(deviceAuth)}
                 >
-                  {checking ? "Checking" : nextPollSeconds ? "Waiting" : "Check now"}
+                  {checking ? "Checking" : "Check now"}
                 </button>
               )}
             </>
