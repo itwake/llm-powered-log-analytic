@@ -101,7 +101,7 @@ export default function CopilotSettingsPage() {
       if (response.status === "pending") {
         setPollStatus("pending");
         setMessage(pollMessage(response.message));
-        setNextPollSeconds(response.next_poll_after_seconds ?? auth.interval ?? 5);
+        setNextPollSeconds(response.next_poll_after_seconds ?? auth.interval ?? 10);
         setPollAttempt((value) => value + 1);
         return;
       }
