@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { authApi, UserOut } from "@/lib/api";
 
@@ -12,6 +13,7 @@ interface ShellProps {
 }
 
 export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
+  const router = useRouter();
   const [user, setUser] = useState<UserOut | null>(null);
   const [authState, setAuthState] = useState<"loading" | "signed-in" | "signed-out">("loading");
 
@@ -29,12 +31,14 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
         if (!cancelled) {
           setUser(null);
           setAuthState("signed-out");
+          const nextPath = `${window.location.pathname}${window.location.search}`;
+          router.replace(`/login?next=${encodeURIComponent(nextPath || "/cases")}`);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
 
   const nav = useMemo(() => {
     const links: [string, string][] = [

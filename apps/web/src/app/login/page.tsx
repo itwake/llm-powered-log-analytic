@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { authApi } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
+import { safeNextPath } from "@/lib/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,7 +20,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await authApi.login({email_or_username: emailOrUsername, password});
-      router.push("/cases");
+      router.replace(safeNextPath(window.location.search));
     } catch (caught) {
       setError(apiErrorMessage(caught));
     } finally {
