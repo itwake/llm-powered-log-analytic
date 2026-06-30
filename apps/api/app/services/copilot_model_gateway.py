@@ -66,9 +66,9 @@ class CopilotModelGateway:
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.store = store
-        self.settings = app_settings
+        self.settings = store.settings if store is not None and app_settings is settings else app_settings
         self.http_client = http_client or httpx.AsyncClient(
-            **app_settings.copilot_httpx_client_kwargs()
+            **self.settings.copilot_httpx_client_kwargs()
         )
 
     async def responses(

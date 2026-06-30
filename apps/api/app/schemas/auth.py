@@ -10,7 +10,6 @@ class UserOut(BaseModel):
     username: str
     role: str
     is_active: bool = True
-    has_copilot_credential: bool = False
 
 
 class RegisterRequest(BaseModel):
@@ -27,21 +26,3 @@ class LoginRequest(BaseModel):
 
 class AuthUserResponse(BaseModel):
     user: UserOut
-
-
-class CopilotStartRequest(BaseModel):
-    github_base_url: str = Field(
-        default="https://github.com",
-        description=(
-            "Accepted for backwards compatibility; Copilot OAuth always uses "
-            "https://github.com regardless of this value."
-        ),
-    )
-
-
-class CopilotCheckRequest(BaseModel):
-    auth_id: str
-    device_code: str | None = Field(
-        default=None,
-        description="Optional device code echoed from /start; accepted for EFP portal compatibility.",
-    )

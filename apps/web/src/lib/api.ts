@@ -281,7 +281,6 @@ export interface UserOut {
   username: string;
   role: string;
   is_active: boolean;
-  has_copilot_credential: boolean;
 }
 
 export interface AuthUserResponse {
@@ -639,30 +638,6 @@ export interface ChatStreamHandlers {
   error?: (message: string) => void;
 }
 
-export interface CopilotStartResponse {
-  auth_id: string;
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  verification_uri_complete: string;
-  expires_in: number;
-  interval: number;
-}
-
-export interface CopilotCheckResponse {
-  status: "pending" | "authorized" | "expired" | "declined" | "error" | "not_found" | string;
-  message?: string;
-  next_poll_after_seconds?: number;
-  token_type?: string;
-  runtime_type?: string;
-  expires_at?: string | null;
-}
-
-export interface CopilotDisconnectResponse {
-  status: string;
-  revoked_count: number;
-}
-
 export interface AdminUser {
   id: string;
   organization_id: string;
@@ -671,7 +646,6 @@ export interface AdminUser {
   full_name: string | null;
   role: "admin" | "engineer" | string;
   is_active: boolean;
-  has_copilot_credential: boolean;
   created_at: string;
 }
 
@@ -698,6 +672,19 @@ export interface AdminAuditLogListResponse {
   total: number;
   offset: number;
   limit: number;
+}
+
+export interface CapabilitiesResponse {
+  models: {
+    provider: string;
+    default_model: string;
+    supported_models: string[];
+  };
+  views: string[];
+  upload: {
+    max_file_size_bytes: number;
+    supported_extensions: string[];
+  };
 }
 
 export interface AdminSettingsResponse {
@@ -1008,21 +995,8 @@ export const chatApi = {
   },
 };
 
-export const copilotAuthApi = {
-  start: (github_base_url = "https://github.com") =>
-    request<CopilotStartResponse>("/api/copilot/auth/start", {
-      method: "POST",
-      body: {github_base_url},
-    }),
-  check: (auth_id: string, device_code?: string) =>
-    request<CopilotCheckResponse>("/api/copilot/auth/check", {
-      method: "POST",
-      body: {auth_id, ...(device_code ? {device_code} : {})},
-    }),
-  disconnect: () =>
-    request<CopilotDisconnectResponse>("/api/copilot/auth/credential", {
-      method: "DELETE",
-    }),
+export const capabilitiesApi = {
+  get: () => request<CapabilitiesResponse>("/api/capabilities"),
 };
 
 export const adminApi = {

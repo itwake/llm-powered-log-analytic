@@ -35,7 +35,7 @@ make PYTHON=.venv/bin/python evaluate
 ```
 
 The evaluator runs `AnalyzeCasePipeline` with `MockCopilotAnnotationGateway`, so it does not
-require Docker, Temporal, GitHub Copilot credentials, or external network access. It emits
+require Docker, Temporal, AI Platform credentials, or external network access. It emits
 thresholded metrics for review-load reduction, golden-signal macro F1, fault-category micro and
 macro F1, entity precision/recall/F1, root-cause hit@k, useful causal-edge recall, and summary
 rubric quality.
@@ -147,7 +147,7 @@ servers are reused outside CI for debugging convenience; make sure they use the 
 settings when relying on reuse. The suite registers unique users, creates a case, starts the
 deterministic sample/local analysis fixture, and exercises Data Summary, Temporal View, Tabular
 Logs, Causal Graph, and Causal Summary without external databases, MinIO, ClickHouse,
-OpenSearch, Temporal, or real Copilot credentials. The memory store is process-local and clears
+OpenSearch, Temporal, or real AI Platform credentials. The memory store is process-local and clears
 when the API server exits.
 
 ## Full-Stack Docker Smoke
@@ -167,7 +167,7 @@ SQLAlchemy/PostgreSQL store, use `LOGAN_OBJECT_STORE_BACKEND=minio`, start analy
 `LOGAN_ANALYSIS_ORCHESTRATOR=temporal`, publish external analytics with
 `LOGAN_ANALYTICS_SINKS_ENABLED=true`, read temporal/log reports with
 `LOGAN_EXTERNAL_ANALYTICS_QUERIES_ENABLED=true`, and set `LOGAN_LLM_PROVIDER=mock` so the smoke
-never needs Copilot credentials.
+never needs AI Platform credentials.
 
 The runner in `scripts/full_stack_smoke.py` validates the following:
 
@@ -207,7 +207,7 @@ deployment environment requires another Ubuntu mirror.
 
 OpenSearch is capped at `-Xms512m -Xmx512m` in compose. On small VMs, leave several GiB free for
 Docker or lower other local workloads before running the smoke. The compose credentials are local
-development placeholders only. Do not put real Copilot, GitHub, S3, database, or customer
+development placeholders only. Do not put real AI Platform, S3, database, or customer
 credentials into `.env`, compose files, or committed docs.
 
 PostgreSQL startup runs idempotent SQL migrations after SQLAlchemy creates the current metadata
@@ -239,9 +239,8 @@ activity on the second attempt, then invokes the activity again to confirm idemp
 does not duplicate job events or fan-out rows. It is skipped in normal pytest runs unless
 `LOGAN_RUN_TEMPORAL_INTEGRATION=true` is set.
 
-`make copilot-staging-smoke` runs the real Copilot `/responses` annotation smoke. It is skipped
-unless `LOGAN_RUN_COPILOT_STAGING_SMOKE=true` and either `LOGAN_GITHUB_COPILOT_TOKEN` or
-`LOGAN_GITHUB_SOURCE_TOKEN` is present. Full-stack smoke always uses the mock provider instead.
+Real AI Platform staging checks should run outside the default smoke path with environment-managed
+AI Platform credentials. Full-stack smoke always uses the mock provider instead.
 
 Run the API locally:
 
@@ -321,16 +320,9 @@ metadata. They do not include raw log text, `raw_text_redacted`, model prompts, 
 credentials, tokens, cookies, database URLs, S3 secrets, or full file paths. In `warn` mode,
 storage errors are audited with a sanitized `artifact_error` and analysis continues.
 
-The default API path uses real GitHub Copilot auth and model calls:
-
-- `POST /api/copilot/auth/start` starts GitHub device-code auth.
-- `POST /api/copilot/auth/check` stores only an encrypted `github_source_oauth` credential when authorized.
-- `DELETE /api/copilot/auth/credential` disconnects the current user by revoking stored source and plugin credentials.
-- analysis runs use `CopilotModelGateway` and require a stored credential or one of `LOGAN_GITHUB_COPILOT_TOKEN` / `LOGAN_GITHUB_SOURCE_TOKEN`.
-- case workspace chat uses `POST /api/chat/stream` to stream Copilot answers over SSE when a completed analysis result is available.
-
-To route model calls through AI Platform instead, set `LOGAN_LLM_PROVIDER=ai_platform` and provide
-the AI Platform chat endpoint plus either a direct trust token or iB2B exchange credentials:
+The default API path uses AI Platform model calls. Set `LOGAN_LLM_PROVIDER=ai_platform` and
+provide the AI Platform chat endpoint plus either a direct trust token or iB2B exchange
+credentials:
 
 ```bash
 LOGAN_LLM_PROVIDER=ai_platform
@@ -344,54 +336,50 @@ For iB2B exchange, omit `LOGAN_AI_PLATFORM_TOKEN` and set
 `LOGAN_AI_PLATFORM_IB2B_HOST`, and `LOGAN_AI_PLATFORM_IB2B_URI`. The exchanged JWT is cached in
 memory for `LOGAN_AI_PLATFORM_TOKEN_TTL_SECONDS` seconds, defaulting to 30 seconds.
 
-Device-code polling must follow the `interval` returned by GitHub. If GitHub returns
-`slow_down` or `429 Too Many Requests`, the API keeps the auth status pending and returns
-`next_poll_after_seconds` so the browser can back off instead of surfacing a server error.
-Requests that arrive before the stored wait window expires return the current pending status from
-the API without polling GitHub again. The web settings page keeps scheduling the next poll after
-every pending response, and manual checks are harmless because the backend enforces the wait.
+Case workspace chat uses `POST /api/chat/stream` to stream normalized AI Platform answers over
+SSE when a completed analysis result is available.
 
-If Copilot auth or model calls fail with
+If AI Platform model calls fail with
 `[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate`, the API process is
 usually behind an enterprise TLS inspection proxy or missing the corporate root CA. Export the
-corporate CA chain as a PEM file and point the Copilot HTTP clients at it:
+corporate CA chain as a PEM file and point the AI Platform HTTP client at it:
 
 ```bash
-LOGAN_COPILOT_CA_BUNDLE=/etc/ssl/certs/corp-root-ca.pem uvicorn app.main:app --app-dir apps/api
+LOGAN_AI_PLATFORM_CA_BUNDLE=/etc/ssl/certs/corp-root-ca.pem uvicorn app.main:app --app-dir apps/api
 ```
 
 On Windows PowerShell:
 
 ```powershell
-$env:LOGAN_COPILOT_CA_BUNDLE="C:\certs\corp-root-ca.pem"
+$env:LOGAN_AI_PLATFORM_CA_BUNDLE="C:\certs\corp-root-ca.pem"
 uvicorn app.main:app --app-dir apps/api
 ```
 
-`SSL_CERT_FILE` or `REQUESTS_CA_BUNDLE` are also honored when `LOGAN_COPILOT_CA_BUNDLE` is not
-set. Keep `LOGAN_COPILOT_TLS_VERIFY=true` for normal use. `LOGAN_COPILOT_TLS_VERIFY=false` is
+`SSL_CERT_FILE` or `REQUESTS_CA_BUNDLE` are also honored when `LOGAN_AI_PLATFORM_CA_BUNDLE` is not
+set. Keep `LOGAN_AI_PLATFORM_TLS_VERIFY=true` for normal use. `LOGAN_AI_PLATFORM_TLS_VERIFY=false` is
 available only for short local network diagnosis and is rejected when `LOGAN_ENV=production`.
 
-Copilot auth and `/responses` calls explicitly read `LOGAN_COPILOT_PROXY_URL` first, then
-`HTTPS_PROXY`, `HTTP_PROXY`, and `ALL_PROXY` when `LOGAN_COPILOT_TRUST_ENV=true`. To configure a
-proxy only for Copilot traffic, set:
+AI Platform calls explicitly read `LOGAN_AI_PLATFORM_PROXY_URL` first, then `HTTPS_PROXY`,
+`HTTP_PROXY`, and `ALL_PROXY` when `LOGAN_AI_PLATFORM_TRUST_ENV=true`. To configure a proxy only
+for AI Platform traffic, set:
 
 ```bash
-LOGAN_COPILOT_PROXY_URL=http://proxy.example.com:8080
-LOGAN_COPILOT_TIMEOUT_SECONDS=60
+LOGAN_AI_PLATFORM_PROXY_URL=http://proxy.example.com:8080
+LOGAN_AI_PLATFORM_TIMEOUT_SECONDS=60
 ```
 
 On Windows PowerShell:
 
 ```powershell
-$env:LOGAN_COPILOT_PROXY_URL="http://proxy.example.com:8080"
-$env:LOGAN_COPILOT_TIMEOUT_SECONDS="60"
+$env:LOGAN_AI_PLATFORM_PROXY_URL="http://proxy.example.com:8080"
+$env:LOGAN_AI_PLATFORM_TIMEOUT_SECONDS="60"
 ```
 
 Use `http://user:password@proxy.example.com:8080` only in local shells or secret managers, never
-in committed files. Set `LOGAN_COPILOT_TRUST_ENV=false` when the API should ignore process-level
-proxy environment variables and use only `LOGAN_COPILOT_PROXY_URL`. If Copilot should bypass a
-proxy, clear `LOGAN_COPILOT_PROXY_URL` plus `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` for the API
-process, or set `LOGAN_COPILOT_TRUST_ENV=false`.
+in committed files. Set `LOGAN_AI_PLATFORM_TRUST_ENV=false` when the API should ignore
+process-level proxy environment variables and use only `LOGAN_AI_PLATFORM_PROXY_URL`. If AI
+Platform should bypass a proxy, clear `LOGAN_AI_PLATFORM_PROXY_URL` plus `HTTPS_PROXY` /
+`HTTP_PROXY` / `ALL_PROXY` for the API process, or set `LOGAN_AI_PLATFORM_TRUST_ENV=false`.
 
 On Windows, environment variables changed through System Properties or `setx` are visible only to
 new shells and child processes. Restart the PowerShell window and the FastAPI process, then verify:
@@ -400,16 +388,10 @@ new shells and child processes. Restart the PowerShell window and the FastAPI pr
 python -c "import os; print(os.getenv('HTTPS_PROXY'))"
 ```
 
-When stored source credentials are used, the gateway exchanges them for Copilot plugin tokens,
-persists the plugin token with its `expires_at`, and reuses it until expiration. Set
-`LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS=60` to control the pre-expiration refresh window.
-`LOGAN_GITHUB_SOURCE_TOKEN` remains an environment fallback and is exchanged per call without
-being written to the user credential store.
-
 The chat stream route is authenticated by the same `logan_session` cookie as the rest of the API.
-It sends only compact, redacted analysis context to Copilot: user question, case/run ids, causal
+It sends only compact, redacted analysis context to AI Platform: user question, case/run ids, causal
 summary text, up to five evidence refs, and up to five template-level summary rows. If no context
-exists, it streams a short fallback response without calling Copilot. Credential and gateway
+exists, it streams a short fallback response without calling the model. Credential and gateway
 failures are serialized as sanitized `event: error` SSE frames.
 
 Access control is enforced in the API. Global `admin` users can access every case and the admin
@@ -495,7 +477,7 @@ The Temporal facade imports the SDK only when temporal orchestration is selected
 typed configuration/connectivity error if the SDK or server is unavailable. Workflow history
 contains only deterministic analysis inputs: case/run ids, local file paths or `s3://` object
 URIs, non-secret case context, sanitized analysis config, and numeric activity retry/timeout
-settings. Database URLs, object-store access keys, Copilot/source tokens, and source log content
+settings. Database URLs, object-store access keys, AI Platform credentials, and source log content
 stay out of workflow params. S3-backed inputs are materialized inside
 `run_analysis_pipeline_activity`, so the API process does not download objects for Temporal runs.
 
@@ -643,7 +625,7 @@ Prometheus metrics are enabled by default:
 `GET /metrics` returns Prometheus text exposition from the API process. The HTTP request
 middleware records request count, duration, and in-flight gauges with only `method`, route
 template, and `status_code` labels; the metrics endpoint itself is skipped. The rate limiter
-records rejected requests with only `session`, `ip`, or `unknown` key type. Pipeline, Copilot
+records rejected requests with only `session`, `ip`, or `unknown` key type. Pipeline, model
 gateway, and analytics sink metrics use fixed internal labels such as step name, provider/model,
 stream/status, and sink/status. Metrics do not include tokens, database URLs, S3 secrets, cookies,
 raw log text, prompts, case titles/descriptions, file paths, destination names, idempotency keys,
@@ -686,8 +668,8 @@ needed. The web client sends browser requests with `credentials: "include"` for 
 starts analysis by
 `input_file_ids`, preserves a sample/local fixture run action, lists real runs, loads report
 views from API endpoints, renders Temporal View with Apache ECharts, renders Causal Graph with
-Cytoscape.js, streams case-workspace Copilot answers with fetch-based SSE parsing, submits
-feedback/exports, and drives Copilot device auth start/check through the backend.
+Cytoscape.js, streams case-workspace AI Platform answers with fetch-based SSE parsing, and submits
+feedback/exports.
 
 The case workspace shows upload and analysis progress before reports are ready. Browser uploads
 emit per-file progress with bytes, percentage, multipart part number when available, hashing, and

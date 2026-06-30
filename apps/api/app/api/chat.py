@@ -133,7 +133,7 @@ def execute_task(
     return {
         "task_id": f"task-{payload.task_name}",
         "status": "accepted",
-        "runtime_type": "github_copilot",
+        "runtime_type": "ai_platform",
         "created_by": user.id,
         "arguments": payload.arguments,
     }

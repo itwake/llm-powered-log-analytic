@@ -561,17 +561,6 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     )
     assert login.status_code == 200, login.text
 
-    started_auth = await client.post(
-        "/api/copilot/auth/start", json={"github_base_url": "https://github.com"}
-    )
-    assert started_auth.status_code == 200, started_auth.text
-    auth_id = started_auth.json()["auth_id"]
-    assert (await client.post("/api/copilot/auth/check", json={"auth_id": auth_id})).json()[
-        "status"
-    ] == "pending"
-    authorized = await client.post("/api/copilot/auth/check", json={"auth_id": auth_id})
-    assert authorized.json()["status"] == "authorized"
-
     case = await client.post(
         "/api/cases",
         json={
@@ -663,7 +652,7 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
 
     me = await recreated_client.get("/api/auth/me")
     assert me.status_code == 200, me.text
-    assert me.json()["user"]["has_copilot_credential"] is True
+    assert "has_copilot_credential" not in me.json()["user"]
 
     listed = await recreated_client.get("/api/cases")
     assert listed.status_code == 200, listed.text
@@ -817,7 +806,7 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     model_invocation_metadata = model_invocations[0].metadata
     assert model_invocation_metadata == {
         "analysis_run_id": run_id,
-        "model_provider": "github_copilot",
+        "model_provider": "ai_platform",
         "model_name": "gpt-5.4",
         "model_reasoning_effort": app_settings.copilot_reasoning_effort,
         "prompt_version": "annotation_v1",
@@ -847,7 +836,7 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     assert run_list.status_code == 200, run_list.text
     assert run_list.json()["total"] == 1
     assert run_list.json()["items"][0]["analysis_run_id"] == run_id
-    assert run_list.json()["items"][0]["model_provider"] == "github_copilot"
+    assert run_list.json()["items"][0]["model_provider"] == "ai_platform"
 
     summary = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
     assert summary.status_code == 200, summary.text

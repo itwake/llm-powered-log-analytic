@@ -14,15 +14,7 @@ def capabilities(store: MetadataStore = Depends(get_store)) -> dict[str, object]
         "models": {
             "provider": store.settings.llm_provider,
             "default_model": store.settings.copilot_model,
-            "supported_models": [
-                "gpt-5.4",
-                "gpt-5.4-mini",
-                "gpt-5.5",
-                "gpt-5.3-codex",
-                "gpt-5-mini",
-                "gemini-2.5-pro",
-                "gemini-3.5-flash",
-            ],
+            "supported_models": [store.settings.copilot_model],
         },
         "views": ["data_summary", "temporal", "tabular", "causal_graph", "causal_summary"],
         "upload": {

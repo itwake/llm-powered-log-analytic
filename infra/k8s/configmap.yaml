@@ -5,9 +5,13 @@ metadata:
   namespace: logan
 data:
   LOGAN_ENV: "production"
-  LOGAN_LLM_PROVIDER: "github_copilot"
-  LOGAN_COPILOT_MODEL: "gpt-5.4"
-  LOGAN_COPILOT_REASONING_EFFORT: "high"
+  LOGAN_LLM_PROVIDER: "ai_platform"
+  LOGAN_AI_PLATFORM_MODEL: "gpt-5.4"
+  LOGAN_AI_PLATFORM_REASONING_EFFORT: "high"
+  LOGAN_AI_PLATFORM_CHAT_URI: "/v1/api/v1/chat/completions"
+  LOGAN_AI_PLATFORM_IB2B_URI: "/dsp/rest-sts/DSP_iB2B/iB2B_tokenTranslator_v2?_action=translate"
+  LOGAN_AI_PLATFORM_TRUST_TOKEN_HEADER: "X-XXXX-E2E-Trust-Token"
+  LOGAN_AI_PLATFORM_TRACKING_PREFIX: "EFP"
   LOGAN_ANALYSIS_ORCHESTRATOR: "temporal"
   LOGAN_TEMPORAL_ADDRESS: "temporal:7233"
   LOGAN_TEMPORAL_NAMESPACE: "default"

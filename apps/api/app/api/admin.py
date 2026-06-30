@@ -89,7 +89,6 @@ def _admin_user_response(store: MetadataStore, user: UserRecord) -> AdminUserRes
         full_name=user.full_name,
         role=user.role,
         is_active=user.is_active,
-        has_copilot_credential=store.has_credential(user.id),
         created_at=user.created_at,
     )
 

@@ -67,9 +67,12 @@ class Settings:
     credential_encryption_keyring: str = os.getenv(
         "LOGAN_CREDENTIAL_ENCRYPTION_KEYRING", "{}"
     )
-    llm_provider: str = os.getenv("LOGAN_LLM_PROVIDER", "github_copilot")
-    copilot_model: str = os.getenv("LOGAN_COPILOT_MODEL", "gpt-5.4")
-    copilot_reasoning_effort: str = os.getenv("LOGAN_COPILOT_REASONING_EFFORT", "high")
+    llm_provider: str = os.getenv("LOGAN_LLM_PROVIDER", "ai_platform")
+    copilot_model: str = _env_first("LOGAN_AI_PLATFORM_MODEL", "LOGAN_COPILOT_MODEL") or "gpt-5.4"
+    copilot_reasoning_effort: str = (
+        _env_first("LOGAN_AI_PLATFORM_REASONING_EFFORT", "LOGAN_COPILOT_REASONING_EFFORT")
+        or "high"
+    )
     copilot_base_url: str | None = os.getenv("LOGAN_COPILOT_BASE_URL") or None
     copilot_oauth_client_id: str = os.getenv(
         "LOGAN_COPILOT_OAUTH_CLIENT_ID", "Iv1.b507a08c87ecfe98"

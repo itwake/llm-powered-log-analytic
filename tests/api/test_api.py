@@ -14,14 +14,9 @@ from httpx import ASGITransport, AsyncClient
 from logan_workers.activities.inference import MockCopilotAnnotationGateway
 
 from app.config import Settings
-from app.core.security import decrypt_token
 from app.main import create_app
-from app.services.copilot_model_gateway import (
-    CopilotCredentialError,
-    CopilotModelGateway,
-    CopilotTransportError,
-)
-from app.services.copilot_auth_service import DeviceCodePollResult, MockGitHubDeviceClient
+from app.services.copilot_model_gateway import CopilotTransportError
+from app.services.copilot_auth_service import MockGitHubDeviceClient
 from app.store import DEFAULT_ORGANIZATION_ID, InMemoryStore, merge_analysis_result_progress
 
 
@@ -491,38 +486,14 @@ async def test_temporal_start_path_passes_safe_workflow_params(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_auth_and_copilot_auth_api() -> None:
+async def test_auth_api_and_ai_platform_only_auth_surface() -> None:
     client, _, _ = await _authenticated_client()
     me = await client.get("/api/auth/me")
     assert me.status_code == 200
-    assert me.json()["user"]["has_copilot_credential"] is False
-
-    started = await client.post("/api/copilot/auth/start", json={"github_base_url": "https://github.com"})
-    assert started.status_code == 200
-    started_payload = started.json()
-    auth_id = started_payload["auth_id"]
-    device_code = started_payload["device_code"]
-    pending = await client.post(
-        "/api/copilot/auth/check",
-        json={"auth_id": auth_id, "device_code": device_code},
-    )
-    assert pending.json()["status"] == "pending"
-    authorized = await client.post(
-        "/api/copilot/auth/check",
-        json={"auth_id": auth_id, "device_code": device_code},
-    )
-    assert authorized.json()["status"] == "authorized"
-    assert "token" not in authorized.text.lower().replace("token_type", "")
-
-    me_after = await client.get("/api/auth/me")
-    assert me_after.json()["user"]["has_copilot_credential"] is True
-    disconnect = await client.delete("/api/copilot/auth/credential")
-    assert disconnect.status_code == 200, disconnect.text
-    assert disconnect.json() == {"status": "disconnected", "revoked_count": 1}
-    assert "token" not in disconnect.text
-    assert "encrypted_token" not in disconnect.text
-    me_disconnected = await client.get("/api/auth/me")
-    assert me_disconnected.json()["user"]["has_copilot_credential"] is False
+    assert "has_copilot_credential" not in me.json()["user"]
+    assert (await client.post("/api/copilot/auth/start", json={})).status_code == 404
+    assert (await client.post("/api/copilot/auth/check", json={"auth_id": "missing"})).status_code == 404
+    assert (await client.delete("/api/copilot/auth/credential")).status_code == 404
     logout = await client.post("/api/auth/logout")
     assert logout.status_code == 200
     assert (await client.get("/api/auth/me")).status_code == 401
@@ -530,14 +501,11 @@ async def test_auth_and_copilot_auth_api() -> None:
 
 
 @pytest.mark.asyncio
-async def test_copilot_auth_api_responses_never_include_token_material() -> None:
+async def test_removed_copilot_auth_routes_do_not_create_credentials() -> None:
     source_token = "gho_api_response_secret_token"
     store = InMemoryStore()
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(
-            [DeviceCodePollResult(status="authorized", message="authorized", access_token=source_token)]
-        ),
         model_gateway=MockCopilotAnnotationGateway(),
     )
     client = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
@@ -556,37 +524,21 @@ async def test_copilot_auth_api_responses_never_include_token_material() -> None
     )
 
     started = await client.post("/api/copilot/auth/start", json={"github_base_url": "https://github.com"})
-    started_payload = started.json()
-    checked = await client.post(
-        "/api/copilot/auth/check",
-        json={
-            "auth_id": started_payload["auth_id"],
-            "device_code": started_payload["device_code"],
-        },
-    )
+    checked = await client.post("/api/copilot/auth/check", json={"auth_id": "missing"})
     me = await client.get("/api/auth/me")
     user_id = store.users_by_username["no-token"]
     plugin_token = "copilot_api_response_secret_token"
-    store.save_credential(
-        user_id=user_id,
-        credential_type="copilot_plugin_token",
-        token=plugin_token,
-        github_base_url="https://github.com",
-    )
     disconnect = await client.delete("/api/copilot/auth/credential")
 
-    assert checked.json()["status"] == "authorized"
-    assert disconnect.json() == {"status": "disconnected", "revoked_count": 2}
+    assert started.status_code == 404
+    assert checked.status_code == 404
+    assert disconnect.status_code == 404
+    assert store.has_credential(user_id) is False
     for response in (started, checked, me, disconnect):
         assert source_token not in response.text
         assert plugin_token not in response.text
         assert "encrypted_token" not in response.text
         assert "token_hint" not in response.text
-    audit = store.list_audit_logs(action="copilot.disconnect")[0]
-    serialized_audit_metadata = json.dumps(audit.metadata, sort_keys=True)
-    assert source_token not in serialized_audit_metadata
-    assert plugin_token not in serialized_audit_metadata
-    assert "token_hint" not in serialized_audit_metadata
     await client.aclose()
 
 
@@ -974,7 +926,7 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
         user_id=engineer_id,
         metadata={
             "analysis_run_id": "run-safe",
-            "model_provider": "github_copilot",
+            "model_provider": "ai_platform",
             "model_name": "gpt-5.4",
             "model_reasoning_effort": "high",
             "prompt_version": "annotation_v1",
@@ -995,7 +947,7 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
     assert model_audit_logs.status_code == 200, model_audit_logs.text
     assert model_audit_logs.json()["items"][0]["metadata"] == {
         "analysis_run_id": "run-safe",
-        "model_provider": "github_copilot",
+        "model_provider": "ai_platform",
         "model_name": "gpt-5.4",
         "model_reasoning_effort": "high",
         "prompt_version": "annotation_v1",
@@ -1356,14 +1308,10 @@ async def test_api_rate_limit_only_when_enabled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_disconnect_revokes_credentials_for_gateway_use() -> None:
-    source_token = "gho_disconnect_source_token"
+async def test_removed_disconnect_route_does_not_revoke_ai_platform_state() -> None:
     store = InMemoryStore(Settings(github_copilot_token=None, github_source_token=None))
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(
-            [DeviceCodePollResult(status="authorized", message="authorized", access_token=source_token)]
-        ),
         model_gateway=MockCopilotAnnotationGateway(),
     )
     client = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
@@ -1381,34 +1329,9 @@ async def test_disconnect_revokes_credentials_for_gateway_use() -> None:
         json={"email_or_username": "disconnect", "password": "password123"},
     )
     user_id = store.users_by_username["disconnect"]
-    started = await client.post("/api/copilot/auth/start", json={"github_base_url": "https://github.com"})
-    authorized = await client.post(
-        "/api/copilot/auth/check", json={"auth_id": started.json()["auth_id"]}
-    )
-    assert authorized.json()["status"] == "authorized"
-    credential = store.get_credential(user_id=user_id, credential_type="github_source_oauth")
-    assert credential is not None
-    assert (
-        decrypt_token(credential.encrypted_token, store.settings.credential_encryption_key)
-        == source_token
-    )
-
     disconnect = await client.delete("/api/copilot/auth/credential")
-    assert disconnect.json() == {"status": "disconnected", "revoked_count": 1}
+    assert disconnect.status_code == 404
     assert store.get_credential(user_id=user_id, credential_type="github_source_oauth") is None
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        raise AssertionError(f"revoked credential should not make {request.method} request")
-
-    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    gateway = CopilotModelGateway(
-        store=store,
-        app_settings=store.settings,
-        http_client=http_client,
-    )
-    with pytest.raises(CopilotCredentialError):
-        await gateway.responses(user_id=user_id, model="gpt-5.4", instructions=None, input=[])
-    await http_client.aclose()
     await client.aclose()
 
 
@@ -1457,7 +1380,7 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     model_invocation_metadata = model_invocations[0].metadata
     assert model_invocation_metadata == {
         "analysis_run_id": run_id,
-        "model_provider": "github_copilot",
+        "model_provider": "ai_platform",
         "model_name": status.json()["model_name"],
         "model_reasoning_effort": store.settings.copilot_reasoning_effort,
         "prompt_version": "annotation_v1",
@@ -1549,7 +1472,7 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     assert listed_run["started_at"]
     assert listed_run["completed_at"]
     assert listed_run["error_message"] is None
-    assert listed_run["model_provider"] == "github_copilot"
+    assert listed_run["model_provider"] == "ai_platform"
     assert listed_run["model_name"]
 
     summary = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
@@ -1654,7 +1577,7 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     )
     assert "candidate" in chat.json()["message"].lower()
     tasks = await client.post("/api/tasks/execute", json={"task_name": "noop", "arguments": {}})
-    assert tasks.json()["runtime_type"] == "github_copilot"
+    assert tasks.json()["runtime_type"] == "ai_platform"
     await client.aclose()
 
 

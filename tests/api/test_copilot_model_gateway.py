@@ -19,7 +19,7 @@ from app.store import InMemoryStore
 
 
 def _store_and_user() -> tuple[InMemoryStore, str]:
-    store = InMemoryStore()
+    store = InMemoryStore(Settings(llm_provider="github_copilot"))
     user = store.register_user(
         email="gateway.engineer@example.com",
         username="gateway-engineer",
@@ -302,7 +302,7 @@ async def test_environment_copilot_token_fallback() -> None:
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     gateway = CopilotModelGateway(
-        app_settings=Settings(github_copilot_token=plugin_token),
+        app_settings=Settings(llm_provider="github_copilot", github_copilot_token=plugin_token),
         http_client=http_client,
     )
 
@@ -447,7 +447,11 @@ async def test_revoked_stored_credentials_are_not_used_without_env_fallback() ->
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     gateway = CopilotModelGateway(
         store=store,
-        app_settings=Settings(github_copilot_token=None, github_source_token=None),
+        app_settings=Settings(
+            llm_provider="github_copilot",
+            github_copilot_token=None,
+            github_source_token=None,
+        ),
         http_client=http_client,
     )
 
