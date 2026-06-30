@@ -86,6 +86,48 @@ class Settings:
     copilot_token_cache_skew_seconds: int = int(
         os.getenv("LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS", "60")
     )
+    ai_platform_chat_host: str | None = os.getenv("LOGAN_AI_PLATFORM_CHAT_HOST") or None
+    ai_platform_chat_uri: str = os.getenv(
+        "LOGAN_AI_PLATFORM_CHAT_URI", "/v1/api/v1/chat/completions"
+    )
+    ai_platform_ib2b_host: str | None = os.getenv("LOGAN_AI_PLATFORM_IB2B_HOST") or None
+    ai_platform_ib2b_uri: str = os.getenv(
+        "LOGAN_AI_PLATFORM_IB2B_URI",
+        "/dsp/rest-sts/DSP_iB2B/iB2B_tokenTranslator_v2?_action=translate",
+    )
+    ai_platform_username: str | None = os.getenv("LOGAN_AI_PLATFORM_USERNAME") or None
+    ai_platform_password: str | None = os.getenv("LOGAN_AI_PLATFORM_PASSWORD") or None
+    ai_platform_usercase: str | None = os.getenv("LOGAN_AI_PLATFORM_USERCASE") or None
+    ai_platform_token: str | None = os.getenv("LOGAN_AI_PLATFORM_TOKEN") or None
+    ai_platform_token_expires_at: str | None = (
+        os.getenv("LOGAN_AI_PLATFORM_TOKEN_EXPIRES_AT") or None
+    )
+    ai_platform_trust_token_header: str = os.getenv(
+        "LOGAN_AI_PLATFORM_TRUST_TOKEN_HEADER", "X-XXXX-E2E-Trust-Token"
+    )
+    ai_platform_tracking_prefix: str = os.getenv("LOGAN_AI_PLATFORM_TRACKING_PREFIX", "EFP")
+    ai_platform_max_completion_tokens: int = int(
+        os.getenv("LOGAN_AI_PLATFORM_MAX_COMPLETION_TOKENS", "4096")
+    )
+    ai_platform_token_ttl_seconds: int = int(os.getenv("LOGAN_AI_PLATFORM_TOKEN_TTL_SECONDS", "30"))
+    ai_platform_timeout_seconds: float = float(
+        os.getenv(
+            "LOGAN_AI_PLATFORM_TIMEOUT_SECONDS",
+            os.getenv("LOGAN_COPILOT_TIMEOUT_SECONDS", "30"),
+        )
+    )
+    ai_platform_ca_bundle: str | None = _env_first(
+        "LOGAN_AI_PLATFORM_CA_BUNDLE", "LOGAN_COPILOT_CA_BUNDLE", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"
+    )
+    ai_platform_tls_verify: bool = _env_bool(
+        "LOGAN_AI_PLATFORM_TLS_VERIFY", _env_bool("LOGAN_COPILOT_TLS_VERIFY", True)
+    )
+    ai_platform_proxy_url: str | None = _env_first(
+        "LOGAN_AI_PLATFORM_PROXY_URL", "LOGAN_COPILOT_PROXY_URL"
+    )
+    ai_platform_trust_env: bool = _env_bool(
+        "LOGAN_AI_PLATFORM_TRUST_ENV", _env_bool("LOGAN_COPILOT_TRUST_ENV", True)
+    )
     database_url: str | None = _env_first("LOGAN_DATABASE_URL") or DEFAULT_SQLITE_DATABASE_URL
     store_backend: str = os.getenv("LOGAN_STORE_BACKEND", "auto")
     analysis_orchestrator: str = os.getenv("LOGAN_ANALYSIS_ORCHESTRATOR", "local")
@@ -181,6 +223,8 @@ class Settings:
             )
         if not self.copilot_tls_verify:
             errors.append("LOGAN_COPILOT_TLS_VERIFY must not be false in production")
+        if not self.ai_platform_tls_verify:
+            errors.append("LOGAN_AI_PLATFORM_TLS_VERIFY must not be false in production")
         if errors:
             raise ValueError("Invalid production configuration: " + "; ".join(errors))
 
@@ -206,6 +250,29 @@ class Settings:
             "trust_env": self.copilot_trust_env,
         }
         proxy_url = self.copilot_effective_proxy_url()
+        if proxy_url:
+            kwargs["proxy"] = proxy_url
+        return kwargs
+
+    def ai_platform_httpx_verify(self) -> bool | str:
+        if not self.ai_platform_tls_verify:
+            return False
+        return self.ai_platform_ca_bundle or True
+
+    def ai_platform_effective_proxy_url(self) -> str | None:
+        if self.ai_platform_proxy_url:
+            return self.ai_platform_proxy_url
+        if not self.ai_platform_trust_env:
+            return None
+        return _env_first(*STANDARD_PROXY_ENV_NAMES)
+
+    def ai_platform_httpx_client_kwargs(self) -> dict[str, object]:
+        kwargs: dict[str, object] = {
+            "timeout": self.ai_platform_timeout_seconds,
+            "verify": self.ai_platform_httpx_verify(),
+            "trust_env": self.ai_platform_trust_env,
+        }
+        proxy_url = self.ai_platform_effective_proxy_url()
         if proxy_url:
             kwargs["proxy"] = proxy_url
         return kwargs

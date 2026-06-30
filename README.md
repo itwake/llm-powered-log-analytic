@@ -245,7 +245,8 @@ Tests assert that model inputs are redacted, representative samples are used, an
 ## Security Notes
 
 - GitHub Copilot is the default LLM provider (`github_copilot`) and `gpt-5.4` is the default model.
-- The default backend LLM runtime is GitHub Copilot Plugin `/responses`; OpenAI and Anthropic fallbacks are not configured.
+- The backend can also use the enterprise AI Platform chat gateway by setting
+  `LOGAN_LLM_PROVIDER=ai_platform`.
 - `POST /api/chat/stream` streams authenticated case-workspace answers over SSE using compact redacted analysis context when a case/run is available.
 - Tests inject deterministic mocked Copilot auth and model gateways through `create_app(...)` or pipeline gateway arguments.
 - GitHub source OAuth and Copilot plugin tokens are encrypted at rest, decrypted only in backend services, and never returned to frontend responses.
@@ -259,7 +260,7 @@ See `.env.example` for the full list. Key defaults:
 
 - `LOGAN_LLM_PROVIDER=github_copilot`
 - `LOGAN_LLM_PROVIDER=mock` is supported for deterministic local/CI E2E analysis only; production
-  paths should keep `github_copilot`.
+  paths should keep `github_copilot` or use `ai_platform`.
 - `LOGAN_DATABASE_URL=sqlite:///.logan/logan.db` by default for local durable metadata; set it to another `sqlite:///...` path or `postgresql+psycopg://user:pass@host:5432/db` for PostgreSQL.
 - `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy with SQLite/PostgreSQL. Use `memory` only for explicit ephemeral tests, or `sqlalchemy` to require a configured database URL.
 - `LOGAN_ANALYSIS_ORCHESTRATOR=local`; set to `temporal` to have the API create the SQLAlchemy run and start `AnalyzeCaseWorkflow`.
@@ -280,6 +281,16 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_COPILOT_BASE_URL=` optional override for the Copilot API base URL.
 - `LOGAN_COPILOT_TIMEOUT_SECONDS=30`
 - `LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS=60`
+- `LOGAN_LLM_PROVIDER=ai_platform` switches model calls to AI Platform chat completions.
+- `LOGAN_AI_PLATFORM_CHAT_HOST=` and `LOGAN_AI_PLATFORM_CHAT_URI=/v1/api/v1/chat/completions`
+  configure the chat endpoint.
+- `LOGAN_AI_PLATFORM_TOKEN=` can provide a direct trust token. Alternatively set
+  `LOGAN_AI_PLATFORM_USERNAME`, `LOGAN_AI_PLATFORM_PASSWORD`, `LOGAN_AI_PLATFORM_USERCASE`,
+  `LOGAN_AI_PLATFORM_IB2B_HOST`, and `LOGAN_AI_PLATFORM_IB2B_URI` to exchange credentials for a
+  short-lived JWT.
+- `LOGAN_AI_PLATFORM_TRUST_TOKEN_HEADER=X-XXXX-E2E-Trust-Token`,
+  `LOGAN_AI_PLATFORM_TRACKING_PREFIX=EFP`, and
+  `LOGAN_AI_PLATFORM_MAX_COMPLETION_TOKENS=4096` mirror the AI Platform client defaults.
 - `LOGAN_CREDENTIAL_ENCRYPTION_KEY=change-me-local-key`
 - `LOGAN_RAW_LOG_RETENTION_DAYS=30`
 - `LOGAN_REPORT_RETENTION_DAYS=365`

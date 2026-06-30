@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.dependencies import get_store
+from app.store import MetadataStore
 
 router = APIRouter(prefix="/api", tags=["capabilities"])
 
 
 @router.get("/capabilities")
-def capabilities() -> dict[str, object]:
+def capabilities(store: MetadataStore = Depends(get_store)) -> dict[str, object]:
     return {
         "models": {
-            "provider": "github_copilot",
-            "default_model": "gpt-5.4",
+            "provider": store.settings.llm_provider,
+            "default_model": store.settings.copilot_model,
             "supported_models": [
                 "gpt-5.4",
                 "gpt-5.4-mini",

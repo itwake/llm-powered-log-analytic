@@ -68,7 +68,9 @@ Tests and local no-network checks inject a deterministic fake client through `cr
 - `POST /api/tasks/execute`
 
 The model provider is `github_copilot` by default and the default model is `gpt-5.4`.
-The backend model gateway resolves credentials in this order:
+Set `LOGAN_LLM_PROVIDER=ai_platform` to route model calls through AI Platform chat completions.
+
+The GitHub Copilot gateway resolves credentials in this order:
 
 - stored, non-expired `copilot_plugin_token`
 - stored `github_source_oauth`, exchanged via `https://api.github.com/copilot_internal/v2/token`
@@ -78,17 +80,24 @@ The backend model gateway resolves credentials in this order:
 Stored source OAuth exchanges cache the returned Copilot plugin token with its parsed `expires_at`.
 Environment source tokens are exchanged in memory and are not persisted to user credentials.
 
-The gateway posts requests to `<copilot api base>/responses` with Copilot preview headers.
+The Copilot gateway posts requests to `<copilot api base>/responses` with Copilot preview headers.
 Non-streaming calls return parsed backend objects with the original provider JSON, `output_text`,
 and `output_json` when `response_format={"type": "json_object"}` and the output text is valid
 JSON. Streaming calls use `Accept: text/event-stream`, parse provider SSE `data:` frames, normalize
 common text-delta shapes into `{"type":"message.delta","delta":"..."}`, and emit
 `{"type":"message.completed", ...}` for provider completion or `[DONE]`.
 
+The AI Platform gateway exchanges `LOGAN_AI_PLATFORM_USERNAME`, `LOGAN_AI_PLATFORM_PASSWORD`, and
+`LOGAN_AI_PLATFORM_USERCASE` through the configured iB2B endpoint when `LOGAN_AI_PLATFORM_TOKEN`
+is not set. It posts chat-completions payloads to `LOGAN_AI_PLATFORM_CHAT_HOST` plus
+`LOGAN_AI_PLATFORM_CHAT_URI` with the configured trust-token header, correlation id, and user
+session id. Streaming API callers receive a normalized single-delta stream from the completed chat
+response.
+
 `POST /api/chat/stream` accepts the same `ChatRequest` shape as `POST /api/chat` and requires the
 session cookie. Because it is a POST stream, web clients use `fetch` plus `ReadableStream` rather
 than `EventSource`. When `case_id` and `analysis_run_id` resolve to an analysis result, the API
-sends Copilot a compact redacted context containing the user message, case/run ids, causal summary
+sends the model a compact redacted context containing the user message, case/run ids, causal summary
 text, up to five causal evidence refs, and up to five template-level summary rows. It does not send
 raw log text, stored credentials, source tokens, or model prompts. Without context, the endpoint
 streams the same clear fallback message as `POST /api/chat` and does not call Copilot.

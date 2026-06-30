@@ -7,6 +7,7 @@ from app.api import admin, auth, capabilities, cases, chat, copilot_auth, scim
 from app.config import validate_runtime_settings
 from app.observability import configure_logging, configure_otel, install_metrics
 from app.rate_limit import RateLimitMiddleware
+from app.services.aiplatform_model_gateway import AIPlatformModelGateway
 from app.services.copilot_auth_service import DeviceCodeClient, GitHubDeviceCodeClient
 from app.services.copilot_model_gateway import CopilotModelGateway
 from app.store import MetadataStore, create_store
@@ -18,6 +19,8 @@ def _default_model_gateway(store: MetadataStore) -> object:
         from logan_workers.activities.inference import MockCopilotAnnotationGateway
 
         return MockCopilotAnnotationGateway()
+    if provider in {"ai_platform", "ai-platform", "aiplatform", "ai platform"}:
+        return AIPlatformModelGateway(app_settings=store.settings)
     return CopilotModelGateway(
         store=store,
         app_settings=store.settings,

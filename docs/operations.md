@@ -329,6 +329,21 @@ The default API path uses real GitHub Copilot auth and model calls:
 - analysis runs use `CopilotModelGateway` and require a stored credential or one of `LOGAN_GITHUB_COPILOT_TOKEN` / `LOGAN_GITHUB_SOURCE_TOKEN`.
 - case workspace chat uses `POST /api/chat/stream` to stream Copilot answers over SSE when a completed analysis result is available.
 
+To route model calls through AI Platform instead, set `LOGAN_LLM_PROVIDER=ai_platform` and provide
+the AI Platform chat endpoint plus either a direct trust token or iB2B exchange credentials:
+
+```bash
+LOGAN_LLM_PROVIDER=ai_platform
+LOGAN_AI_PLATFORM_CHAT_HOST=https://ai-platform.example.com
+LOGAN_AI_PLATFORM_CHAT_URI=/v1/api/v1/chat/completions
+LOGAN_AI_PLATFORM_TOKEN=...
+```
+
+For iB2B exchange, omit `LOGAN_AI_PLATFORM_TOKEN` and set
+`LOGAN_AI_PLATFORM_USERNAME`, `LOGAN_AI_PLATFORM_PASSWORD`, `LOGAN_AI_PLATFORM_USERCASE`,
+`LOGAN_AI_PLATFORM_IB2B_HOST`, and `LOGAN_AI_PLATFORM_IB2B_URI`. The exchanged JWT is cached in
+memory for `LOGAN_AI_PLATFORM_TOKEN_TTL_SECONDS` seconds, defaulting to 30 seconds.
+
 Device-code polling must follow the `interval` returned by GitHub. If GitHub returns
 `slow_down` or `429 Too Many Requests`, the API keeps the auth status pending and returns
 `next_poll_after_seconds` so the browser can back off instead of surfacing a server error.

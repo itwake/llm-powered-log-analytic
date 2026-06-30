@@ -361,7 +361,7 @@ async def annotate_templates(
                 annotation_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{template.template_id}:annotation_v1")),
                 template_id=template.template_id,
                 analysis_run_id=analysis_run_id,
-                model_provider="github_copilot",
+                model_provider=getattr(gateway, "provider", "github_copilot"),
                 model_name="gpt-5.4",
                 prompt_version="annotation_v1",
                 raw_model_response=raw if isinstance(raw, dict) else {"raw": raw},
