@@ -25,7 +25,7 @@ CREATE TABLE copilot_credentials (
   credential_type TEXT NOT NULL,
   encrypted_token BYTEA NOT NULL,
   token_hint TEXT,
-  github_base_url TEXT NOT NULL DEFAULT 'https://github.com',
+  github_base_url TEXT NOT NULL DEFAULT 'https://example.github.com',
   runtime_type TEXT NOT NULL DEFAULT 'github_copilot',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
