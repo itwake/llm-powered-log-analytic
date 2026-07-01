@@ -34,7 +34,7 @@ The equivalent Make target is:
 make PYTHON=.venv/bin/python evaluate
 ```
 
-The evaluator runs `AnalyzeCasePipeline` with `MockCopilotAnnotationGateway`, so it does not
+The evaluator runs `AnalyzeCasePipeline` with `MockAIPlatformAnnotationGateway`, so it does not
 require Docker, Temporal, AI Platform credentials, or external network access. It emits
 thresholded metrics for review-load reduction, golden-signal macro F1, fault-category micro and
 macro F1, entity precision/recall/F1, root-cause hit@k, useful causal-edge recall, and summary
@@ -70,7 +70,7 @@ publish. Default installs use `StableDrainAdapter` and still run the full pipeli
 Use the scale benchmark when validating worker ingestion and pipeline behavior on larger generated
 inputs. The runner creates deterministic synthetic checkout incident logs under
 `.logan/scale-fixtures`, which is ignored by git, then runs the real `AnalyzeCasePipeline` with
-`MockCopilotAnnotationGateway`.
+`MockAIPlatformAnnotationGateway`.
 
 The generated fixture mixes:
 

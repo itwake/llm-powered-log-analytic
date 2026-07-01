@@ -14,9 +14,9 @@ from app.store import MetadataStore, create_store
 def _default_model_gateway(store: MetadataStore) -> object:
     provider = (store.settings.llm_provider or "ai_platform").lower()
     if provider in {"mock", "local_mock"}:
-        from logan_workers.activities.inference import MockCopilotAnnotationGateway
+        from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
 
-        return MockCopilotAnnotationGateway()
+        return MockAIPlatformAnnotationGateway()
     if provider in {"ai_platform", "ai-platform", "aiplatform", "ai platform"}:
         return AIPlatformModelGateway(app_settings=store.settings)
     raise ValueError("LOGAN_LLM_PROVIDER must be ai_platform or mock")

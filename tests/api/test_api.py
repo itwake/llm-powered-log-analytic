@@ -11,12 +11,11 @@ import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from logan_workers.activities.inference import MockCopilotAnnotationGateway
+from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
 
 from app.config import Settings
 from app.main import create_app
-from app.services.copilot_model_gateway import CopilotTransportError
-from app.services.copilot_auth_service import MockGitHubDeviceClient
+from app.services.model_gateway import ModelTransportError
 from app.store import DEFAULT_ORGANIZATION_ID, InMemoryStore, merge_analysis_result_progress
 
 
@@ -27,7 +26,7 @@ PIPELINE_STEPS = [
     "preprocess_redact",
     "drain_templating",
     "representative_sampling",
-    "copilot_annotation",
+    "ai_platform_annotation",
     "broadcast_annotations",
     "temporal_aggregation",
     "causal_graph",
@@ -108,9 +107,7 @@ def test_job_event_progress_logs_are_safe(caplog: pytest.LogCaptureFixture) -> N
 async def test_cors_allowed_origins_are_configurable() -> None:
     app_settings = Settings(cors_allowed_origins="https://logan.example.com, http://localhost:3000")
     app = create_app(
-        store=InMemoryStore(app_settings),
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        store=InMemoryStore(app_settings),        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"
@@ -127,7 +124,7 @@ async def test_cors_allowed_origins_are_configurable() -> None:
     assert response.headers["access-control-allow-origin"] == "https://logan.example.com"
 
 
-class FailingAnnotationGateway(MockCopilotAnnotationGateway):
+class FailingAnnotationGateway(MockAIPlatformAnnotationGateway):
     async def responses(self, **kwargs):
         raise RuntimeError(
             "annotation failed source_token=gho_secret_token_1234567890 "
@@ -135,7 +132,7 @@ class FailingAnnotationGateway(MockCopilotAnnotationGateway):
         )
 
 
-class StreamingChatGateway(MockCopilotAnnotationGateway):
+class StreamingChatGateway(MockAIPlatformAnnotationGateway):
     async def responses(self, **kwargs):
         if kwargs.get("stream"):
             self.calls.append(kwargs)
@@ -152,10 +149,10 @@ class StreamingChatGateway(MockCopilotAnnotationGateway):
         return await super().responses(**kwargs)
 
 
-class StreamingErrorGateway(MockCopilotAnnotationGateway):
+class StreamingErrorGateway(MockAIPlatformAnnotationGateway):
     async def responses(self, **kwargs):
         if kwargs.get("stream"):
-            raise CopilotTransportError(
+            raise ModelTransportError(
                 "stream failed source_token=gho_secret_token_1234567890 password=hunter2"
             )
         return await super().responses(**kwargs)
@@ -253,8 +250,7 @@ async def _authenticated_client(
     store = InMemoryStore(app_settings or Settings())
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=model_gateway or MockCopilotAnnotationGateway(),
+        model_gateway=model_gateway or MockAIPlatformAnnotationGateway(),
         s3_client_factory=s3_client_factory,
     )
     transport = ASGITransport(app=app)
@@ -386,8 +382,7 @@ async def test_prometheus_metrics_endpoint_records_safe_api_request_metrics() ->
     store = InMemoryStore(Settings(metrics_enabled=True))
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     client = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
 
@@ -432,7 +427,7 @@ async def test_temporal_start_path_passes_safe_workflow_params(monkeypatch) -> N
             temporal_activity_max_attempts=4,
             database_url="postgresql+psycopg://logan:secret@postgres/logan",
             github_source_token="gho_source_secret_1234567890",
-            github_copilot_token="copilot_secret_1234567890",
+            ai_platform_token="ai_platform_secret_1234567890",
             s3_access_key="access-key",
             s3_secret_key="secret-key",
         )
@@ -490,55 +485,9 @@ async def test_auth_api_and_ai_platform_only_auth_surface() -> None:
     client, _, _ = await _authenticated_client()
     me = await client.get("/api/auth/me")
     assert me.status_code == 200
-    assert "has_copilot_credential" not in me.json()["user"]
-    assert (await client.post("/api/copilot/auth/start", json={})).status_code == 404
-    assert (await client.post("/api/copilot/auth/check", json={"auth_id": "missing"})).status_code == 404
-    assert (await client.delete("/api/copilot/auth/credential")).status_code == 404
     logout = await client.post("/api/auth/logout")
     assert logout.status_code == 200
     assert (await client.get("/api/auth/me")).status_code == 401
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_removed_copilot_auth_routes_do_not_create_credentials() -> None:
-    source_token = "gho_api_response_secret_token"
-    store = InMemoryStore()
-    app = create_app(
-        store=store,
-        model_gateway=MockCopilotAnnotationGateway(),
-    )
-    client = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
-    await client.post(
-        "/api/auth/register",
-        json={
-            "email": "no-token@example.com",
-            "username": "no-token",
-            "full_name": "No Token",
-            "password": "password123",
-        },
-    )
-    await client.post(
-        "/api/auth/login",
-        json={"email_or_username": "no-token", "password": "password123"},
-    )
-
-    started = await client.post("/api/copilot/auth/start", json={"github_base_url": "https://github.com"})
-    checked = await client.post("/api/copilot/auth/check", json={"auth_id": "missing"})
-    me = await client.get("/api/auth/me")
-    user_id = store.users_by_username["no-token"]
-    plugin_token = "copilot_api_response_secret_token"
-    disconnect = await client.delete("/api/copilot/auth/credential")
-
-    assert started.status_code == 404
-    assert checked.status_code == 404
-    assert disconnect.status_code == 404
-    assert store.has_credential(user_id) is False
-    for response in (started, checked, me, disconnect):
-        assert source_token not in response.text
-        assert plugin_token not in response.text
-        assert "encrypted_token" not in response.text
-        assert "token_hint" not in response.text
     await client.aclose()
 
 
@@ -547,8 +496,7 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
     store = InMemoryStore(Settings(local_object_store_dir=str(tmp_path / "object-store")))
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     owner = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
     collaborator = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
@@ -694,8 +642,7 @@ async def test_organization_isolation_and_policy_group_case_access(tmp_path: Pat
     )
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     owner = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
     admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
@@ -848,7 +795,7 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
         Settings(
             database_url="postgresql://logan:db-secret@postgres/logan",
             github_source_token="gho_source_secret",
-            github_copilot_token="copilot-secret",
+            ai_platform_token="ai-platform-secret",
             s3_access_key="access-secret",
             s3_secret_key="s3-secret",
             clickhouse_password="clickhouse-secret",
@@ -858,8 +805,7 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
     )
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     engineer = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
     admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
@@ -893,7 +839,7 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
     for forbidden in (
         "db-secret",
         "gho_source_secret",
-        "copilot-secret",
+        "ai-platform-secret",
         "access-secret",
         "s3-secret",
         "clickhouse-secret",
@@ -985,8 +931,7 @@ async def test_scim_users_and_groups_support_bearer_and_admin_session() -> None:
     )
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     scim = AsyncClient(
         transport=ASGITransport(app=app),
@@ -1123,8 +1068,7 @@ async def test_scim_bearer_defaults_to_default_organization() -> None:
     store = InMemoryStore(Settings(scim_bearer_token="default-scim-secret"))
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     scim = AsyncClient(
         transport=ASGITransport(app=app),
@@ -1148,8 +1092,7 @@ async def test_audit_export_and_metadata_redaction_block_adversarial_payloads() 
     store = InMemoryStore()
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
     admin_id = await _register_and_login(
@@ -1268,9 +1211,7 @@ async def test_api_rate_limit_only_when_enabled() -> None:
         Settings(rate_limit_enabled=False, rate_limit_requests_per_minute=1)
     )
     disabled_app = create_app(
-        store=disabled_store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        store=disabled_store,        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     disabled_client = AsyncClient(
         transport=ASGITransport(app=disabled_app),
@@ -1284,9 +1225,7 @@ async def test_api_rate_limit_only_when_enabled() -> None:
         Settings(rate_limit_enabled=True, rate_limit_requests_per_minute=2)
     )
     enabled_app = create_app(
-        store=enabled_store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        store=enabled_store,        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     enabled_client = AsyncClient(
         transport=ASGITransport(app=enabled_app),
@@ -1305,34 +1244,6 @@ async def test_api_rate_limit_only_when_enabled() -> None:
     assert "gho_secret_token_1234567890" not in body
     assert "password=hunter2" not in body
     await enabled_client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_removed_disconnect_route_does_not_revoke_ai_platform_state() -> None:
-    store = InMemoryStore(Settings(github_copilot_token=None, github_source_token=None))
-    app = create_app(
-        store=store,
-        model_gateway=MockCopilotAnnotationGateway(),
-    )
-    client = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
-    await client.post(
-        "/api/auth/register",
-        json={
-            "email": "disconnect@example.com",
-            "username": "disconnect",
-            "full_name": "Disconnect",
-            "password": "password123",
-        },
-    )
-    await client.post(
-        "/api/auth/login",
-        json={"email_or_username": "disconnect", "password": "password123"},
-    )
-    user_id = store.users_by_username["disconnect"]
-    disconnect = await client.delete("/api/copilot/auth/credential")
-    assert disconnect.status_code == 404
-    assert store.get_credential(user_id=user_id, credential_type="github_source_oauth") is None
-    await client.aclose()
 
 
 @pytest.mark.asyncio
@@ -1382,7 +1293,7 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
         "analysis_run_id": run_id,
         "model_provider": "ai_platform",
         "model_name": status.json()["model_name"],
-        "model_reasoning_effort": store.settings.copilot_reasoning_effort,
+        "model_reasoning_effort": store.settings.ai_platform_reasoning_effort,
         "prompt_version": "annotation_v1",
         "representative_sample_count": len(analysis_result.samples),
         "model_input_count": len(analysis_result.model_inputs),
@@ -1583,7 +1494,7 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_chat_stream_fallback_without_context_does_not_call_gateway() -> None:
-    gateway = MockCopilotAnnotationGateway()
+    gateway = MockAIPlatformAnnotationGateway()
     client, _, _ = await _authenticated_client(model_gateway=gateway)
 
     response = await client.post("/api/chat/stream", json={"message": "What happened?"})
@@ -1782,7 +1693,7 @@ async def test_analysis_failure_records_sanitized_job_event() -> None:
     events = store.list_job_events(
         case_id=case.id,
         analysis_run_id=run.id,
-        step_name="copilot_annotation",
+        step_name="ai_platform_annotation",
     )
     failed_events = [event for event in events if event.event_type == "failed"]
     assert len(failed_events) == 1
@@ -1791,7 +1702,7 @@ async def test_analysis_failure_records_sanitized_job_event() -> None:
     assert "gho_secret_token_1234567890" not in failed_event.error_message
     assert "hunter2" not in failed_event.error_message
     assert failed_event.metadata == {}
-    assert run.progress["steps"]["copilot_annotation"]["status"] == "failed"
+    assert run.progress["steps"]["ai_platform_annotation"]["status"] == "failed"
 
 
 @pytest.mark.asyncio

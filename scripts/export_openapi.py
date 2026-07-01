@@ -6,16 +6,14 @@ from pathlib import Path
 from typing import Any
 
 from app.main import create_app
-from app.services.copilot_auth_service import MockGitHubDeviceClient
 from app.store import InMemoryStore
-from logan_workers.activities.inference import MockCopilotAnnotationGateway
+from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
 
 
 def current_openapi_schema() -> dict[str, Any]:
     app = create_app(
         store=InMemoryStore(),
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     return app.openapi()
 

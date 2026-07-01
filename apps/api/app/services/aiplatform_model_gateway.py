@@ -10,14 +10,14 @@ from typing import Any
 import httpx
 
 from app.config import Settings, settings
-from app.observability import record_copilot_gateway_request
-from app.services.copilot_model_gateway import (
-    CopilotCredentialError,
-    CopilotGatewayError,
-    CopilotTransportError,
-    _extract_output_text,
-    _parse_expires_at,
-    _redact_token_material,
+from app.observability import record_model_gateway_request
+from app.services.model_gateway import (
+    ModelCredentialError,
+    ModelGatewayError,
+    ModelTransportError,
+    extract_output_text,
+    parse_expires_at,
+    redact_token_material,
 )
 
 
@@ -76,7 +76,7 @@ class AIPlatformModelGateway:
                 response_format=response_format,
             )
         except Exception:
-            record_copilot_gateway_request(
+            record_model_gateway_request(
                 provider=self.provider,
                 model=model,
                 stream=stream,
@@ -93,7 +93,7 @@ class AIPlatformModelGateway:
                 started_at=started_at,
             )
 
-        record_copilot_gateway_request(
+        record_model_gateway_request(
             provider=self.provider,
             model=model,
             stream=False,
@@ -116,7 +116,7 @@ class AIPlatformModelGateway:
         response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if _normalize_provider(self.settings.llm_provider) != AI_PLATFORM_PROVIDER:
-            raise CopilotGatewayError("LogAn AI Platform gateway requires LOGAN_LLM_PROVIDER=ai_platform")
+            raise ModelGatewayError("LogAn AI Platform gateway requires LOGAN_LLM_PROVIDER=ai_platform")
 
         resolved = await self._resolve_token()
         endpoint = _join_url(self.settings.ai_platform_chat_host, self.settings.ai_platform_chat_uri)
@@ -143,17 +143,17 @@ class AIPlatformModelGateway:
             message = f"AI Platform chat completions failed with HTTP {exc.response.status_code}"
             if detail:
                 message = f"{message}: {detail}"
-            raise CopilotTransportError(_redact_token_material(message, [resolved.token])) from exc
+            raise ModelTransportError(redact_token_material(message, [resolved.token])) from exc
         except Exception as exc:
-            message = _redact_token_material(
+            message = redact_token_material(
                 str(exc) or exc.__class__.__name__,
                 [resolved.token, self.settings.ai_platform_password or ""],
             )
-            raise CopilotTransportError(
+            raise ModelTransportError(
                 f"AI Platform chat completions transport failed: {message}"
             ) from exc
 
-        output_text = _extract_output_text(provider_json)
+        output_text = extract_output_text(provider_json)
         result: dict[str, Any] = {
             "provider": self.provider,
             "model": model,
@@ -169,7 +169,7 @@ class AIPlatformModelGateway:
 
     async def _resolve_token(self) -> ResolvedAIPlatformToken:
         configured_token = (self.settings.ai_platform_token or "").strip()
-        configured_expires_at = _parse_expires_at(self.settings.ai_platform_token_expires_at)
+        configured_expires_at = parse_expires_at(self.settings.ai_platform_token_expires_at)
         if configured_token and _token_is_fresh(configured_expires_at):
             return ResolvedAIPlatformToken(
                 token=configured_token,
@@ -182,10 +182,10 @@ class AIPlatformModelGateway:
             self._cached_token = await self._exchange_token()
             return self._cached_token
         if configured_token and configured_expires_at is not None:
-            raise CopilotCredentialError(
+            raise ModelCredentialError(
                 "Configured AI Platform token is expired and no refresh credentials are available"
             )
-        raise CopilotCredentialError(
+        raise ModelCredentialError(
             "No AI Platform credential is available; configure LOGAN_AI_PLATFORM_TOKEN or "
             "LOGAN_AI_PLATFORM_USERNAME, LOGAN_AI_PLATFORM_PASSWORD, and LOGAN_AI_PLATFORM_USERCASE"
         )
@@ -226,16 +226,16 @@ class AIPlatformModelGateway:
             message = f"AI Platform iB2B token exchange failed with HTTP {exc.response.status_code}"
             if detail:
                 message = f"{message}: {detail}"
-            raise CopilotTransportError(_redact_token_material(message, [password])) from exc
+            raise ModelTransportError(redact_token_material(message, [password])) from exc
         except Exception as exc:
-            message = _redact_token_material(str(exc) or exc.__class__.__name__, [password])
-            raise CopilotTransportError(
+            message = redact_token_material(str(exc) or exc.__class__.__name__, [password])
+            raise ModelTransportError(
                 f"AI Platform iB2B token exchange transport failed: {message}"
             ) from exc
 
         token = data.get("issued_token")
         if not isinstance(token, str) or not token.strip():
-            raise CopilotTransportError("AI Platform iB2B token response did not include issued_token")
+            raise ModelTransportError("AI Platform iB2B token response did not include issued_token")
         ttl_seconds = max(1, self.settings.ai_platform_token_ttl_seconds)
         return ResolvedAIPlatformToken(
             token=token,
@@ -329,7 +329,7 @@ async def _instrument_ai_platform_stream(
             yield event
         status = "succeeded"
     finally:
-        record_copilot_gateway_request(
+        record_model_gateway_request(
             provider=provider,
             model=model,
             stream=True,
@@ -363,7 +363,7 @@ def _join_url(host: str | None, uri: str | None) -> str:
     trimmed_host = (host or "").strip().rstrip("/")
     trimmed_uri = (uri or "").strip()
     if not trimmed_host or not trimmed_uri:
-        raise CopilotCredentialError("AI Platform host and uri are required")
+        raise ModelCredentialError("AI Platform host and uri are required")
     if trimmed_uri.startswith(("http://", "https://")):
         return trimmed_uri
     if not trimmed_uri.startswith("/"):
@@ -397,8 +397,6 @@ def _normalize_provider(provider: str | None) -> str:
     normalized = (provider or "").strip().lower().replace("-", "_").replace(" ", "_")
     if normalized in {"aiplatform", "ai_platform"}:
         return AI_PLATFORM_PROVIDER
-    if normalized in {"github", "copilot", "github_copilot_plugin"}:
-        return "github_copilot"
     return normalized
 
 
@@ -409,9 +407,9 @@ def _sanitized_response_detail(response: httpx.Response) -> str:
     try:
         payload = response.json()
     except ValueError:
-        return _redact_token_material(_limit_detail(text))
+        return redact_token_material(_limit_detail(text))
     detail = _detail_from_value(payload)
-    return _redact_token_material(_limit_detail(detail or text))
+    return redact_token_material(_limit_detail(detail or text))
 
 
 def _detail_from_value(value: Any) -> str:

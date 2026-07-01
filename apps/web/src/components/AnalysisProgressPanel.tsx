@@ -8,7 +8,7 @@ const PIPELINE_STEPS = [
   ["preprocess_redact", "Redact"],
   ["drain_templating", "Template"],
   ["representative_sampling", "Sample"],
-  ["copilot_annotation", "Annotate"],
+  ["ai_platform_annotation", "Annotate"],
   ["broadcast_annotations", "Broadcast"],
   ["temporal_aggregation", "Temporal"],
   ["causal_graph", "Graph"],

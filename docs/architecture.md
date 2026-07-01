@@ -2,7 +2,7 @@
 
 LogAn is organized as a monorepo with three runtime surfaces:
 
-- FastAPI backend for auth, Copilot authorization, cases, uploads, analysis runs, reports, feedback, chat, tasks, and capabilities.
+- FastAPI backend for auth, AI Platform model access, cases, uploads, analysis runs, reports, feedback, chat, tasks, and capabilities.
 - Python worker package for deterministic log analysis and Temporal workflow activities.
 - Next.js web workbench for operational incident review.
 
@@ -15,7 +15,7 @@ case files
   -> timestamp parse, normalization, redaction
   -> Drain-style templating
   -> representative sampling
-  -> GitHub Copilot Plugin annotation on redacted representatives only
+  -> AI Platform annotation on redacted representatives only
   -> label broadcasting
   -> temporal aggregation
   -> candidate causal graph with temporal, PGEM-style, Granger-style, and PageRank-style evidence
@@ -42,7 +42,7 @@ prompts, credentials, tokens, cookies, database URLs, S3 secrets, and full file 
 Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services,
 and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy.
 Uploaded bytes use a local disk object store by default, so tests can still inject the
-deterministic in-memory store, fake device-code client, mock model gateway, and fake S3 client
+deterministic in-memory store, mock model gateway, and fake S3 client
 with no Docker services or external model network required. Production raw uploads can switch to
 S3/MinIO with `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio`. Smaller files use the existing single
 presigned `PUT` path. Large files use S3 multipart sessions with durable upload metadata for the
@@ -87,13 +87,14 @@ signal, and root-cause candidate cues in the graph and detail panel.
 
 The API owns runtime injection points on app state:
 
-- `copilot_auth_client` defaults to the real GitHub device-code client.
-- `model_gateway` defaults to the real GitHub Copilot `/responses` gateway.
+- `model_gateway` defaults to the real AI Platform gateway.
 - `s3_client_factory` can inject fake S3/MinIO clients for presign, multipart, and `head_object`
   tests.
 - tests pass deterministic fakes through `create_app(...)`.
 
-The Copilot gateway resolves stored plugin credentials, stored GitHub source OAuth credentials, and optional server-side environment tokens. Stored source tokens are exchanged for Copilot plugin tokens, cached with `expires_at`, and revoked with the user disconnect flow; no token material crosses the frontend boundary.
+The AI Platform gateway uses a configured trust token directly, or exchanges configured iB2B
+credentials for a short-lived token and caches it with `expires_at`; no token material crosses the
+frontend boundary.
 
 ## Traceability
 
@@ -122,5 +123,5 @@ tested directions. These scores are ranking and validation aids, not definitive 
 - Tune the optional Drain3-backed adapter and keep `StableDrainAdapter` as the default install
   fallback behind the same `cluster()` interface.
 - Add S3 object storage adapters for report artifacts.
-- Add streaming Copilot `/responses` and `/api/chat/stream` SSE support.
+- Extend AI Platform streaming behavior for `/api/chat/stream` if operators need native streaming.
 - Add bin-size sensitivity reporting for causal methods if operators need multi-bin comparisons.

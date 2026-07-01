@@ -68,27 +68,9 @@ class Settings:
         "LOGAN_CREDENTIAL_ENCRYPTION_KEYRING", "{}"
     )
     llm_provider: str = os.getenv("LOGAN_LLM_PROVIDER", "ai_platform")
-    copilot_model: str = _env_first("LOGAN_AI_PLATFORM_MODEL", "LOGAN_COPILOT_MODEL") or "gpt-5.4"
-    copilot_reasoning_effort: str = (
-        _env_first("LOGAN_AI_PLATFORM_REASONING_EFFORT", "LOGAN_COPILOT_REASONING_EFFORT")
-        or "high"
-    )
-    copilot_base_url: str | None = os.getenv("LOGAN_COPILOT_BASE_URL") or None
-    copilot_oauth_client_id: str = os.getenv(
-        "LOGAN_COPILOT_OAUTH_CLIENT_ID", "Iv1.b507a08c87ecfe98"
-    )
-    github_copilot_token: str | None = os.getenv("LOGAN_GITHUB_COPILOT_TOKEN") or None
+    ai_platform_model: str = os.getenv("LOGAN_AI_PLATFORM_MODEL", "gpt-5.4")
+    ai_platform_reasoning_effort: str = os.getenv("LOGAN_AI_PLATFORM_REASONING_EFFORT", "high")
     github_source_token: str | None = os.getenv("LOGAN_GITHUB_SOURCE_TOKEN") or None
-    copilot_timeout_seconds: float = float(os.getenv("LOGAN_COPILOT_TIMEOUT_SECONDS", "30"))
-    copilot_ca_bundle: str | None = _env_first(
-        "LOGAN_COPILOT_CA_BUNDLE", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"
-    )
-    copilot_tls_verify: bool = _env_bool("LOGAN_COPILOT_TLS_VERIFY", True)
-    copilot_proxy_url: str | None = _env_first("LOGAN_COPILOT_PROXY_URL")
-    copilot_trust_env: bool = _env_bool("LOGAN_COPILOT_TRUST_ENV", True)
-    copilot_token_cache_skew_seconds: int = int(
-        os.getenv("LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS", "60")
-    )
     ai_platform_chat_host: str | None = os.getenv("LOGAN_AI_PLATFORM_CHAT_HOST") or None
     ai_platform_chat_uri: str = os.getenv(
         "LOGAN_AI_PLATFORM_CHAT_URI", "/v1/api/v1/chat/completions"
@@ -113,24 +95,13 @@ class Settings:
         os.getenv("LOGAN_AI_PLATFORM_MAX_COMPLETION_TOKENS", "4096")
     )
     ai_platform_token_ttl_seconds: int = int(os.getenv("LOGAN_AI_PLATFORM_TOKEN_TTL_SECONDS", "30"))
-    ai_platform_timeout_seconds: float = float(
-        os.getenv(
-            "LOGAN_AI_PLATFORM_TIMEOUT_SECONDS",
-            os.getenv("LOGAN_COPILOT_TIMEOUT_SECONDS", "30"),
-        )
-    )
+    ai_platform_timeout_seconds: float = float(os.getenv("LOGAN_AI_PLATFORM_TIMEOUT_SECONDS", "30"))
     ai_platform_ca_bundle: str | None = _env_first(
-        "LOGAN_AI_PLATFORM_CA_BUNDLE", "LOGAN_COPILOT_CA_BUNDLE", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"
+        "LOGAN_AI_PLATFORM_CA_BUNDLE", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"
     )
-    ai_platform_tls_verify: bool = _env_bool(
-        "LOGAN_AI_PLATFORM_TLS_VERIFY", _env_bool("LOGAN_COPILOT_TLS_VERIFY", True)
-    )
-    ai_platform_proxy_url: str | None = _env_first(
-        "LOGAN_AI_PLATFORM_PROXY_URL", "LOGAN_COPILOT_PROXY_URL"
-    )
-    ai_platform_trust_env: bool = _env_bool(
-        "LOGAN_AI_PLATFORM_TRUST_ENV", _env_bool("LOGAN_COPILOT_TRUST_ENV", True)
-    )
+    ai_platform_tls_verify: bool = _env_bool("LOGAN_AI_PLATFORM_TLS_VERIFY", True)
+    ai_platform_proxy_url: str | None = _env_first("LOGAN_AI_PLATFORM_PROXY_URL")
+    ai_platform_trust_env: bool = _env_bool("LOGAN_AI_PLATFORM_TRUST_ENV", True)
     database_url: str | None = _env_first("LOGAN_DATABASE_URL") or DEFAULT_SQLITE_DATABASE_URL
     store_backend: str = os.getenv("LOGAN_STORE_BACKEND", "auto")
     analysis_orchestrator: str = os.getenv("LOGAN_ANALYSIS_ORCHESTRATOR", "local")
@@ -224,8 +195,6 @@ class Settings:
                 "LOGAN_CREDENTIAL_ENCRYPTION_KEY must be set to a non-default value "
                 "with at least 32 characters"
             )
-        if not self.copilot_tls_verify:
-            errors.append("LOGAN_COPILOT_TLS_VERIFY must not be false in production")
         if not self.ai_platform_tls_verify:
             errors.append("LOGAN_AI_PLATFORM_TLS_VERIFY must not be false in production")
         if errors:
@@ -233,29 +202,6 @@ class Settings:
 
     def cors_origins(self) -> list[str]:
         return _origin_list(self.cors_allowed_origins) or ["http://localhost:3000"]
-
-    def copilot_httpx_verify(self) -> bool | str:
-        if not self.copilot_tls_verify:
-            return False
-        return self.copilot_ca_bundle or True
-
-    def copilot_effective_proxy_url(self) -> str | None:
-        if self.copilot_proxy_url:
-            return self.copilot_proxy_url
-        if not self.copilot_trust_env:
-            return None
-        return _env_first(*STANDARD_PROXY_ENV_NAMES)
-
-    def copilot_httpx_client_kwargs(self) -> dict[str, object]:
-        kwargs: dict[str, object] = {
-            "timeout": self.copilot_timeout_seconds,
-            "verify": self.copilot_httpx_verify(),
-            "trust_env": self.copilot_trust_env,
-        }
-        proxy_url = self.copilot_effective_proxy_url()
-        if proxy_url:
-            kwargs["proxy"] = proxy_url
-        return kwargs
 
     def ai_platform_httpx_verify(self) -> bool | str:
         if not self.ai_platform_tls_verify:

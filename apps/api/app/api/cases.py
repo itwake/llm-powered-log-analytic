@@ -32,7 +32,7 @@ from app.schemas.case import (
     UploadCompleteRequest,
     UploadRequest,
 )
-from app.services.copilot_model_gateway import CopilotCredentialError, CopilotGatewayError
+from app.services.model_gateway import ModelCredentialError, ModelGatewayError
 from app.services.object_store import (
     CompletedMultipartUploadPart,
     ObjectStoreConfigurationError,
@@ -812,9 +812,9 @@ async def start_analysis(
             gateway=gateway,
             s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
         )
-    except CopilotCredentialError as exc:
+    except ModelCredentialError as exc:
         raise HTTPException(status_code=401, detail=sanitize_error_message(exc)) from exc
-    except CopilotGatewayError as exc:
+    except ModelGatewayError as exc:
         raise HTTPException(status_code=502, detail=sanitize_error_message(exc)) from exc
     except ObjectStoreConfigurationError as exc:
         raise HTTPException(status_code=500, detail=sanitize_error_message(exc)) from exc

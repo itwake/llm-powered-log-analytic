@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from logan_workers.activities.inference import MockCopilotAnnotationGateway
+from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
 from logan_workers.evaluation.benchmark import load_benchmark
 from logan_workers.evaluation.metrics import (
     flatten_entities,
@@ -245,7 +245,7 @@ async def run_benchmark_pipeline(benchmark: LoadedBenchmark) -> AnalysisResult:
         paths=[str(path) for path in benchmark.input_paths],
         case_context=benchmark.manifest.case_context,
         config=benchmark.manifest.config,
-        gateway=MockCopilotAnnotationGateway(),
+        gateway=MockAIPlatformAnnotationGateway(),
     )
 
 

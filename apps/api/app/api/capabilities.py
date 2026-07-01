@@ -13,8 +13,8 @@ def capabilities(store: MetadataStore = Depends(get_store)) -> dict[str, object]
     return {
         "models": {
             "provider": store.settings.llm_provider,
-            "default_model": store.settings.copilot_model,
-            "supported_models": [store.settings.copilot_model],
+            "default_model": store.settings.ai_platform_model,
+            "supported_models": [store.settings.ai_platform_model],
         },
         "views": ["data_summary", "temporal", "tabular", "causal_graph", "causal_summary"],
         "upload": {

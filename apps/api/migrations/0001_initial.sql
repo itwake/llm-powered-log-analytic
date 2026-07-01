@@ -19,33 +19,18 @@ CREATE TABLE sessions (
   revoked_at TIMESTAMPTZ
 );
 
-CREATE TABLE copilot_credentials (
+CREATE TABLE credentials (
   id UUID PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES users(id),
   credential_type TEXT NOT NULL,
   encrypted_token BYTEA NOT NULL,
   token_hint TEXT,
   github_base_url TEXT NOT NULL DEFAULT 'https://github.com',
-  runtime_type TEXT NOT NULL DEFAULT 'github_copilot',
+  runtime_type TEXT NOT NULL DEFAULT 'ai_platform',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ,
   revoked_at TIMESTAMPTZ
-);
-
-CREATE TABLE copilot_device_auth (
-  auth_id UUID PRIMARY KEY,
-  user_id UUID NOT NULL REFERENCES users(id),
-  device_code TEXT NOT NULL,
-  user_code TEXT NOT NULL,
-  verification_uri TEXT NOT NULL,
-  verification_uri_complete TEXT NOT NULL,
-  expires_in INT NOT NULL,
-  interval INT NOT NULL,
-  poll_count INT NOT NULL DEFAULT 0,
-  github_base_url TEXT NOT NULL DEFAULT 'https://github.com',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE cases (

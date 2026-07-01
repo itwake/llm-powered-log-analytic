@@ -651,11 +651,6 @@
             ],
             "title": "Full Name"
           },
-          "has_copilot_credential": {
-            "default": false,
-            "title": "Has Copilot Credential",
-            "type": "boolean"
-          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1297,43 +1292,6 @@
         "title": "ChatRequest",
         "type": "object"
       },
-      "CopilotCheckRequest": {
-        "properties": {
-          "auth_id": {
-            "title": "Auth Id",
-            "type": "string"
-          },
-          "device_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional device code echoed from /start; accepted for EFP portal compatibility.",
-            "title": "Device Code"
-          }
-        },
-        "required": [
-          "auth_id"
-        ],
-        "title": "CopilotCheckRequest",
-        "type": "object"
-      },
-      "CopilotStartRequest": {
-        "properties": {
-          "github_base_url": {
-            "default": "https://github.com",
-            "description": "Accepted for backwards compatibility; Copilot OAuth always uses https://github.com regardless of this value.",
-            "title": "Github Base Url",
-            "type": "string"
-          }
-        },
-        "title": "CopilotStartRequest",
-        "type": "object"
-      },
       "ExportRequest": {
         "properties": {
           "export_type": {
@@ -1757,11 +1715,6 @@
             "title": "Email",
             "type": "string"
           },
-          "has_copilot_credential": {
-            "default": false,
-            "title": "Has Copilot Credential",
-            "type": "boolean"
-          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1796,13 +1749,6 @@
       },
       "ValidationError": {
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
           "loc": {
             "items": {
               "anyOf": [
@@ -4330,115 +4276,6 @@
         "summary": "Chat Stream",
         "tags": [
           "runtime"
-        ]
-      }
-    },
-    "/api/copilot/auth/check": {
-      "post": {
-        "operationId": "check_api_copilot_auth_check_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CopilotCheckRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Check Api Copilot Auth Check Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Check",
-        "tags": [
-          "copilot-auth"
-        ]
-      }
-    },
-    "/api/copilot/auth/credential": {
-      "delete": {
-        "operationId": "disconnect_api_copilot_auth_credential_delete",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Disconnect Api Copilot Auth Credential Delete",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Disconnect",
-        "tags": [
-          "copilot-auth"
-        ]
-      }
-    },
-    "/api/copilot/auth/start": {
-      "post": {
-        "operationId": "start_api_copilot_auth_start_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CopilotStartRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Start Api Copilot Auth Start Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Start",
-        "tags": [
-          "copilot-auth"
         ]
       }
     },

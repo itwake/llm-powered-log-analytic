@@ -15,7 +15,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from logan_workers.activities.inference import MockCopilotAnnotationGateway
+from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
 from logan_workers.evaluation.metrics import review_load_reduction
 from logan_workers.evaluation.reporting import ensure_report_text_is_safe
 from logan_workers.evaluation.schemas import ReportSafetySummary
@@ -461,7 +461,7 @@ async def run_scale_benchmark(
         profile=profile,
         target_bytes=target_bytes,
     )
-    gateway = MockCopilotAnnotationGateway()
+    gateway = MockAIPlatformAnnotationGateway()
     case_id = f"{fixture.fixture_id}-case"
     analysis_run_id = f"{fixture.fixture_id}-run"
     baseline_rss = _current_rss_bytes_linux()

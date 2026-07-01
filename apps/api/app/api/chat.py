@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from app.dependencies import current_user, get_model_gateway, get_store, require_case_permission
 from app.schemas.chat import ChatRequest, TaskExecuteRequest
-from app.services.copilot_model_gateway import CopilotGatewayError
+from app.services.model_gateway import ModelGatewayError
 from app.store import MetadataStore, UserRecord, sanitize_error_message
 
 
@@ -78,7 +78,7 @@ async def chat_stream(
         try:
             stream = await gateway.responses(
                 user_id=user.id,
-                model=store.settings.copilot_model,
+                model=store.settings.ai_platform_model,
                 instructions=CHAT_INSTRUCTIONS,
                 input=[
                     {
@@ -97,7 +97,7 @@ async def chat_stream(
                     "analysis_run_id": payload.analysis_run_id,
                     "purpose": "case_chat",
                 },
-                reasoning_effort=store.settings.copilot_reasoning_effort,
+                reasoning_effort=store.settings.ai_platform_reasoning_effort,
             )
             yield _sse_frame("evidence", {"evidence_refs": evidence_refs})
             completed_text = ""
@@ -117,7 +117,7 @@ async def chat_stream(
                 yield _sse_frame("delta", {"delta": completed_text})
                 message = completed_text
             yield _sse_frame("done", {"message": message})
-        except CopilotGatewayError as exc:
+        except ModelGatewayError as exc:
             yield _sse_frame("error", {"message": sanitize_error_message(exc)})
         except Exception as exc:
             yield _sse_frame("error", {"message": sanitize_error_message(exc)})

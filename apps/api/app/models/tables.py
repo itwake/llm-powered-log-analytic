@@ -77,8 +77,8 @@ class Session(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-class CopilotCredential(Base):
-    __tablename__ = "copilot_credentials"
+class Credential(Base):
+    __tablename__ = "credentials"
 
     id: Mapped[str] = uuid_pk()
     user_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("users.id"), nullable=False)
@@ -87,28 +87,11 @@ class CopilotCredential(Base):
     token_hint: Mapped[str | None] = mapped_column(Text)
     key_id: Mapped[str | None] = mapped_column(Text)
     github_base_url: Mapped[str] = mapped_column(Text, nullable=False, default="https://github.com")
-    runtime_type: Mapped[str] = mapped_column(Text, nullable=False, default="github_copilot")
+    runtime_type: Mapped[str] = mapped_column(Text, nullable=False, default="ai_platform")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class CopilotDeviceAuth(Base):
-    __tablename__ = "copilot_device_auth"
-
-    auth_id: Mapped[str] = uuid_pk()
-    user_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("users.id"), nullable=False)
-    device_code: Mapped[str] = mapped_column(Text, nullable=False)
-    user_code: Mapped[str] = mapped_column(Text, nullable=False)
-    verification_uri: Mapped[str] = mapped_column(Text, nullable=False)
-    verification_uri_complete: Mapped[str] = mapped_column(Text, nullable=False)
-    expires_in: Mapped[int] = mapped_column(Integer, nullable=False)
-    interval: Mapped[int] = mapped_column(Integer, nullable=False)
-    poll_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    github_base_url: Mapped[str] = mapped_column(Text, nullable=False, default="https://github.com")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Case(Base):

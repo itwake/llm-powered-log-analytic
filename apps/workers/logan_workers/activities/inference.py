@@ -16,8 +16,8 @@ from logan_workers.models import (
 )
 
 
-class MockCopilotAnnotationGateway:
-    provider = "github_copilot"
+class MockAIPlatformAnnotationGateway:
+    provider = "ai_platform"
     model = "gpt-5.4"
 
     def __init__(self) -> None:
@@ -309,9 +309,9 @@ async def annotate_templates(
     templates: list[LogTemplate],
     samples: list[RepresentativeSample],
     case_context: dict[str, Any],
-    gateway: MockCopilotAnnotationGateway | None = None,
+    gateway: MockAIPlatformAnnotationGateway | None = None,
 ) -> tuple[list[TemplateAnnotation], list[dict[str, Any]]]:
-    gateway = gateway or MockCopilotAnnotationGateway()
+    gateway = gateway or MockAIPlatformAnnotationGateway()
     samples_by_template: dict[str, list[RepresentativeSample]] = {}
     for sample in samples:
         samples_by_template.setdefault(sample.template_id, []).append(sample)
@@ -361,7 +361,7 @@ async def annotate_templates(
                 annotation_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{template.template_id}:annotation_v1")),
                 template_id=template.template_id,
                 analysis_run_id=analysis_run_id,
-                model_provider=getattr(gateway, "provider", "github_copilot"),
+                model_provider=getattr(gateway, "provider", "ai_platform"),
                 model_name="gpt-5.4",
                 prompt_version="annotation_v1",
                 raw_model_response=raw if isinstance(raw, dict) else {"raw": raw},
