@@ -140,6 +140,29 @@ class Settings:
         "LOGAN_STEP_ARTIFACT_FAILURE_MODE", "warn"
     ).lower()
     secure_cookies: bool = os.getenv("LOGAN_ENV", "development") == "production"
+    web_base_url: str | None = os.getenv("LOGAN_WEB_BASE_URL") or None
+    sso_enabled: bool = _env_bool("LOGAN_SSO_ENABLED", False)
+    sso_authorize_url: str = os.getenv(
+        "LOGAN_SSO_AUTHORIZE_URL",
+        "https://example.sso.com/realms/persons/protocol/openid-connect/auth",
+    )
+    sso_token_url: str = os.getenv(
+        "LOGAN_SSO_TOKEN_URL",
+        "https://example.sso.com/realms/persons/protocol/openid-connect/token",
+    )
+    sso_client_id: str = os.getenv("LOGAN_SSO_CLIENT_ID", "webapp")
+    sso_authorize_scope: str = os.getenv("LOGAN_SSO_AUTHORIZE_SCOPE", "read write")
+    sso_token_scope: str = os.getenv("LOGAN_SSO_TOKEN_SCOPE", "offline_access")
+    sso_tls_verify: bool = _env_bool("LOGAN_SSO_TLS_VERIFY", True)
+    sso_timeout_seconds: float = float(os.getenv("LOGAN_SSO_TIMEOUT_SECONDS", "15"))
+    sso_mock_enabled: bool = _env_bool("LOGAN_SSO_MOCK_ENABLED", False)
+    sso_mock_username: str = (os.getenv("LOGAN_SSO_MOCK_USERNAME") or "logan.mock").strip() or "logan.mock"
+    sso_mock_email: str = (
+        os.getenv("LOGAN_SSO_MOCK_EMAIL") or "logan.mock@example.com"
+    ).strip() or "logan.mock@example.com"
+    sso_mock_full_name: str = (
+        os.getenv("LOGAN_SSO_MOCK_FULL_NAME") or "Logan Mock User"
+    ).strip() or "Logan Mock User"
     raw_log_retention_days: int = int(os.getenv("LOGAN_RAW_LOG_RETENTION_DAYS", "30"))
     report_retention_days: int = int(os.getenv("LOGAN_REPORT_RETENTION_DAYS", "365"))
     audit_retention_days: int = int(os.getenv("LOGAN_AUDIT_RETENTION_DAYS", "730"))
@@ -197,11 +220,24 @@ class Settings:
             )
         if not self.ai_platform_tls_verify:
             errors.append("LOGAN_AI_PLATFORM_TLS_VERIFY must not be false in production")
+        if self.sso_enabled and not self.sso_tls_verify:
+            errors.append("LOGAN_SSO_TLS_VERIFY must not be false in production when SSO is enabled")
+        if self.sso_mock_enabled:
+            errors.append("LOGAN_SSO_MOCK_ENABLED must be false in production")
         if errors:
             raise ValueError("Invalid production configuration: " + "; ".join(errors))
 
     def cors_origins(self) -> list[str]:
         return _origin_list(self.cors_allowed_origins) or ["http://localhost:3000"]
+
+    def public_web_base_url(self) -> str | None:
+        if self.web_base_url and self.web_base_url.strip():
+            return self.web_base_url.strip().rstrip("/")
+        origins = self.cors_origins()
+        if origins:
+            return origins[0].rstrip("/")
+        return None
+
 
     def ai_platform_httpx_verify(self) -> bool | str:
         if not self.ai_platform_tls_verify:
@@ -225,6 +261,13 @@ class Settings:
         if proxy_url:
             kwargs["proxy"] = proxy_url
         return kwargs
+
+    def sso_httpx_client_kwargs(self) -> dict[str, object]:
+        return {
+            "timeout": self.sso_timeout_seconds,
+            "verify": self.sso_tls_verify,
+            "trust_env": True,
+        }
 
 
 def validate_runtime_settings(app_settings: Settings) -> None:

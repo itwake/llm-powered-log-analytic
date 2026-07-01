@@ -12,6 +12,22 @@ interface ShellProps {
   caseTitle?: string | null;
 }
 
+function displayNameFromEmail(email: string | null | undefined): string | null {
+  const localPart = email?.split("@", 1)[0]?.trim() || "";
+  if (!localPart) {
+    return null;
+  }
+
+  const parts = localPart
+    .replace(/[_-]/g, ".")
+    .split(".")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1).toLowerCase()}`);
+
+  return parts.length ? parts.join(" ") : null;
+}
+
 export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
   const router = useRouter();
   const [user, setUser] = useState<UserOut | null>(null);
@@ -64,6 +80,8 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
     return links;
   }, [caseId, runId, user?.role]);
 
+  const signedInDisplayName = displayNameFromEmail(user?.email) || user?.username || "Signed in";
+
   return (
     <>
       <header className="topbar">
@@ -71,8 +89,8 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
         <span className="topbar-title">{caseTitle || "Incident workbench"}</span>
         <span className="status">
           {authState === "loading" && "Checking session"}
-          {authState === "signed-in" && `${user?.username || "Signed in"} | AI Platform`}
-          {authState === "signed-out" && <Link href="/login">Sign in</Link>}
+          {authState === "signed-in" && `${signedInDisplayName} | AI Platform`}
+          {authState === "signed-out" && <Link href="/login">Continue with SSO</Link>}
         </span>
       </header>
       <div className="layout">
