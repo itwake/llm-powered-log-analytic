@@ -54,6 +54,7 @@ from app.services.object_store import (
     safe_filename,
 )
 from app.store import (
+    AnalysisRunCancelled,
     AnalysisRunRecord,
     AnalysisStepArtifactRecord,
     AnalyticsSinkWriteRecord,
@@ -62,6 +63,7 @@ from app.store import (
     CaseCollaboratorRecord,
     CaseRecord,
     CASE_PERMISSION_ROLES,
+    CANCELLABLE_ANALYSIS_RUN_STATUSES,
     REVOCABLE_CREDENTIAL_TYPES,
     CredentialRecord,
     DEFAULT_ORGANIZATION_ID,
@@ -77,6 +79,7 @@ from app.store import (
     RAW_LOG_RETAINED_MARKER,
     RetentionResultRecord,
     SessionRecord,
+    TERMINAL_ANALYSIS_RUN_STATUSES,
     UploadRecord,
     UserRecord,
     apply_job_event_progress,
@@ -821,9 +824,76 @@ class SQLAlchemyStore:
             )
         return self._case_record(case)
 
+    def update_case(
+        self, *, case_id: str, data: dict[str, Any], user_id: str
+    ) -> CaseRecord:
+        allowed_fields = {
+            "title",
+            "issue_description",
+            "product",
+            "service",
+            "environment",
+            "incident_start",
+            "incident_end",
+            "timezone",
+        }
+        changed_fields = sorted(key for key in data if key in allowed_fields)
+        with self._session() as session:
+            case = session.get(tables.Case, case_id)
+            if case is None or case.deleted_at is not None:
+                raise KeyError(case_id)
+            for key in changed_fields:
+                setattr(case, key, data[key])
+            case.updated_at = _now()
+            self._add_audit(
+                session,
+                action="case.update",
+                user_id=user_id,
+                target_type="case",
+                target_id=case_id,
+                case_id=case_id,
+                metadata={"fields": changed_fields},
+            )
+        return self._case_record(case)
+
+    def delete_case(self, *, case_id: str, user_id: str) -> bool:
+        now = _now()
+        with self._session() as session:
+            case = session.get(tables.Case, case_id)
+            if case is None or case.deleted_at is not None:
+                return False
+            active_runs = session.scalars(
+                select(tables.AnalysisRun).where(
+                    tables.AnalysisRun.case_id == case_id,
+                    tables.AnalysisRun.status.in_(list(CANCELLABLE_ANALYSIS_RUN_STATUSES)),
+                )
+            ).all()
+            for run in active_runs:
+                progress = dict(run.progress_json or {})
+                progress["current_step"] = "cancelled"
+                progress["cancelled_at"] = now.isoformat()
+                run.progress_json = progress
+                run.status = "cancelled"
+                run.completed_at = now
+                run.error_message = None
+            case.status = "deleted"
+            case.deleted_at = now
+            case.updated_at = now
+            self._add_audit(
+                session,
+                action="case.delete",
+                user_id=user_id,
+                target_type="case",
+                target_id=case_id,
+                case_id=case_id,
+            )
+        return True
+
     def get_case(self, case_id: str) -> CaseRecord | None:
         with self._session() as session:
             case = session.get(tables.Case, case_id)
+            if case is not None and case.deleted_at is not None:
+                return None
             return self._case_record(case) if case else None
 
     def list_cases(
@@ -835,7 +905,7 @@ class SQLAlchemyStore:
         limit: int | None = None,
     ) -> tuple[list[CaseRecord], int]:
         with self._session() as session:
-            criteria = []
+            criteria = [tables.Case.deleted_at.is_(None)]
             if status:
                 criteria.append(tables.Case.status == status)
             if product:
@@ -862,7 +932,7 @@ class SQLAlchemyStore:
         limit: int | None = None,
     ) -> tuple[list[CaseRecord], int]:
         with self._session() as session:
-            criteria = []
+            criteria = [tables.Case.deleted_at.is_(None)]
             if status:
                 criteria.append(tables.Case.status == status)
             if product:
@@ -911,7 +981,7 @@ class SQLAlchemyStore:
             if user is None or not user.is_active:
                 return False
             case = session.get(tables.Case, case_id)
-            if case is None:
+            if case is None or case.deleted_at is not None:
                 return False
             if case.organization_id != user.organization_id:
                 return False
@@ -949,7 +1019,7 @@ class SQLAlchemyStore:
     def list_case_collaborators(self, case_id: str) -> list[CaseCollaboratorRecord]:
         with self._session() as session:
             case = session.get(tables.Case, case_id)
-            if case is None:
+            if case is None or case.deleted_at is not None:
                 raise KeyError(case_id)
             rows = session.execute(
                 select(tables.CaseCollaborator, tables.User)
@@ -1282,7 +1352,7 @@ class SQLAlchemyStore:
         _validate_policy_group_role(role)
         with self._session() as session:
             case = session.get(tables.Case, case_id)
-            if case is None:
+            if case is None or case.deleted_at is not None:
                 raise KeyError(case_id)
             group = session.get(tables.PolicyGroup, group_id)
             if group is None:
@@ -1427,11 +1497,49 @@ class SQLAlchemyStore:
         gateway: Any | None = None,
         s3_client_factory: S3ClientFactory | None = None,
     ) -> AnalysisRunRecord:
-        run = self._create_analysis_run(case_id=case_id, user_id=user_id, config=config)
+        run = self.create_analysis_run(case_id=case_id, user_id=user_id, config=config)
+        return await self.run_analysis(
+            run_id=run.id,
+            user_id=user_id,
+            input_paths=input_paths,
+            config=config,
+            gateway=gateway,
+            s3_client_factory=s3_client_factory,
+        )
+
+    def create_analysis_run(
+        self, *, case_id: str, user_id: str, config: dict[str, Any]
+    ) -> AnalysisRunRecord:
+        return self._create_analysis_run(case_id=case_id, user_id=user_id, config=config)
+
+    def _analysis_run_cancel_requested(self, run_id: str) -> bool:
+        run = self.get_analysis_run(run_id)
+        return run is not None and run.status == "cancelled"
+
+    def _raise_if_analysis_cancelled(self, run_id: str) -> None:
+        if self._analysis_run_cancel_requested(run_id):
+            raise AnalysisRunCancelled("analysis run was cancelled")
+
+    async def run_analysis(
+        self,
+        *,
+        run_id: str,
+        user_id: str,
+        input_paths: list[str],
+        config: dict[str, Any],
+        gateway: Any | None = None,
+        s3_client_factory: S3ClientFactory | None = None,
+    ) -> AnalysisRunRecord:
+        run = self.get_analysis_run(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        case_id = run.case_id
         case = self.get_case(case_id)
         if case is None:
             raise KeyError(case_id)
+        config = dict(config or run.config)
         try:
+            self._raise_if_analysis_cancelled(run.id)
             if not input_paths:
                 fixture_dir = Path("tests/fixtures/logs/checkout_incident")
                 input_paths = [str(path) for path in sorted(fixture_dir.glob("*.log"))]
@@ -1477,6 +1585,7 @@ class SQLAlchemyStore:
                 return self.get_analysis_run(run.id) or run
 
             def record_progress(event: dict[str, Any]) -> None:
+                self._raise_if_analysis_cancelled(run.id)
                 job_event = self.record_job_event(
                     case_id=case_id,
                     analysis_run_id=run.id,
@@ -1493,6 +1602,7 @@ class SQLAlchemyStore:
                     error_message=event.get("error_message"),
                 )
                 self._update_analysis_progress(run_id=run.id, event=job_event)
+                self._raise_if_analysis_cancelled(run.id)
 
             with materialize_analysis_inputs(
                 input_paths,
@@ -1531,6 +1641,7 @@ class SQLAlchemyStore:
                     gateway=gateway,
                     progress_callback=record_progress,
                 )
+            self._raise_if_analysis_cancelled(run.id)
             recorded_run = self.get_analysis_run(run.id)
             result = result.model_copy(
                 update={
@@ -1541,13 +1652,62 @@ class SQLAlchemyStore:
                 }
             )
             return self._complete_analysis_run(run_id=run.id, result=result, user_id=user_id)
+        except AnalysisRunCancelled:
+            return self.cancel_analysis_run(run_id=run.id, user_id=user_id)
         except Exception as exc:
+            if self._analysis_run_cancel_requested(run.id):
+                return self.cancel_analysis_run(run_id=run.id, user_id=user_id)
             self._fail_analysis_run(
                 run_id=run.id,
                 error_message=sanitize_error_message(exc),
                 user_id=user_id,
             )
             raise
+
+    def cancel_analysis_run(self, *, run_id: str, user_id: str) -> AnalysisRunRecord:
+        run = self.get_analysis_run(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        if run.status in TERMINAL_ANALYSIS_RUN_STATUSES:
+            return run
+        previous_step = str((run.progress or {}).get("current_step") or run.status)
+        job_event = self.record_job_event(
+            case_id=run.case_id,
+            analysis_run_id=run.id,
+            step_name=previous_step,
+            event_type="cancelled",
+            status="cancelled",
+            attempt=1,
+            idempotency_key=f"cancel:{run.id}",
+            metadata={"cancelled_by": user_id, "previous_step": previous_step},
+        )
+        self._update_analysis_progress(run_id=run.id, event=job_event)
+        now = _now()
+        with self._session() as session:
+            row = session.get(tables.AnalysisRun, run_id)
+            if row is None:
+                raise KeyError(run_id)
+            case = session.get(tables.Case, row.case_id)
+            progress = dict(row.progress_json or {})
+            progress["current_step"] = "cancelled"
+            progress["cancelled_at"] = now.isoformat()
+            row.progress_json = progress
+            row.status = "cancelled"
+            row.completed_at = now
+            row.error_message = None
+            if case is not None and case.deleted_at is None:
+                case.status = "cancelled"
+                case.updated_at = now
+            self._add_audit(
+                session,
+                action="analysis.cancel",
+                user_id=user_id,
+                target_type="analysis_run",
+                target_id=row.id,
+                case_id=row.case_id,
+                metadata={"previous_step": previous_step},
+            )
+        return self._analysis_run_record(row)
 
     def get_analysis_run(self, run_id: str) -> AnalysisRunRecord | None:
         with self._session() as session:
@@ -1666,6 +1826,8 @@ class SQLAlchemyStore:
         run = self.get_analysis_run(run_id)
         if run is None:
             raise KeyError(run_id)
+        if run.status == "cancelled":
+            return run
         if run.status == "completed" and run.result is not None:
             return run
         return self._complete_analysis_run(run_id=run_id, result=result, user_id=user_id)
@@ -2905,7 +3067,7 @@ class SQLAlchemyStore:
     ) -> AnalysisRunRecord:
         with self._session() as session:
             case = session.get(tables.Case, case_id)
-            if case is None:
+            if case is None or case.deleted_at is not None:
                 raise KeyError(case_id)
             run_number = (
                 session.scalar(
@@ -2968,6 +3130,8 @@ class SQLAlchemyStore:
             existing_run = session.get(tables.AnalysisRun, run_id)
             if existing_run is None:
                 raise KeyError(run_id)
+            if existing_run.status == "cancelled":
+                return self._analysis_run_record(existing_run)
             if existing_run.status == "completed" and existing_run.result_json is not None:
                 return self._analysis_run_record(existing_run)
 
@@ -2977,6 +3141,8 @@ class SQLAlchemyStore:
             run = session.get(tables.AnalysisRun, run_id)
             if run is None:
                 raise KeyError(run_id)
+            if run.status == "cancelled":
+                return self._analysis_run_record(run)
             run.error_message = None
             run.progress_json = merge_analysis_result_progress(
                 run.progress_json, result.progress
@@ -3016,6 +3182,8 @@ class SQLAlchemyStore:
             run = session.get(tables.AnalysisRun, run_id)
             if run is None:
                 raise KeyError(run_id)
+            if run.status == "cancelled":
+                return self._analysis_run_record(run)
             case = session.get(tables.Case, run.case_id)
             run.status = "completed"
             run.completed_at = _now()
@@ -3556,6 +3724,8 @@ class SQLAlchemyStore:
             run = session.get(tables.AnalysisRun, run_id)
             if run is None:
                 raise KeyError(run_id)
+            if run.status == "cancelled":
+                return self._analysis_run_record(run)
             case = session.get(tables.Case, run.case_id)
             run.status = "failed"
             run.failed_at = _now()

@@ -17,10 +17,22 @@ class CaseCreateRequest(BaseModel):
     timezone: str = "UTC"
 
 
+class CaseUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1)
+    issue_description: str | None = None
+    product: str | None = None
+    service: str | None = None
+    environment: str | None = None
+    incident_start: datetime | None = None
+    incident_end: datetime | None = None
+    timezone: str | None = None
+
+
 class CaseResponse(BaseModel):
     case_id: str
     case_key: str
     title: str | None = None
+    issue_description: str | None = None
     status: str
     product: str | None = None
     service: str | None = None

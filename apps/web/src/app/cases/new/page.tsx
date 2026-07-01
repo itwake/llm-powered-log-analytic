@@ -55,12 +55,12 @@ export default function NewCasePage() {
         const uploaded = selectedFiles.length
           ? await casesApi.uploadFiles(created.case_id, selectedFiles)
           : [];
-        const run = await runsApi.start(created.case_id, {
+        await runsApi.start(created.case_id, {
           input_file_ids: uploaded.map((file) => file.file_id),
           input_paths: [],
           config: {default_window_size_seconds: 60},
-        });
-        router.push(`/cases/${created.case_id}/runs/${run.analysis_run_id}/summary`);
+        }, {background: true});
+        router.push(`/cases/${created.case_id}`);
         return;
       }
       router.push(`/cases/${created.case_id}`);

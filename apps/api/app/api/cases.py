@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 import html
 import json
+import logging
 import uuid
 from typing import Any
 
@@ -24,6 +26,7 @@ from app.schemas.case import (
     CaseCollaboratorResponse,
     CaseCreateRequest,
     CaseResponse,
+    CaseUpdateRequest,
     CausalSummaryUpdateRequest,
     ExportRequest,
     FeedbackRequest,
@@ -56,6 +59,7 @@ from app.store import MetadataStore, UserRecord, sanitize_error_message
 
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
+_BACKGROUND_ANALYSIS_LOGGER = logging.getLogger("logan.analysis.background")
 
 
 def _case_response(record: Any) -> CaseResponse:
@@ -63,6 +67,7 @@ def _case_response(record: Any) -> CaseResponse:
         case_id=record.id,
         case_key=record.case_key,
         title=record.title,
+        issue_description=record.issue_description,
         status=record.status,
         product=record.product,
         service=record.service,
@@ -298,6 +303,44 @@ def _upload_path_for_analysis(upload: Any) -> str:
     return str(path)
 
 
+def _background_analysis_tasks(request: Request) -> dict[str, asyncio.Task[Any]]:
+    tasks = getattr(request.app.state, "analysis_tasks", None)
+    if not isinstance(tasks, dict):
+        tasks = {}
+        request.app.state.analysis_tasks = tasks
+    return tasks
+
+
+def _track_background_analysis_task(
+    request: Request,
+    *,
+    run_id: str,
+    task: asyncio.Task[Any],
+) -> None:
+    tasks = _background_analysis_tasks(request)
+    tasks[run_id] = task
+
+    def cleanup(done_task: asyncio.Task[Any]) -> None:
+        tasks.pop(run_id, None)
+        try:
+            done_task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            _BACKGROUND_ANALYSIS_LOGGER.exception(
+                "background analysis task failed",
+                extra={"analysis_run_id": run_id},
+            )
+
+    task.add_done_callback(cleanup)
+
+
+def _cancel_background_analysis_task(request: Request, run_id: str) -> None:
+    task = _background_analysis_tasks(request).get(run_id)
+    if task is not None and not task.done():
+        task.cancel()
+
+
 @router.post("", response_model=CaseResponse)
 def create_case(
     payload: CaseCreateRequest,
@@ -347,6 +390,59 @@ def get_case(
         hide_forbidden=True,
     )
     return _case_response(case)
+
+
+@router.patch("/{case_id}", response_model=CaseResponse)
+def update_case(
+    case_id: str,
+    payload: CaseUpdateRequest,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> CaseResponse:
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
+    data = payload.model_dump(exclude_unset=True)
+    if "title" in data and data["title"] is None:
+        raise HTTPException(status_code=400, detail="title cannot be null")
+    if "timezone" in data and not data["timezone"]:
+        data["timezone"] = "UTC"
+    try:
+        updated = store.update_case(case_id=case_id, data=data, user_id=user.id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="case not found") from exc
+    return _case_response(updated)
+
+
+@router.delete("/{case_id}")
+def delete_case(
+    request: Request,
+    case_id: str,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> dict[str, object]:
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="owner",
+        hide_forbidden=False,
+    )
+    active_run_ids = [
+        run.id
+        for run in store.list_analysis_runs(case_id)
+        if run.status not in {"completed", "failed", "cancelled"}
+    ]
+    deleted = store.delete_case(case_id=case_id, user_id=user.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="case not found")
+    for run_id in active_run_ids:
+        _cancel_background_analysis_task(request, run_id)
+    return {"status": "deleted", "deleted": True}
 
 
 @router.get(
@@ -788,6 +884,7 @@ async def start_analysis(
     request: Request,
     case_id: str,
     payload: AnalysisRunRequest,
+    background: bool = False,
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
     gateway: Any = Depends(get_model_gateway),
@@ -803,6 +900,25 @@ async def start_analysis(
     for file_id in payload.input_file_ids:
         upload = _require_upload_for_case(store, case_id, file_id)
         input_paths.append(_upload_path_for_analysis(upload))
+    if background:
+        run = store.create_analysis_run(
+            case_id=case_id,
+            user_id=user.id,
+            config=payload.config,
+        )
+        task = asyncio.create_task(
+            store.run_analysis(
+                run_id=run.id,
+                user_id=user.id,
+                input_paths=input_paths,
+                config=payload.config,
+                gateway=gateway,
+                s3_client_factory=getattr(request.app.state, "s3_client_factory", None),
+            ),
+            name=f"analysis-run-{run.id}",
+        )
+        _track_background_analysis_task(request, run_id=run.id, task=task)
+        return {"analysis_run_id": run.id, "status": run.status}
     try:
         run = await store.start_analysis(
             case_id=case_id,
@@ -861,6 +977,32 @@ def get_analysis_run(
     if not run or run.case_id != case_id:
         raise HTTPException(status_code=404, detail="analysis run not found")
     return _analysis_run_response(run).model_dump(mode="json")
+
+
+@router.post("/{case_id}/analysis-runs/{run_id}/cancel", response_model=AnalysisRunResponse)
+def cancel_analysis_run(
+    request: Request,
+    case_id: str,
+    run_id: str,
+    user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
+) -> AnalysisRunResponse:
+    require_case_permission(
+        store=store,
+        user=user,
+        case_id=case_id,
+        permission="edit",
+        hide_forbidden=False,
+    )
+    run = store.get_analysis_run(run_id)
+    if not run or run.case_id != case_id:
+        raise HTTPException(status_code=404, detail="analysis run not found")
+    try:
+        cancelled = store.cancel_analysis_run(run_id=run_id, user_id=user.id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="analysis run not found") from exc
+    _cancel_background_analysis_task(request, run_id)
+    return _analysis_run_response(cancelled)
 
 
 @router.get(

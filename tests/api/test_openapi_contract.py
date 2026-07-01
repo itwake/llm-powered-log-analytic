@@ -8,12 +8,13 @@ from scripts.export_openapi import current_openapi_schema
 
 REQUIRED_ENDPOINTS: dict[str, set[str]] = {
     "/api/cases": {"get", "post"},
-    "/api/cases/{case_id}": {"get"},
+    "/api/cases/{case_id}": {"delete", "get", "patch"},
     "/api/cases/{case_id}/uploads": {"post"},
     "/api/cases/{case_id}/uploads/{file_id}/content": {"put"},
     "/api/cases/{case_id}/uploads/{file_id}/complete": {"post"},
     "/api/cases/{case_id}/analysis-runs": {"get", "post"},
     "/api/cases/{case_id}/analysis-runs/{run_id}": {"get"},
+    "/api/cases/{case_id}/analysis-runs/{run_id}/cancel": {"post"},
     "/api/cases/{case_id}/analysis-runs/{run_id}/events": {"get"},
     "/api/cases/{case_id}/analysis-runs/{run_id}/summary": {"get"},
     "/api/cases/{case_id}/analysis-runs/{run_id}/temporal": {"get"},

@@ -13,6 +13,9 @@ function statusClass(status: string): string {
   if (status === "failed") {
     return "red";
   }
+  if (status === "cancelled") {
+    return "blue";
+  }
   if (status === "processing" || status === "uploading") {
     return "amber";
   }
@@ -69,6 +72,7 @@ export default function CasesPage() {
             <option value="processing">Processing</option>
             <option value="ready">Ready</option>
             <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         </label>
         <label className="inline-field">

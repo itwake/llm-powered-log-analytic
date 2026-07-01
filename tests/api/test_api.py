@@ -364,6 +364,71 @@ async def _create_completed_sample_run(client: AsyncClient) -> tuple[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_case_can_be_updated_and_deleted() -> None:
+    client, store, _ = await _authenticated_client()
+    case_id = await _create_case(client)
+
+    updated = await client.patch(
+        f"/api/cases/{case_id}",
+        json={
+            "title": "Updated checkout incident",
+            "issue_description": "Updated customer impact.",
+            "product": "commerce-platform",
+            "service": "payments",
+            "environment": None,
+            "timezone": "UTC",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    updated_body = updated.json()
+    assert updated_body["title"] == "Updated checkout incident"
+    assert updated_body["issue_description"] == "Updated customer impact."
+    assert updated_body["service"] == "payments"
+    assert updated_body["environment"] is None
+
+    deleted = await client.delete(f"/api/cases/{case_id}")
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {"status": "deleted", "deleted": True}
+    assert (await client.get(f"/api/cases/{case_id}")).status_code == 404
+    cases = await client.get("/api/cases")
+    assert cases.status_code == 200
+    assert cases.json()["total"] == 0
+
+    audit_actions = {record.action for record in store.list_audit_logs(case_id=case_id)}
+    assert {"case.update", "case.delete"}.issubset(audit_actions)
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_analysis_run_can_be_cancelled() -> None:
+    client, store, user_id = await _authenticated_client()
+    case_id = await _create_case(client)
+    run = store.create_analysis_run(
+        case_id=case_id,
+        user_id=user_id,
+        config={"default_window_size_seconds": 60},
+    )
+
+    cancelled = await client.post(f"/api/cases/{case_id}/analysis-runs/{run.id}/cancel")
+    assert cancelled.status_code == 200, cancelled.text
+    cancelled_body = cancelled.json()
+    assert cancelled_body["analysis_run_id"] == run.id
+    assert cancelled_body["status"] == "cancelled"
+    assert cancelled_body["current_step"] == "cancelled"
+    assert cancelled_body["completed_at"] is not None
+
+    events = await client.get(f"/api/cases/{case_id}/analysis-runs/{run.id}/events")
+    assert events.status_code == 200, events.text
+    assert [item["event_type"] for item in events.json()["items"]] == ["cancelled"]
+    assert store.get_case(case_id).status == "cancelled"
+    assert {record.action for record in store.list_audit_logs(case_id=case_id)} >= {
+        "analysis.start",
+        "analysis.cancel",
+    }
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_prometheus_metrics_endpoint_records_safe_api_request_metrics() -> None:
     store = InMemoryStore(Settings(metrics_enabled=True))
     app = create_app(

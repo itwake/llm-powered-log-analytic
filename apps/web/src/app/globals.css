@@ -470,6 +470,10 @@ th {
   background: var(--red);
 }
 
+.progress-fill.cancelled {
+  background: var(--blue);
+}
+
 .progress-metrics {
   display: grid;
   gap: 10px;
@@ -534,6 +538,10 @@ th {
   background: var(--red);
 }
 
+.step-item.cancelled .step-dot {
+  background: var(--blue);
+}
+
 .step-item div {
   display: grid;
   gap: 3px;
@@ -559,6 +567,16 @@ th {
   margin: 0;
 }
 
+.event-log-scroll {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 10px;
+}
+
 .event-row {
   align-items: center;
   display: grid;
@@ -567,6 +585,17 @@ th {
 }
 
 .event-row span {
+  overflow-wrap: anywhere;
+}
+
+.event-row span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+}
+
+.event-row small {
+  color: var(--muted);
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 

@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { AnalysisRunResponse, JobEventResponse } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 
@@ -27,7 +30,7 @@ const PROGRESS_METRICS = [
   ["edges", "Edges"],
 ] as const;
 
-type StepStatus = "pending" | "processing" | "completed" | "failed";
+type StepStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
 
 function statusClass(status: string): string {
   if (status === "completed") {
@@ -35,6 +38,9 @@ function statusClass(status: string): string {
   }
   if (status === "failed") {
     return "red";
+  }
+  if (status === "cancelled") {
+    return "blue";
   }
   if (status === "processing" || status === "queued") {
     return "amber";
@@ -60,6 +66,12 @@ function stepStatus(
   }
   if (latestEvent?.status === "completed" || latestEvent?.event_type === "completed") {
     return "completed";
+  }
+  if (latestEvent?.status === "cancelled" || latestEvent?.event_type === "cancelled") {
+    return "cancelled";
+  }
+  if (run.status === "cancelled") {
+    return "pending";
   }
   if (latestEvent?.status === "processing" || latestEvent?.event_type === "started") {
     return "processing";
@@ -90,9 +102,29 @@ interface AnalysisProgressPanelProps {
   caseId: string;
   run: AnalysisRunResponse | null;
   events: JobEventResponse[];
+  cancelling?: boolean;
+  onCancel?: (run: AnalysisRunResponse) => void;
 }
 
-export function AnalysisProgressPanel({caseId, run, events}: AnalysisProgressPanelProps) {
+function terminalRunStatus(status: string): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+export function AnalysisProgressPanel({
+  caseId,
+  run,
+  events,
+  cancelling = false,
+  onCancel,
+}: AnalysisProgressPanelProps) {
+  const eventLogRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (eventLogRef.current) {
+      eventLogRef.current.scrollTop = eventLogRef.current.scrollHeight;
+    }
+  }, [events.length, run?.analysis_run_id]);
+
   if (!run) {
     return (
       <section className="panel progress-panel">
@@ -109,12 +141,13 @@ export function AnalysisProgressPanel({caseId, run, events}: AnalysisProgressPan
   });
   const completedSteps = stepRows.filter((step) => step.status === "completed").length;
   const failed = run.status === "failed" || stepRows.some((step) => step.status === "failed");
+  const cancelled = run.status === "cancelled";
   const completionPercent = failed
     ? Math.max(8, Math.round((completedSteps / PIPELINE_STEPS.length) * 100))
     : run.status === "completed"
       ? 100
       : Math.max(8, Math.round((completedSteps / PIPELINE_STEPS.length) * 100));
-  const recentEvents = [...events].slice(-6).reverse();
+  const canCancel = !terminalRunStatus(run.status) && Boolean(onCancel);
 
   return (
     <section className="panel progress-panel">
@@ -125,12 +158,24 @@ export function AnalysisProgressPanel({caseId, run, events}: AnalysisProgressPan
             Run #{run.run_number} - {run.current_step}
           </p>
         </div>
-        <span className={`pill ${statusClass(run.status)}`}>{run.status}</span>
+        <div className="form-actions">
+          {canCancel && (
+            <button
+              className="button danger"
+              disabled={cancelling}
+              type="button"
+              onClick={() => onCancel?.(run)}
+            >
+              {cancelling ? "Stopping" : "Terminate"}
+            </button>
+          )}
+          <span className={`pill ${statusClass(run.status)}`}>{run.status}</span>
+        </div>
       </div>
 
       <div className="progress-track" aria-label="Analysis progress">
         <div
-          className={`progress-fill ${failed ? "failed" : ""}`}
+          className={`progress-fill ${failed ? "failed" : cancelled ? "cancelled" : ""}`}
           style={{width: `${completionPercent}%`}}
         />
       </div>
@@ -179,16 +224,24 @@ export function AnalysisProgressPanel({caseId, run, events}: AnalysisProgressPan
         )}
       </div>
 
-      {recentEvents.length > 0 && (
+      {events.length > 0 && (
         <div className="event-log">
-          <h3>Recent Events</h3>
-          {recentEvents.map((event) => (
-            <div className="event-row" key={event.id}>
-              <span className={`pill ${statusClass(event.status)}`}>{event.event_type}</span>
-              <span>{event.step_name}</span>
-              <span className="muted">{formatDateTime(event.created_at)}</span>
-            </div>
-          ))}
+          <h3>Event Log</h3>
+          <div className="event-log-scroll" ref={eventLogRef}>
+            {events.map((event) => (
+              <div className="event-row" key={event.id}>
+                <span className={`pill ${statusClass(event.status)}`}>{event.event_type}</span>
+                <span>
+                  {event.step_name}
+                  {event.metadata && Object.keys(event.metadata).length > 0 && (
+                    <small>{metadataPreview(event.metadata)}</small>
+                  )}
+                  {event.error_message && <small>{event.error_message}</small>}
+                </span>
+                <span className="muted">{formatDateTime(event.created_at)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </section>

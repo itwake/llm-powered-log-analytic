@@ -50,6 +50,8 @@ DEFAULT_ORGANIZATION_SLUG = "default"
 DEFAULT_ORGANIZATION_NAME = "Default Organization"
 RAW_LOG_RETAINED_MARKER = "[raw log text scrubbed by retention policy]"
 MODEL_INVOCATION_AUDIT_ACTION = "model.invocation"
+TERMINAL_ANALYSIS_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
+CANCELLABLE_ANALYSIS_RUN_STATUSES = frozenset({"queued", "processing"})
 _JOB_EVENT_LOGGER = logging.getLogger("logan.analysis.progress")
 
 
@@ -142,6 +144,12 @@ _SENSITIVE_ARTIFACT_KEY_PARTS = {
     "source_token",
     "token",
 }
+
+
+class AnalysisRunCancelled(RuntimeError):
+    pass
+
+
 _SAFE_ARTIFACT_STRING_KEYS = {
     "artifact_error",
     "artifact_type",
@@ -766,6 +774,12 @@ class MetadataStore(Protocol):
 
     def create_case(self, *, user_id: str, data: dict[str, Any]) -> CaseRecord: ...
 
+    def update_case(
+        self, *, case_id: str, data: dict[str, Any], user_id: str
+    ) -> CaseRecord: ...
+
+    def delete_case(self, *, case_id: str, user_id: str) -> bool: ...
+
     def get_case(self, case_id: str) -> CaseRecord | None: ...
 
     def list_cases(
@@ -872,9 +886,26 @@ class MetadataStore(Protocol):
         s3_client_factory: S3ClientFactory | None = None,
     ) -> AnalysisRunRecord: ...
 
+    def create_analysis_run(
+        self, *, case_id: str, user_id: str, config: dict[str, Any]
+    ) -> AnalysisRunRecord: ...
+
+    async def run_analysis(
+        self,
+        *,
+        run_id: str,
+        user_id: str,
+        input_paths: list[str],
+        config: dict[str, Any],
+        gateway: Any | None = None,
+        s3_client_factory: S3ClientFactory | None = None,
+    ) -> AnalysisRunRecord: ...
+
     def get_analysis_run(self, run_id: str) -> AnalysisRunRecord | None: ...
 
     def list_analysis_runs(self, case_id: str) -> list[AnalysisRunRecord]: ...
+
+    def cancel_analysis_run(self, *, run_id: str, user_id: str) -> AnalysisRunRecord: ...
 
     def record_job_event(
         self,
@@ -1321,6 +1352,59 @@ class InMemoryStore:
             case_id=case_id,
         )
         return record
+
+    def update_case(
+        self, *, case_id: str, data: dict[str, Any], user_id: str
+    ) -> CaseRecord:
+        record = self.cases.get(case_id)
+        if record is None:
+            raise KeyError(case_id)
+        allowed_fields = {
+            "title",
+            "issue_description",
+            "product",
+            "service",
+            "environment",
+            "incident_start",
+            "incident_end",
+            "timezone",
+        }
+        for key, value in data.items():
+            if key in allowed_fields:
+                setattr(record, key, value)
+        self.record_audit(
+            action="case.update",
+            user_id=user_id,
+            target_type="case",
+            target_id=case_id,
+            case_id=case_id,
+            metadata={"fields": sorted(key for key in data if key in allowed_fields)},
+        )
+        return record
+
+    def delete_case(self, *, case_id: str, user_id: str) -> bool:
+        record = self.cases.pop(case_id, None)
+        if record is None:
+            return False
+        for run in self.runs.values():
+            if run.case_id == case_id and run.status in CANCELLABLE_ANALYSIS_RUN_STATUSES:
+                self.cancel_analysis_run(run_id=run.id, user_id=user_id)
+        self.case_collaborators = {
+            key: collaborator
+            for key, collaborator in self.case_collaborators.items()
+            if key[0] != case_id
+        }
+        self.case_group_access = {
+            key: access for key, access in self.case_group_access.items() if key[0] != case_id
+        }
+        self.record_audit(
+            action="case.delete",
+            user_id=user_id,
+            target_type="case",
+            target_id=case_id,
+            case_id=case_id,
+        )
+        return True
 
     def get_case(self, case_id: str) -> CaseRecord | None:
         return self.cases.get(case_id)
@@ -1813,6 +1897,19 @@ class InMemoryStore:
         gateway: Any | None = None,
         s3_client_factory: S3ClientFactory | None = None,
     ) -> AnalysisRunRecord:
+        run = self.create_analysis_run(case_id=case_id, user_id=user_id, config=config)
+        return await self.run_analysis(
+            run_id=run.id,
+            user_id=user_id,
+            input_paths=input_paths,
+            config=config,
+            gateway=gateway,
+            s3_client_factory=s3_client_factory,
+        )
+
+    def create_analysis_run(
+        self, *, case_id: str, user_id: str, config: dict[str, Any]
+    ) -> AnalysisRunRecord:
         case = self.cases[case_id]
         run_number = 1 + len([run for run in self.runs.values() if run.case_id == case_id])
         run = AnalysisRunRecord(
@@ -1838,7 +1935,32 @@ class InMemoryStore:
             target_id=run.id,
             case_id=case_id,
         )
+        return run
+
+    def _analysis_run_cancel_requested(self, run_id: str) -> bool:
+        run = self.runs.get(run_id)
+        return run is not None and run.status == "cancelled"
+
+    def _raise_if_analysis_cancelled(self, run_id: str) -> None:
+        if self._analysis_run_cancel_requested(run_id):
+            raise AnalysisRunCancelled("analysis run was cancelled")
+
+    async def run_analysis(
+        self,
+        *,
+        run_id: str,
+        user_id: str,
+        input_paths: list[str],
+        config: dict[str, Any],
+        gateway: Any | None = None,
+        s3_client_factory: S3ClientFactory | None = None,
+    ) -> AnalysisRunRecord:
+        run = self.runs[run_id]
+        case_id = run.case_id
+        case = self.cases[case_id]
+        config = dict(config or run.config)
         try:
+            self._raise_if_analysis_cancelled(run.id)
             if not input_paths:
                 fixture_dir = Path("tests/fixtures/logs/checkout_incident")
                 input_paths = [str(path) for path in sorted(fixture_dir.glob("*.log"))]
@@ -1881,6 +2003,7 @@ class InMemoryStore:
                 return run
 
             def record_progress(event: dict[str, Any]) -> None:
+                self._raise_if_analysis_cancelled(run.id)
                 job_event = self.record_job_event(
                     case_id=case_id,
                     analysis_run_id=run.id,
@@ -1897,6 +2020,7 @@ class InMemoryStore:
                     error_message=event.get("error_message"),
                 )
                 run.progress = apply_job_event_progress(run.progress, job_event)
+                self._raise_if_analysis_cancelled(run.id)
 
             with materialize_analysis_inputs(
                 input_paths,
@@ -1935,11 +2059,16 @@ class InMemoryStore:
                     gateway=gateway,
                     progress_callback=record_progress,
                 )
+            self._raise_if_analysis_cancelled(run.id)
             result = result.model_copy(
                 update={"progress": merge_recorded_progress(result.progress, run.progress)}
             )
             run = self.complete_analysis_run(run_id=run.id, result=result, user_id=user_id)
+        except AnalysisRunCancelled:
+            run = self.cancel_analysis_run(run_id=run.id, user_id=user_id)
         except Exception as exc:
+            if self._analysis_run_cancel_requested(run.id):
+                return self.cancel_analysis_run(run_id=run.id, user_id=user_id)
             error_message = sanitize_error_message(exc)
             run.status = "failed"
             run.error_message = error_message
@@ -1953,6 +2082,44 @@ class InMemoryStore:
                 metadata={"error_message": error_message},
             )
             raise
+        return run
+
+    def cancel_analysis_run(self, *, run_id: str, user_id: str) -> AnalysisRunRecord:
+        run = self.runs.get(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        if run.status in TERMINAL_ANALYSIS_RUN_STATUSES:
+            return run
+        previous_step = str((run.progress or {}).get("current_step") or run.status)
+        job_event = self.record_job_event(
+            case_id=run.case_id,
+            analysis_run_id=run.id,
+            step_name=previous_step,
+            event_type="cancelled",
+            status="cancelled",
+            attempt=1,
+            idempotency_key=f"cancel:{run.id}",
+            metadata={"cancelled_by": user_id, "previous_step": previous_step},
+        )
+        run.progress = apply_job_event_progress(run.progress, job_event)
+        progress = dict(run.progress or {})
+        progress["current_step"] = "cancelled"
+        progress["cancelled_at"] = datetime.now(UTC).isoformat()
+        run.progress = progress
+        run.status = "cancelled"
+        run.completed_at = datetime.now(UTC)
+        run.error_message = None
+        case = self.cases.get(run.case_id)
+        if case is not None:
+            case.status = "cancelled"
+        self.record_audit(
+            action="analysis.cancel",
+            user_id=user_id,
+            target_type="analysis_run",
+            target_id=run.id,
+            case_id=run.case_id,
+            metadata={"previous_step": previous_step},
+        )
         return run
 
     def get_analysis_run(self, run_id: str) -> AnalysisRunRecord | None:
@@ -2037,6 +2204,8 @@ class InMemoryStore:
         run = self.runs.get(run_id)
         if run is None:
             raise KeyError(run_id)
+        if run.status == "cancelled":
+            return run
         if run.status == "completed" and run.result is not None:
             return run
         case = self.cases.get(run.case_id)
@@ -2077,6 +2246,8 @@ class InMemoryStore:
         run = self.runs.get(run_id)
         if run is None:
             raise KeyError(run_id)
+        if run.status == "cancelled":
+            return run
         case = self.cases.get(run.case_id)
         sanitized_error = sanitize_error_message(error_message)
         run.status = "failed"

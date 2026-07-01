@@ -538,6 +538,80 @@ def test_sqlalchemy_case_collaborators_persist_and_filter_access(tmp_path: Path)
     }.issubset(actions)
 
 
+def test_sqlalchemy_case_update_cancel_and_delete(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
+    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+    owner = store.register_user(
+        email="sql-edit-owner@example.com",
+        username="sql-edit-owner",
+        full_name="SQL Edit Owner",
+        password="password123",
+    )
+    case = store.create_case(
+        user_id=owner.id,
+        data={
+            "title": "Original SQL case",
+            "issue_description": "Before update",
+            "product": "commerce-platform",
+            "service": "checkout",
+            "environment": "test",
+            "incident_start": None,
+            "incident_end": None,
+            "timezone": "UTC",
+        },
+    )
+
+    updated = store.update_case(
+        case_id=case.id,
+        user_id=owner.id,
+        data={
+            "title": "Updated SQL case",
+            "issue_description": "After update",
+            "service": "payments",
+            "environment": None,
+        },
+    )
+    assert updated.title == "Updated SQL case"
+    assert updated.issue_description == "After update"
+    assert updated.service == "payments"
+    assert updated.environment is None
+
+    run = store.create_analysis_run(
+        case_id=case.id,
+        user_id=owner.id,
+        config={"default_window_size_seconds": 60},
+    )
+    cancelled = store.cancel_analysis_run(run_id=run.id, user_id=owner.id)
+    assert cancelled.status == "cancelled"
+    assert cancelled.progress["current_step"] == "cancelled"
+    assert [event.event_type for event in store.list_job_events(analysis_run_id=run.id)] == [
+        "cancelled"
+    ]
+
+    active_run = store.create_analysis_run(
+        case_id=case.id,
+        user_id=owner.id,
+        config={"default_window_size_seconds": 60},
+    )
+    assert store.delete_case(case_id=case.id, user_id=owner.id) is True
+    assert store.get_case(case.id) is None
+    assert store.list_cases()[1] == 0
+    assert store.list_cases_for_user(owner)[1] == 0
+    assert store.user_can_access_case(owner.id, case.id, "view") is False
+    active_run_after_delete = store.get_analysis_run(active_run.id)
+    assert active_run_after_delete is not None
+    assert active_run_after_delete.status == "cancelled"
+    with store.session_factory() as session:
+        row = session.get(tables.Case, case.id)
+        assert row is not None
+        assert row.deleted_at is not None
+        assert row.status == "deleted"
+
+    audit_actions = {record.action for record in store.list_audit_logs(case_id=case.id)}
+    assert {"case.update", "analysis.cancel", "case.delete"}.issubset(audit_actions)
+
+
 @pytest.mark.asyncio
 async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"

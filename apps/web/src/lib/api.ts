@@ -298,10 +298,22 @@ export interface CaseCreateRequest {
   timezone?: string;
 }
 
+export interface CaseUpdateRequest {
+  title?: string;
+  issue_description?: string | null;
+  product?: string | null;
+  service?: string | null;
+  environment?: string | null;
+  incident_start?: string | null;
+  incident_end?: string | null;
+  timezone?: string | null;
+}
+
 export interface CaseResponse {
   case_id: string;
   case_key: string;
   title: string | null;
+  issue_description: string | null;
   status: string;
   product: string | null;
   service: string | null;
@@ -759,6 +771,10 @@ export const casesApi = {
   create: (payload: CaseCreateRequest) =>
     request<CaseResponse>("/api/cases", {method: "POST", body: payload}),
   get: (caseId: string) => request<CaseResponse>(`/api/cases/${caseId}`),
+  update: (caseId: string, payload: CaseUpdateRequest) =>
+    request<CaseResponse>(`/api/cases/${caseId}`, {method: "PATCH", body: payload}),
+  remove: (caseId: string) =>
+    request<{status: string; deleted: boolean}>(`/api/cases/${caseId}`, {method: "DELETE"}),
   listCollaborators: (caseId: string) =>
     request<CaseCollaboratorListResponse>(`/api/cases/${caseId}/collaborators`),
   upsertCollaborator: (caseId: string, payload: {user_id: string; role: string}) =>
@@ -891,13 +907,18 @@ export const casesApi = {
 
 export const runsApi = {
   list: (caseId: string) => request<AnalysisRunListResponse>(`/api/cases/${caseId}/analysis-runs`),
-  start: (caseId: string, payload: AnalysisRunRequest) =>
+  start: (caseId: string, payload: AnalysisRunRequest, options?: {background?: boolean}) =>
     request<StartAnalysisResponse>(`/api/cases/${caseId}/analysis-runs`, {
       method: "POST",
       body: payload,
+      query: {background: options?.background || undefined},
     }),
   get: (caseId: string, runId: string) =>
     request<AnalysisRunResponse>(`/api/cases/${caseId}/analysis-runs/${runId}`),
+  cancel: (caseId: string, runId: string) =>
+    request<AnalysisRunResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/cancel`, {
+      method: "POST",
+    }),
   events: (caseId: string, runId: string) =>
     request<JobEventListResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/events`),
 };

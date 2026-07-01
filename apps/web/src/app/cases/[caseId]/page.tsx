@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   AnalysisRunResponse,
@@ -37,6 +37,9 @@ function statusClass(status: string): string {
   }
   if (status === "failed") {
     return "red";
+  }
+  if (status === "cancelled") {
+    return "blue";
   }
   if (status === "processing" || status === "uploading") {
     return "amber";
@@ -91,11 +94,36 @@ function uploadPercent(item: UploadItem): number {
 }
 
 function terminalRunStatus(status: string): boolean {
-  return status === "completed" || status === "failed";
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+function emptyToNull(value: string): string | null {
+  return value.trim() ? value.trim() : null;
+}
+
+function localDateTimeToIso(value: string): string | null {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function isoToLocalDateTime(value: string | null): string {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
 export default function CaseWorkspacePage() {
   const {caseId} = useParams<{caseId: string}>();
+  const router = useRouter();
   const [caseRecord, setCaseRecord] = useState<CaseResponse | null>(null);
   const [runs, setRuns] = useState<AnalysisRunResponse[]>([]);
   const [runEvents, setRunEvents] = useState<Record<string, JobEventResponse[]>>({});
@@ -104,7 +132,18 @@ export default function CaseWorkspacePage() {
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState<"files" | "sample" | null>(null);
+  const [editingCase, setEditingCase] = useState(false);
+  const [savingCase, setSavingCase] = useState(false);
+  const [deletingCase, setDeletingCase] = useState(false);
+  const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [caseTitle, setCaseTitle] = useState("");
+  const [caseIssueDescription, setCaseIssueDescription] = useState("");
+  const [caseProduct, setCaseProduct] = useState("");
+  const [caseService, setCaseService] = useState("");
+  const [caseEnvironment, setCaseEnvironment] = useState("");
+  const [caseIncidentStart, setCaseIncidentStart] = useState("");
+  const [caseIncidentEnd, setCaseIncidentEnd] = useState("");
   const [askQuestion, setAskQuestion] = useState("");
   const [askAnswer, setAskAnswer] = useState("");
   const [askEvidenceRefs, setAskEvidenceRefs] = useState<EvidenceRef[]>([]);
@@ -181,6 +220,19 @@ export default function CaseWorkspacePage() {
     void load();
   }, [caseId]);
 
+  useEffect(() => {
+    if (!caseRecord) {
+      return;
+    }
+    setCaseTitle(caseRecord.title || "");
+    setCaseIssueDescription(caseRecord.issue_description || "");
+    setCaseProduct(caseRecord.product || "");
+    setCaseService(caseRecord.service || "");
+    setCaseEnvironment(caseRecord.environment || "");
+    setCaseIncidentStart(isoToLocalDateTime(caseRecord.incident_start));
+    setCaseIncidentEnd(isoToLocalDateTime(caseRecord.incident_end));
+  }, [caseRecord]);
+
   useEffect(() => () => {
     askAbortRef.current?.abort();
   }, []);
@@ -238,7 +290,7 @@ export default function CaseWorkspacePage() {
       const run = await runsApi.start(caseId, {
         input_file_ids: uploaded.map((file) => file.file_id),
         config: {default_window_size_seconds: 60},
-      });
+      }, {background: true});
       setActiveRunId(run.analysis_run_id);
       await refreshRunProgress(run.analysis_run_id);
     } catch (caught) {
@@ -260,7 +312,7 @@ export default function CaseWorkspacePage() {
       const run = await runsApi.start(caseId, {
         input_paths: [],
         config: {default_window_size_seconds: 60},
-      });
+      }, {background: true});
       setActiveRunId(run.analysis_run_id);
       await refreshRunProgress(run.analysis_run_id);
     } catch (caught) {
@@ -314,20 +366,98 @@ export default function CaseWorkspacePage() {
     setAskStreaming(false);
   }
 
+  async function saveCase() {
+    setSavingCase(true);
+    setError(null);
+    try {
+      const updated = await casesApi.update(caseId, {
+        title: caseTitle,
+        issue_description: emptyToNull(caseIssueDescription),
+        product: emptyToNull(caseProduct),
+        service: emptyToNull(caseService),
+        environment: emptyToNull(caseEnvironment),
+        incident_start: localDateTimeToIso(caseIncidentStart),
+        incident_end: localDateTimeToIso(caseIncidentEnd),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      });
+      setCaseRecord(updated);
+      setEditingCase(false);
+    } catch (caught) {
+      setError(apiErrorMessage(caught));
+    } finally {
+      setSavingCase(false);
+    }
+  }
+
+  async function deleteCase() {
+    if (!window.confirm("Delete this case?")) {
+      return;
+    }
+    setDeletingCase(true);
+    setError(null);
+    try {
+      await casesApi.remove(caseId);
+      router.push("/cases");
+    } catch (caught) {
+      setError(apiErrorMessage(caught));
+      setDeletingCase(false);
+    }
+  }
+
+  async function cancelRun(run: AnalysisRunResponse) {
+    setCancellingRunId(run.analysis_run_id);
+    setError(null);
+    try {
+      const cancelled = await runsApi.cancel(caseId, run.analysis_run_id);
+      upsertRun(cancelled);
+      await refreshRunProgress(run.analysis_run_id);
+    } catch (caught) {
+      setError(apiErrorMessage(caught));
+    } finally {
+      setCancellingRunId(null);
+    }
+  }
+
   const trackedEvents = trackedRun ? runEvents[trackedRun.analysis_run_id] || [] : [];
 
   return (
-    <Shell caseId={caseId} runId={latestRun?.analysis_run_id} caseTitle={caseRecord?.title}>
+    <Shell
+      caseId={caseId}
+      runId={latestRun?.status === "completed" ? latestRun.analysis_run_id : undefined}
+      caseTitle={caseRecord?.title}
+    >
       <div className="toolbar">
         <h1>Case Workspace</h1>
-        {latestRun && (
-          <Link
-            className="button secondary"
-            href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}
-          >
-            Open latest report
-          </Link>
-        )}
+        <div className="form-actions">
+          {caseRecord && (
+            <>
+              <button
+                className="button secondary"
+                disabled={savingCase || deletingCase}
+                type="button"
+                onClick={() => setEditingCase((current) => !current)}
+              >
+                {editingCase ? "Close edit" : "Edit case"}
+              </button>
+              <button
+                className="button danger"
+                disabled={deletingCase}
+                type="button"
+                onClick={() => void deleteCase()}
+              >
+                {deletingCase ? "Deleting" : "Delete case"}
+              </button>
+            </>
+          )}
+          {latestRun?.status === "completed" && (
+            <Link
+              className="button secondary"
+              href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}
+            >
+              Open latest report
+            </Link>
+          )}
+        </div>
       </div>
 
       {error && <div className="alert error">{error}</div>}
@@ -340,6 +470,73 @@ export default function CaseWorkspacePage() {
             <Metric label="Runs" value={String(runs.length)} />
             <Metric label="Latest templates" value={progressValue(latestRun, "templates")} />
           </section>
+
+          {editingCase && (
+            <section className="panel" style={{marginTop: 14}}>
+              <h2>Edit Case</h2>
+              <div className="grid two">
+                <label className="field">
+                  Title
+                  <input
+                    required
+                    value={caseTitle}
+                    onChange={(event) => setCaseTitle(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  Product
+                  <input value={caseProduct} onChange={(event) => setCaseProduct(event.target.value)} />
+                </label>
+                <label className="field">
+                  Service
+                  <input value={caseService} onChange={(event) => setCaseService(event.target.value)} />
+                </label>
+                <label className="field">
+                  Environment
+                  <input
+                    value={caseEnvironment}
+                    onChange={(event) => setCaseEnvironment(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  Incident start
+                  <input
+                    type="datetime-local"
+                    value={caseIncidentStart}
+                    onChange={(event) => setCaseIncidentStart(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  Incident end
+                  <input
+                    type="datetime-local"
+                    value={caseIncidentEnd}
+                    onChange={(event) => setCaseIncidentEnd(event.target.value)}
+                  />
+                </label>
+              </div>
+              <label className="field">
+                Issue description
+                <textarea
+                  value={caseIssueDescription}
+                  onChange={(event) => setCaseIssueDescription(event.target.value)}
+                />
+              </label>
+              <div className="form-actions">
+                <button
+                  className="button"
+                  disabled={savingCase || !caseTitle.trim()}
+                  type="button"
+                  onClick={() => void saveCase()}
+                >
+                  {savingCase ? "Saving" : "Save case"}
+                </button>
+                <button className="button secondary" type="button" onClick={() => setEditingCase(false)}>
+                  Cancel
+                </button>
+              </div>
+            </section>
+          )}
 
           <section className="panel" style={{marginTop: 14}}>
             <h2>Run Analysis</h2>
@@ -403,7 +600,13 @@ export default function CaseWorkspacePage() {
           </section>
 
           <section style={{marginTop: 14}}>
-            <AnalysisProgressPanel caseId={caseId} run={trackedRun} events={trackedEvents} />
+            <AnalysisProgressPanel
+              caseId={caseId}
+              run={trackedRun}
+              events={trackedEvents}
+              cancelling={trackedRun?.analysis_run_id === cancellingRunId}
+              onCancel={(run) => void cancelRun(run)}
+            />
           </section>
 
           {latestRun && (
@@ -463,6 +666,7 @@ export default function CaseWorkspacePage() {
                   <tr><td>Product</td><td>{valueLabel(caseRecord.product)}</td></tr>
                   <tr><td>Service</td><td>{valueLabel(caseRecord.service)}</td></tr>
                   <tr><td>Environment</td><td>{valueLabel(caseRecord.environment)}</td></tr>
+                  <tr><td>Issue</td><td>{valueLabel(caseRecord.issue_description)}</td></tr>
                   <tr><td>Incident start</td><td>{formatDateTime(caseRecord.incident_start)}</td></tr>
                   <tr><td>Incident end</td><td>{formatDateTime(caseRecord.incident_end)}</td></tr>
                 </tbody>
@@ -503,6 +707,7 @@ export default function CaseWorkspacePage() {
                       <th>Started</th>
                       <th>Completed</th>
                       <th>Report</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -514,7 +719,21 @@ export default function CaseWorkspacePage() {
                         <td>{formatDateTime(run.started_at)}</td>
                         <td>{formatDateTime(run.completed_at)}</td>
                         <td>
-                          <Link href={`/cases/${caseId}/runs/${run.analysis_run_id}/summary`}>Summary</Link>
+                          {run.status === "completed" && (
+                            <Link href={`/cases/${caseId}/runs/${run.analysis_run_id}/summary`}>Summary</Link>
+                          )}
+                        </td>
+                        <td>
+                          {!terminalRunStatus(run.status) && (
+                            <button
+                              className="button danger"
+                              disabled={cancellingRunId === run.analysis_run_id}
+                              type="button"
+                              onClick={() => void cancelRun(run)}
+                            >
+                              {cancellingRunId === run.analysis_run_id ? "Stopping" : "Terminate"}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
