@@ -15,7 +15,7 @@ from app.observability import (
 from logan_workers.activities.broadcasting import broadcast_annotations
 from logan_workers.activities.causal import infer_causal_graph
 from logan_workers.activities.export import export_analysis
-from logan_workers.activities.inference import MockCopilotAnnotationGateway, annotate_templates
+from logan_workers.activities.inference import MockAIPlatformAnnotationGateway, annotate_templates
 from logan_workers.activities.ingestion import ingest_paths
 from logan_workers.activities.preprocessing import merge_entries, preprocess_entries
 from logan_workers.activities.sampling import select_samples
@@ -75,7 +75,7 @@ class AnalyzeCasePipeline:
         paths: list[str],
         case_context: dict[str, Any] | None = None,
         config: dict[str, Any] | None = None,
-        gateway: MockCopilotAnnotationGateway | None = None,
+        gateway: MockAIPlatformAnnotationGateway | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> AnalysisResult:
         record_pipeline_run_started()
@@ -103,7 +103,7 @@ class AnalyzeCasePipeline:
         paths: list[str],
         case_context: dict[str, Any] | None = None,
         config: dict[str, Any] | None = None,
-        gateway: MockCopilotAnnotationGateway | None = None,
+        gateway: MockAIPlatformAnnotationGateway | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> AnalysisResult:
         config = config or {}
@@ -112,7 +112,7 @@ class AnalyzeCasePipeline:
             "analysis_run_id": analysis_run_id,
             **(case_context or {}),
         }
-        gateway = gateway or MockCopilotAnnotationGateway()
+        gateway = gateway or MockAIPlatformAnnotationGateway()
         progress: dict[str, Any] = {"current_step": "queued", "steps": {}}
 
         async def emit(
@@ -218,7 +218,7 @@ class AnalyzeCasePipeline:
             lambda value: {"samples": len(value)},
         )
         annotations, model_inputs = await run_step(
-            "copilot_annotation",
+            "ai_platform_annotation",
             lambda: annotate_templates(
                 analysis_run_id=analysis_run_id,
                 templates=templates,

@@ -10,8 +10,7 @@ The current FastAPI app exposes the required foundation routes under `/api`.
 - `GET /api/auth/me`
 
 Sessions use an HttpOnly `logan_session` cookie and are revocable in the local store.
-`GET /api/auth/me` returns safe user fields including `role`, `is_active`, and
-`has_copilot_credential`.
+`GET /api/auth/me` returns safe user fields including `role` and `is_active`.
 
 ## Access Control
 
@@ -25,40 +24,8 @@ Read routes such as `GET /api/cases/{case_id}` and report/event/log routes retur
 inaccessible cases. Mutating case routes return `403` when the case exists but the caller lacks
 the needed collaborator role.
 
-## Copilot Auth
-
-- `POST /api/copilot/auth/start`
-- `POST /api/copilot/auth/check`
-- `DELETE /api/copilot/auth/credential`
-
-Default app construction uses GitHub's real device-code flow with client id `Iv1.b507a08c87ecfe98`.
-`/start` posts to `https://github.com/login/device/code` and returns only:
-
-- `auth_id`
-- `device_code`
-- `user_code`
-- `verification_uri`
-- `verification_uri_complete`
-- `expires_in`
-- `interval`
-
-`github_base_url` is accepted in `/start` requests for backwards compatibility only. Copilot OAuth
-always uses public `https://github.com`, and auth records store that public GitHub base URL.
-
-`/check` accepts `auth_id` and an optional `device_code` echoed from `/start`, matching the EFP
-portal flow while preserving older `auth_id`-only clients. It polls
-`https://github.com/login/oauth/access_token` only after the stored GitHub `interval` has elapsed;
-early checks return pending from the API without calling GitHub. It also respects `slow_down` and
-`429 Retry-After` backoff, and returns pending, authorized, declined, expired, or not-found status
-fields.
-Authorized responses return `token_type=github_source_oauth`, `runtime_type=github_copilot`,
-and `expires_at`; they never include source tokens, plugin tokens, or encrypted bytes.
-
-`DELETE /api/copilot/auth/credential` revokes active stored `github_source_oauth` and
-`copilot_plugin_token` credentials for the current user and returns only `status` and
-`revoked_count`.
-
-Tests and local no-network checks inject a deterministic fake client through `create_app(...)`.
+Tests and local no-network checks inject a deterministic fake model gateway through
+`create_app(...)`.
 
 ## Platform
 
@@ -67,31 +34,22 @@ Tests and local no-network checks inject a deterministic fake client through `cr
 - `POST /api/chat/stream`
 - `POST /api/tasks/execute`
 
-The model provider is `github_copilot` by default and the default model is `gpt-5.4`.
-The backend model gateway resolves credentials in this order:
+The model provider is `ai_platform` and the default model is `gpt-5.4`.
 
-- stored, non-expired `copilot_plugin_token`
-- stored `github_source_oauth`, exchanged via `https://api.github.com/copilot_internal/v2/token`
-- `LOGAN_GITHUB_COPILOT_TOKEN`
-- `LOGAN_GITHUB_SOURCE_TOKEN`, exchanged per call
-
-Stored source OAuth exchanges cache the returned Copilot plugin token with its parsed `expires_at`.
-Environment source tokens are exchanged in memory and are not persisted to user credentials.
-
-The gateway posts requests to `<copilot api base>/responses` with Copilot preview headers.
-Non-streaming calls return parsed backend objects with the original provider JSON, `output_text`,
-and `output_json` when `response_format={"type": "json_object"}` and the output text is valid
-JSON. Streaming calls use `Accept: text/event-stream`, parse provider SSE `data:` frames, normalize
-common text-delta shapes into `{"type":"message.delta","delta":"..."}`, and emit
-`{"type":"message.completed", ...}` for provider completion or `[DONE]`.
+The AI Platform gateway exchanges `LOGAN_AI_PLATFORM_USERNAME`, `LOGAN_AI_PLATFORM_PASSWORD`, and
+`LOGAN_AI_PLATFORM_USERCASE` through the configured iB2B endpoint when `LOGAN_AI_PLATFORM_TOKEN`
+is not set. It posts chat-completions payloads to `LOGAN_AI_PLATFORM_CHAT_HOST` plus
+`LOGAN_AI_PLATFORM_CHAT_URI` with the configured trust-token header, correlation id, and user
+session id. Streaming API callers receive a normalized single-delta stream from the completed chat
+response.
 
 `POST /api/chat/stream` accepts the same `ChatRequest` shape as `POST /api/chat` and requires the
 session cookie. Because it is a POST stream, web clients use `fetch` plus `ReadableStream` rather
 than `EventSource`. When `case_id` and `analysis_run_id` resolve to an analysis result, the API
-sends Copilot a compact redacted context containing the user message, case/run ids, causal summary
+sends the model a compact redacted context containing the user message, case/run ids, causal summary
 text, up to five causal evidence refs, and up to five template-level summary rows. It does not send
 raw log text, stored credentials, source tokens, or model prompts. Without context, the endpoint
-streams the same clear fallback message as `POST /api/chat` and does not call Copilot.
+streams the same clear fallback message as `POST /api/chat` and does not call the model.
 
 SSE frames are JSON:
 

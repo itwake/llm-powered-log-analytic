@@ -23,7 +23,7 @@ ALTER TABLE users
 ALTER TABLE cases
   ADD COLUMN IF NOT EXISTS organization_id TEXT NOT NULL DEFAULT 'default';
 
-ALTER TABLE copilot_credentials
+ALTER TABLE credentials
   ADD COLUMN IF NOT EXISTS key_id TEXT;
 
 DO $$

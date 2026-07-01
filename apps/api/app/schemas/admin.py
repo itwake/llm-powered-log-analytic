@@ -14,7 +14,6 @@ class AdminUserResponse(BaseModel):
     full_name: str | None = None
     role: str
     is_active: bool
-    has_copilot_credential: bool = False
     created_at: datetime
 
 

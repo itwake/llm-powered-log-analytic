@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 import pytest
 
-from logan_workers.activities.inference import MockCopilotAnnotationGateway
+from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
 from logan_workers.models import (
     AnalysisResult,
     CausalGraph,
@@ -571,7 +571,7 @@ async def test_sqlalchemy_warn_mode_audits_sink_error_without_failing_run(
         user_id=user.id,
         input_paths=[str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
         config={"default_window_size_seconds": 60},
-        gateway=MockCopilotAnnotationGateway(),
+        gateway=MockAIPlatformAnnotationGateway(),
     )
 
     assert run.status == "completed"
@@ -629,7 +629,7 @@ async def test_sqlalchemy_fail_mode_preserves_sink_write_and_fails_run(
             user_id=user.id,
             input_paths=[str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
             config={"default_window_size_seconds": 60},
-            gateway=MockCopilotAnnotationGateway(),
+            gateway=MockAIPlatformAnnotationGateway(),
         )
 
     run = store.list_analysis_runs(case.id)[0]

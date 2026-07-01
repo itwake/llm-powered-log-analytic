@@ -19,7 +19,6 @@ def to_user_out(store: MetadataStore, user: UserRecord) -> UserOut:
         username=user.username,
         role=user.role,
         is_active=user.is_active,
-        has_copilot_credential=store.has_credential(user.id),
     )
 
 

@@ -8,7 +8,7 @@ The production metadata model follows the final specification and is represented
 
 Core tables:
 
-- `organizations`, `users`, `sessions`, `copilot_credentials`, `copilot_device_auth`
+- `organizations`, `users`, `sessions`, `credentials`
 - `cases`, `case_collaborators`, `policy_groups`, `policy_group_members`, `case_group_access`
 - `analysis_runs`, `job_events`, `analysis_step_artifacts`, `analytics_sink_writes`
 - `raw_files`, `raw_log_lines`, `normalized_log_lines`
@@ -17,8 +17,8 @@ Core tables:
 - `causal_nodes`, `causal_edges`, `causal_summaries`
 - `feedback`, `exports`, `audit_logs`
 
-The API now has a durable SQLAlchemy metadata store for auth/session, Copilot credentials,
-device-auth polling state, organizations, policy groups, cases, uploads, analysis runs,
+The API now has a durable SQLAlchemy metadata store for auth/session, encrypted credentials,
+organizations, policy groups, cases, uploads, analysis runs,
 serialized results, normalized PostgreSQL/SQLite analytics rows, exports, feedback, and audit
 logs. The in-memory store remains available as an explicit lightweight test option.
 

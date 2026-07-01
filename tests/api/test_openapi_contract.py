@@ -22,9 +22,6 @@ REQUIRED_ENDPOINTS: dict[str, set[str]] = {
     "/api/cases/{case_id}/analysis-runs/{run_id}/causal-summary": {"get", "patch"},
     "/api/cases/{case_id}/analysis-runs/{run_id}/exports": {"post"},
     "/api/cases/{case_id}/feedback": {"post"},
-    "/api/copilot/auth/start": {"post"},
-    "/api/copilot/auth/check": {"post"},
-    "/api/copilot/auth/credential": {"delete"},
     "/api/chat/stream": {"post"},
 }
 

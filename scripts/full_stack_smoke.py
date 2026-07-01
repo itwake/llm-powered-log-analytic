@@ -35,7 +35,7 @@ PIPELINE_STEPS = {
     "preprocess_redact",
     "drain_templating",
     "representative_sampling",
-    "copilot_annotation",
+    "ai_platform_annotation",
     "broadcast_annotations",
     "temporal_aggregation",
     "causal_graph",

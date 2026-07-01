@@ -57,14 +57,12 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
         ["Causal Summary", `/cases/${caseId}/runs/${runId}/causal-summary`],
       );
     }
-    links.push(["Copilot", "/settings/copilot"]);
+    links.push(["AI Platform", "/settings/ai-platform"]);
     if (user?.role === "admin") {
       links.push(["Admin", "/admin"]);
     }
     return links;
   }, [caseId, runId, user?.role]);
-
-  const copilotStatus = user?.has_copilot_credential ? "Copilot connected" : "Copilot disconnected";
 
   return (
     <>
@@ -73,7 +71,7 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
         <span className="topbar-title">{caseTitle || "Incident workbench"}</span>
         <span className="status">
           {authState === "loading" && "Checking session"}
-          {authState === "signed-in" && `${user?.username || "Signed in"} | ${copilotStatus}`}
+          {authState === "signed-in" && `${user?.username || "Signed in"} | AI Platform`}
           {authState === "signed-out" && <Link href="/login">Sign in</Link>}
         </span>
       </header>

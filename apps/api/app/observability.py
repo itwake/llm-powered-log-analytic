@@ -25,7 +25,7 @@ PIPELINE_STEP_NAMES = frozenset(
         "preprocess_redact",
         "drain_templating",
         "representative_sampling",
-        "copilot_annotation",
+        "ai_platform_annotation",
         "broadcast_annotations",
         "temporal_aggregation",
         "causal_graph",
@@ -72,14 +72,14 @@ _PIPELINE_STEP_DURATION_SECONDS = Histogram(
     "Analysis pipeline step duration in seconds.",
     ("step_name", "status"),
 )
-_COPILOT_GATEWAY_REQUESTS_TOTAL = Counter(
-    "logan_copilot_gateway_requests_total",
-    "Copilot gateway requests by provider, model, stream mode, and status.",
+_MODEL_GATEWAY_REQUESTS_TOTAL = Counter(
+    "logan_model_gateway_requests_total",
+    "Model gateway requests by provider, model, stream mode, and status.",
     ("provider", "model", "stream", "status"),
 )
-_COPILOT_GATEWAY_REQUEST_DURATION_SECONDS = Histogram(
-    "logan_copilot_gateway_request_duration_seconds",
-    "Copilot gateway request duration in seconds.",
+_MODEL_GATEWAY_REQUEST_DURATION_SECONDS = Histogram(
+    "logan_model_gateway_request_duration_seconds",
+    "Model gateway request duration in seconds.",
     ("provider", "model", "stream", "status"),
 )
 _ANALYTICS_SINK_OPERATIONS_TOTAL = Counter(
@@ -228,7 +228,7 @@ def record_pipeline_step_failed(step_name: str, duration_seconds: float) -> None
     ).observe(max(0.0, duration_seconds))
 
 
-def record_copilot_gateway_request(
+def record_model_gateway_request(
     *,
     provider: str,
     model: str,
@@ -242,8 +242,8 @@ def record_copilot_gateway_request(
         "stream": "true" if stream else "false",
         "status": _status_label(status),
     }
-    _COPILOT_GATEWAY_REQUESTS_TOTAL.labels(**labels).inc()
-    _COPILOT_GATEWAY_REQUEST_DURATION_SECONDS.labels(**labels).observe(
+    _MODEL_GATEWAY_REQUESTS_TOTAL.labels(**labels).inc()
+    _MODEL_GATEWAY_REQUEST_DURATION_SECONDS.labels(**labels).observe(
         max(0.0, duration_seconds)
     )
 
