@@ -171,7 +171,7 @@ never needs AI Platform credentials.
 
 The runner in `scripts/full_stack_smoke.py` validates the following:
 
-- API health, user registration/login, and case creation.
+- API health, SSO sign-in, and case creation.
 - MinIO presigned single-part upload for all checkout incident fixture logs.
 - MinIO `head_object` confirms object existence and size before upload completion.
 - Analysis starts with `input_file_ids`, then a Temporal worker materializes `s3://` inputs,
@@ -656,6 +656,19 @@ Run the web workspace against the local API:
 
 ```bash
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev --workspace @logan/web
+```
+
+The web workbench now signs users in through the API-backed SSO flow only. For local
+development, either point `LOGAN_SSO_AUTHORIZE_URL` and `LOGAN_SSO_TOKEN_URL` at the
+corporate identity provider or enable the built-in mock provider with:
+
+```bash
+LOGAN_SSO_ENABLED=true
+LOGAN_SSO_MOCK_ENABLED=true
+LOGAN_SSO_AUTHORIZE_URL=http://localhost:8000/api/auth/sso/mock/authorize
+LOGAN_SSO_TOKEN_URL=http://localhost:8000/api/auth/sso/mock/token
+LOGAN_WEB_BASE_URL=http://localhost:3000
+LOGAN_CORS_ALLOWED_ORIGINS=http://localhost:3000
 ```
 
 `NEXT_PUBLIC_API_BASE_URL` defaults to an empty same-origin base, so production browser requests

@@ -4,13 +4,23 @@ The current FastAPI app exposes the required foundation routes under `/api`.
 
 ## Auth
 
-- `POST /api/auth/register`
-- `POST /api/auth/login`
+- `GET /api/auth/sso/login`
+- `GET /api/auth/sso/callback`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 
 Sessions use an HttpOnly `logan_session` cookie and are revocable in the local store.
-`GET /api/auth/me` returns safe user fields including `role` and `is_active`.
+`GET /api/auth/me` returns safe user fields including `role`, `is_active`, and
+`has_copilot_credential`.
+
+The web experience is SSO-only. `/api/auth/sso/login` starts the authorization-code
+flow, `/api/auth/sso/callback` exchanges the code, auto-provisions a local user on
+first sign-in, and mints the `logan_session` cookie used by the rest of the API.
+Legacy `POST /api/auth/register` and `POST /api/auth/login` calls return `410 Gone`.
+
+When `LOGAN_SSO_MOCK_ENABLED=true`, local-only non-schema routes
+`/api/auth/sso/mock/authorize` and `/api/auth/sso/mock/token` are also available for
+deterministic browser smoke and Playwright runs.
 
 ## Access Control
 
