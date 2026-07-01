@@ -5,22 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { CaseListResponse, casesApi } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
 import { Shell } from "@/components/Shell";
-
-function statusClass(status: string): string {
-  if (status === "ready" || status === "completed") {
-    return "green";
-  }
-  if (status === "failed") {
-    return "red";
-  }
-  if (status === "cancelled") {
-    return "blue";
-  }
-  if (status === "processing" || status === "uploading") {
-    return "amber";
-  }
-  return "blue";
-}
+import { Badge, Card, EmptyState, SkeletonBlock, statusTone } from "@/components/ui";
 
 export default function CasesPage() {
   const [data, setData] = useState<CaseListResponse | null>(null);
@@ -57,66 +42,77 @@ export default function CasesPage() {
 
   return (
     <Shell>
-      <div className="toolbar">
-        <h1>Cases</h1>
-        <Link className="button" href="/cases/new">New case</Link>
-      </div>
-
-      <form className="toolbar" onSubmit={submit}>
-        <label className="inline-field">
-          Status
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="">Any</option>
-            <option value="created">Created</option>
-            <option value="uploading">Uploading</option>
-            <option value="processing">Processing</option>
-            <option value="ready">Ready</option>
-            <option value="failed">Failed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </label>
-        <label className="inline-field">
-          Product
-          <input value={product} onChange={(event) => setProduct(event.target.value)} />
-        </label>
-        <button className="button secondary" disabled={loading} type="submit">Apply</button>
-      </form>
-
-      {error && <div className="alert error">{error}</div>}
-      <section className="panel">
-        {loading && <div className="empty">Loading cases</div>}
-        {!loading && data && data.items.length === 0 && <div className="empty">No cases found</div>}
-        {!loading && data && data.items.length > 0 && (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Case</th>
-                  <th>Product</th>
-                  <th>Service</th>
-                  <th>Status</th>
-                  <th>Incident start</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((item) => (
-                  <tr key={item.case_id}>
-                    <td>
-                      <Link href={`/cases/${item.case_id}`}>
-                        {item.case_key} {valueLabel(item.title)}
-                      </Link>
-                    </td>
-                    <td>{valueLabel(item.product)}</td>
-                    <td>{valueLabel(item.service)}</td>
-                    <td><span className={`pill ${statusClass(item.status)}`}>{item.status}</span></td>
-                    <td>{formatDateTime(item.incident_start)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="page-stack">
+        <section className="page-hero compact">
+          <div>
+            <span className="eyebrow">Incident queue</span>
+            <h1>Cases</h1>
+            <p>Open incidents, active analyses, and completed reports.</p>
           </div>
+          <Link className="button" href="/cases/new">New case</Link>
+        </section>
+
+        <form className="tool-strip toolbar" onSubmit={submit}>
+          <label className="inline-field">
+            Status
+            <select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">Any</option>
+              <option value="created">Created</option>
+              <option value="uploading">Uploading</option>
+              <option value="processing">Processing</option>
+              <option value="ready">Ready</option>
+              <option value="failed">Failed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </label>
+          <label className="inline-field">
+            Product
+            <input value={product} onChange={(event) => setProduct(event.target.value)} />
+          </label>
+          <button className="button secondary" disabled={loading} type="submit">Apply</button>
+        </form>
+
+        {error && <div className="alert error">{error}</div>}
+
+        {loading && (
+          <section className="case-card-grid">
+            <Card><SkeletonBlock lines={4} /></Card>
+            <Card><SkeletonBlock lines={4} /></Card>
+            <Card><SkeletonBlock lines={4} /></Card>
+          </section>
         )}
-      </section>
+
+        {!loading && data && data.items.length === 0 && (
+          <Card>
+            <EmptyState title="No cases found">
+              <Link className="button secondary" href="/cases/new">Create a case</Link>
+            </EmptyState>
+          </Card>
+        )}
+
+        {!loading && data && data.items.length > 0 && (
+          <section className="case-card-grid">
+            {data.items.map((item) => (
+              <Link className="case-card panel" href={`/cases/${item.case_id}`} key={item.case_id}>
+                <div className="case-card-header">
+                  <span className="eyebrow">{item.case_key}</span>
+                  <Badge tone={statusTone(item.status)}>{item.status}</Badge>
+                </div>
+                <h2>{valueLabel(item.title)}</h2>
+                <dl className="case-card-meta">
+                  <dt>Product</dt>
+                  <dd>{valueLabel(item.product)}</dd>
+                  <dt>Service</dt>
+                  <dd>{valueLabel(item.service)}</dd>
+                  <dt>Incident start</dt>
+                  <dd>{formatDateTime(item.incident_start)}</dd>
+                </dl>
+                <span className="case-card-cta">Open workspace</span>
+              </Link>
+            ))}
+          </section>
+        )}
+      </div>
     </Shell>
   );
 }

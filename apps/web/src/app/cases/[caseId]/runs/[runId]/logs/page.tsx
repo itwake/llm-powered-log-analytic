@@ -70,6 +70,14 @@ export default function LogsPage() {
     void load(keyword, service, "", "");
   }
 
+  async function copyEvidenceRef(value: string) {
+    try {
+      await navigator.clipboard?.writeText(value);
+    } catch {
+      // Clipboard access can be unavailable in some browser contexts.
+    }
+  }
+
   const serviceOptions = useMemo(() => {
     const values = new Set<string>();
     if (service) {
@@ -138,7 +146,17 @@ export default function LogsPage() {
                     <td>{formatDateTime(item.timestamp)}</td>
                     <td>{valueLabel(item.level)}</td>
                     <td>{valueLabel(item.service)}</td>
-                    <td>{item.file_path}:{item.line_number}</td>
+                    <td>
+                      <code>{item.file_path}:{item.line_number}</code>
+                      <br />
+                      <button
+                        className="button ghost"
+                        type="button"
+                        onClick={() => void copyEvidenceRef(`${item.file_path}:${item.line_number}`)}
+                      >
+                        Copy ref
+                      </button>
+                    </td>
                     <td>
                       {item.message}
                       <br />

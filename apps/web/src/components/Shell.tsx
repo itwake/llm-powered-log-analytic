@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { authApi, UserOut } from "@/lib/api";
 
@@ -29,6 +29,7 @@ function displayNameFromEmail(email: string | null | undefined): string | null {
 }
 
 export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
+  const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<UserOut | null>(null);
   const [authState, setAuthState] = useState<"loading" | "signed-in" | "signed-out">("loading");
@@ -82,26 +83,45 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
 
   const signedInDisplayName = displayNameFromEmail(user?.email) || user?.username || "Signed in";
 
+  function isActive(href: string): boolean {
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
   return (
-    <>
-      <header className="topbar">
-        <Link href="/cases" className="brand">LogAn</Link>
-        <span className="topbar-title">{caseTitle || "Incident workbench"}</span>
-        <span className="status">
-          {authState === "loading" && "Checking session"}
-          {authState === "signed-in" && `${signedInDisplayName} | AI Platform`}
-          {authState === "signed-out" && <Link href="/login">Continue with SSO</Link>}
-        </span>
-      </header>
-      <div className="layout">
-        <nav className="sidebar">
-          {nav.map(([label, href]) => (
-            <Link key={href} href={href}>{label}</Link>
-          ))}
+    <div className="app-shell">
+      <aside className="app-sidebar sidebar">
+        <div className="app-sidebar-header">
+          <Link href="/cases" className="brand app-brand">LogAn</Link>
+          <div className="app-subtitle">Incident Copilot</div>
+        </div>
+        <nav className="app-nav" aria-label="Primary">
+          {nav.map(([label, href]) => {
+            const active = isActive(href);
+            return (
+              <Link
+                aria-current={active ? "page" : undefined}
+                className={`app-nav-link ${active ? "active" : ""}`}
+                key={`${label}-${href}`}
+                href={href}
+              >
+                {label}
+              </Link>
+            );
+          })}
         </nav>
-        <main className="main">{children}</main>
+      </aside>
+      <div className="app-frame layout">
+        <header className="app-header topbar">
+          <div className="app-header-title topbar-title">{caseTitle || "Incident workbench"}</div>
+          <div className="app-header-status status">
+            {authState === "loading" && "Checking session"}
+            {authState === "signed-in" && `${signedInDisplayName} · AI Platform`}
+            {authState === "signed-out" && <Link href="/login">Continue with SSO</Link>}
+          </div>
+        </header>
+        <main className="main app-main">{children}</main>
       </div>
-    </>
+    </div>
   );
 }
 

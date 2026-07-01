@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AnalysisRunResponse,
   CaseResponse,
@@ -10,12 +10,13 @@ import {
   JobEventResponse,
   UploadProgressEvent,
   casesApi,
-  chatApi,
   runsApi,
 } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
-import { AnalysisProgressPanel } from "@/components/AnalysisProgressPanel";
+import { CaseRunInspector } from "@/components/CaseRunInspector";
+import { ChatWorkspace } from "@/components/ChatWorkspace";
 import { Metric, Shell } from "@/components/Shell";
+import { Badge, Button, Card, EmptyState, SectionHeader, statusTone } from "@/components/ui";
 
 type UploadItemStatus = "queued" | "preparing" | "hashing" | "uploading" | "verifying" | "completed" | "failed";
 
@@ -31,29 +32,9 @@ interface UploadItem {
   message?: string;
 }
 
-function statusClass(status: string): string {
-  if (status === "ready" || status === "completed") {
-    return "green";
-  }
-  if (status === "failed") {
-    return "red";
-  }
-  if (status === "cancelled") {
-    return "blue";
-  }
-  if (status === "processing" || status === "uploading") {
-    return "amber";
-  }
-  return "blue";
-}
-
 function progressValue(run: AnalysisRunResponse | null, key: string): string {
   const value = run?.progress[key];
   return typeof value === "number" ? String(value) : "n/a";
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === "AbortError";
 }
 
 function uploadKey(file: File, index: number): string {
@@ -130,6 +111,7 @@ export default function CaseWorkspacePage() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
+  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceRef | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState<"files" | "sample" | null>(null);
   const [editingCase, setEditingCase] = useState(false);
@@ -144,12 +126,6 @@ export default function CaseWorkspacePage() {
   const [caseEnvironment, setCaseEnvironment] = useState("");
   const [caseIncidentStart, setCaseIncidentStart] = useState("");
   const [caseIncidentEnd, setCaseIncidentEnd] = useState("");
-  const [askQuestion, setAskQuestion] = useState("");
-  const [askAnswer, setAskAnswer] = useState("");
-  const [askEvidenceRefs, setAskEvidenceRefs] = useState<EvidenceRef[]>([]);
-  const [askStreaming, setAskStreaming] = useState(false);
-  const [askError, setAskError] = useState<string | null>(null);
-  const askAbortRef = useRef<AbortController | null>(null);
 
   async function load() {
     setLoading(true);
@@ -232,10 +208,6 @@ export default function CaseWorkspacePage() {
     setCaseIncidentStart(isoToLocalDateTime(caseRecord.incident_start));
     setCaseIncidentEnd(isoToLocalDateTime(caseRecord.incident_end));
   }, [caseRecord]);
-
-  useEffect(() => () => {
-    askAbortRef.current?.abort();
-  }, []);
 
   const latestRun = runs[0] || null;
   const trackedRun = runs.find((run) => run.analysis_run_id === activeRunId) || latestRun;
@@ -322,50 +294,6 @@ export default function CaseWorkspacePage() {
     }
   }
 
-  async function askModel(latestRun: AnalysisRunResponse) {
-    const question = askQuestion.trim();
-    if (!question || askStreaming) {
-      return;
-    }
-    const controller = new AbortController();
-    askAbortRef.current = controller;
-    setAskStreaming(true);
-    setAskAnswer("");
-    setAskEvidenceRefs([]);
-    setAskError(null);
-    try {
-      await chatApi.stream(
-        {
-          message: question,
-          case_id: caseId,
-          analysis_run_id: latestRun.analysis_run_id,
-        },
-        {
-          delta: (delta) => setAskAnswer((current) => `${current}${delta}`),
-          evidence: (evidenceRefs) => setAskEvidenceRefs(evidenceRefs),
-          done: (message) => setAskAnswer((current) => current || message),
-          error: (message) => setAskError(message),
-        },
-        controller.signal,
-      );
-    } catch (caught) {
-      if (!isAbortError(caught)) {
-        setAskError(apiErrorMessage(caught));
-      }
-    } finally {
-      if (askAbortRef.current === controller) {
-        askAbortRef.current = null;
-      }
-      setAskStreaming(false);
-    }
-  }
-
-  function cancelAsk() {
-    askAbortRef.current?.abort();
-    askAbortRef.current = null;
-    setAskStreaming(false);
-  }
-
   async function saveCase() {
     setSavingCase(true);
     setError(null);
@@ -423,327 +351,257 @@ export default function CaseWorkspacePage() {
   return (
     <Shell
       caseId={caseId}
-      runId={latestRun?.status === "completed" ? latestRun.analysis_run_id : undefined}
-      caseTitle={caseRecord?.title}
+      runId={latestRun?.analysis_run_id}
+      caseTitle={caseRecord?.title || caseRecord?.case_key}
     >
-      <div className="toolbar">
-        <h1>Case Workspace</h1>
-        <div className="form-actions">
-          {caseRecord && (
-            <>
-              <button
-                className="button secondary"
-                disabled={savingCase || deletingCase}
-                type="button"
-                onClick={() => setEditingCase((current) => !current)}
-              >
-                {editingCase ? "Close edit" : "Edit case"}
-              </button>
-              <button
-                className="button danger"
-                disabled={deletingCase}
-                type="button"
-                onClick={() => void deleteCase()}
-              >
-                {deletingCase ? "Deleting" : "Delete case"}
-              </button>
-            </>
-          )}
-          {latestRun?.status === "completed" && (
-            <Link
-              className="button secondary"
-              href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}
-            >
-              Open latest report
-            </Link>
-          )}
-        </div>
-      </div>
+      <div className="page-stack">
+        {error && <div className="alert error">{error}</div>}
+        {loading && <Card><EmptyState title="Loading case" /></Card>}
 
-      {error && <div className="alert error">{error}</div>}
-      {loading && <section className="panel"><div className="empty">Loading case</div></section>}
-
-      {!loading && caseRecord && (
-        <>
-          <section className="grid three">
-            <Metric label="Case status" value={caseRecord.status} />
-            <Metric label="Runs" value={String(runs.length)} />
-            <Metric label="Latest templates" value={progressValue(latestRun, "templates")} />
-          </section>
-
-          {editingCase && (
-            <section className="panel" style={{marginTop: 14}}>
-              <h2>Edit Case</h2>
-              <div className="grid two">
-                <label className="field">
-                  Title
-                  <input
-                    required
-                    value={caseTitle}
-                    onChange={(event) => setCaseTitle(event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  Product
-                  <input value={caseProduct} onChange={(event) => setCaseProduct(event.target.value)} />
-                </label>
-                <label className="field">
-                  Service
-                  <input value={caseService} onChange={(event) => setCaseService(event.target.value)} />
-                </label>
-                <label className="field">
-                  Environment
-                  <input
-                    value={caseEnvironment}
-                    onChange={(event) => setCaseEnvironment(event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  Incident start
-                  <input
-                    type="datetime-local"
-                    value={caseIncidentStart}
-                    onChange={(event) => setCaseIncidentStart(event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  Incident end
-                  <input
-                    type="datetime-local"
-                    value={caseIncidentEnd}
-                    onChange={(event) => setCaseIncidentEnd(event.target.value)}
-                  />
-                </label>
-              </div>
-              <label className="field">
-                Issue description
-                <textarea
-                  value={caseIssueDescription}
-                  onChange={(event) => setCaseIssueDescription(event.target.value)}
-                />
-              </label>
-              <div className="form-actions">
-                <button
-                  className="button"
-                  disabled={savingCase || !caseTitle.trim()}
-                  type="button"
-                  onClick={() => void saveCase()}
-                >
-                  {savingCase ? "Saving" : "Save case"}
-                </button>
-                <button className="button secondary" type="button" onClick={() => setEditingCase(false)}>
-                  Cancel
-                </button>
-              </div>
-            </section>
-          )}
-
-          <section className="panel" style={{marginTop: 14}}>
-            <h2>Run Analysis</h2>
-            <label className="field">
-              Log/archive files
-              <input
-                accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
-                multiple
-                type="file"
-                onChange={(event) => handleFileSelection(Array.from(event.target.files || []))}
-              />
-            </label>
-            {uploadItems.length > 0 && (
-              <div className="upload-progress-list">
-                {uploadItems.map((item) => {
-                  const percent = uploadPercent(item);
-                  return (
-                    <div className="upload-progress-row" key={item.key}>
-                      <div className="upload-progress-header">
-                        <strong>{item.name}</strong>
-                        <span className={`pill ${statusClass(item.status)}`}>{item.status}</span>
-                      </div>
-                      <div className="progress-track compact" aria-label={`${item.name} upload progress`}>
-                        <div className="progress-fill" style={{width: `${percent}%`}} />
-                      </div>
-                      <div className="upload-progress-meta">
-                        <span>{percent}%</span>
-                        <span>{formatBytes(item.bytesSent)} / {formatBytes(item.size)}</span>
-                        {item.partNumber && item.partCount && (
-                          <span>part {item.partNumber}/{item.partCount}</span>
-                        )}
-                        {item.message && <span>{item.message}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div className="form-actions">
-              <button
-                className="button"
-                disabled={starting !== null || selectedFiles.length === 0}
-                type="button"
-                onClick={startUploadedAnalysis}
-              >
-                {starting === "files" ? "Uploading" : "Upload and analyze files"}
-              </button>
-              <button
-                className="button secondary"
-                disabled={starting !== null}
-                type="button"
-                onClick={startSampleAnalysis}
-              >
-                {starting === "sample" ? "Starting" : "Start sample/local analysis"}
-              </button>
-            </div>
-            <p className="muted">
-              Uploaded files run through the local object store. The sample/local action uses the
-              deterministic fixture set.
-            </p>
-          </section>
-
-          <section style={{marginTop: 14}}>
-            <AnalysisProgressPanel
-              caseId={caseId}
-              run={trackedRun}
-              events={trackedEvents}
-              cancelling={trackedRun?.analysis_run_id === cancellingRunId}
-              onCancel={(run) => void cancelRun(run)}
-            />
-          </section>
-
-          {latestRun && (
-            <section className="panel ask-panel" style={{marginTop: 14}}>
-              <h2>AI Platform Ask</h2>
-              <label className="field">
-                Question
-                <textarea
-                  disabled={askStreaming}
-                  value={askQuestion}
-                  onChange={(event) => setAskQuestion(event.target.value)}
-                />
-              </label>
-              <div className="form-actions">
-                {!askStreaming && (
-                  <button
-                    className="button"
-                    disabled={!askQuestion.trim()}
-                    type="button"
-                    onClick={() => void askModel(latestRun)}
+        {!loading && caseRecord && (
+          <section className="case-workspace">
+            <section className="case-main page-stack">
+              <section className="case-hero">
+                <div className="case-hero-main case-hero-copy">
+                  <div className="case-hero-meta">
+                    <span>{caseRecord.case_key}</span>
+                    <Badge tone={statusTone(caseRecord.status)}>{caseRecord.status}</Badge>
+                    {latestRun && <Badge tone={statusTone(latestRun.status)}>{latestRun.status}</Badge>}
+                  </div>
+                  <h1>{valueLabel(caseRecord.title)}</h1>
+                  <p>{valueLabel(caseRecord.issue_description)}</p>
+                  <div className="case-hero-facts">
+                    <span>{valueLabel(caseRecord.product)}</span>
+                    <span>{valueLabel(caseRecord.service)}</span>
+                    <span>{valueLabel(caseRecord.environment)}</span>
+                    <span>{formatDateTime(caseRecord.incident_start)}</span>
+                  </div>
+                </div>
+                <div className="case-hero-actions">
+                  <Button
+                    disabled={savingCase || deletingCase}
+                    variant="secondary"
+                    onClick={() => setEditingCase((current) => !current)}
                   >
-                    Ask
-                  </button>
-                )}
-                {askStreaming && (
-                  <button className="button secondary" type="button" onClick={cancelAsk}>
-                    Cancel
-                  </button>
-                )}
-              </div>
-              {askError && <div className="alert error compact">{askError}</div>}
-              {(askAnswer || askStreaming) && (
-                <div className="ask-answer">
-                  {askAnswer || <span className="muted">Waiting for response</span>}
+                    {editingCase ? "Close edit" : "Edit case"}
+                  </Button>
+                  <Button
+                    disabled={deletingCase}
+                    variant="danger"
+                    onClick={() => void deleteCase()}
+                  >
+                    {deletingCase ? "Deleting" : "Delete case"}
+                  </Button>
+                  {latestRun?.status === "completed" && (
+                    <Link
+                      className="button"
+                      href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}
+                    >
+                      Open latest report
+                    </Link>
+                  )}
                 </div>
-              )}
-              {askEvidenceRefs.length > 0 && (
-                <div className="evidence-list">
-                  <strong>Evidence refs ({askEvidenceRefs.length})</strong>
-                  {askEvidenceRefs.map((ref) => (
-                    <div key={`${ref.log_id}-${ref.line_number}`}>
-                      {ref.file_path}:{ref.line_number}
-                      {ref.template_id ? ` - ${ref.template_id}` : ""}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
+              </section>
 
-          <section className="grid two" style={{marginTop: 14}}>
-            <div className="panel">
-              <h2>{caseRecord.case_key}</h2>
-              <p>{valueLabel(caseRecord.title)}</p>
-              <table>
-                <tbody>
-                  <tr><td>Product</td><td>{valueLabel(caseRecord.product)}</td></tr>
-                  <tr><td>Service</td><td>{valueLabel(caseRecord.service)}</td></tr>
-                  <tr><td>Environment</td><td>{valueLabel(caseRecord.environment)}</td></tr>
-                  <tr><td>Issue</td><td>{valueLabel(caseRecord.issue_description)}</td></tr>
-                  <tr><td>Incident start</td><td>{formatDateTime(caseRecord.incident_start)}</td></tr>
-                  <tr><td>Incident end</td><td>{formatDateTime(caseRecord.incident_end)}</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div className="panel">
-              <h2>Latest Run</h2>
-              {!latestRun && <div className="empty">No analysis runs</div>}
               {latestRun && (
-                <table>
-                  <tbody>
-                    <tr>
-                      <td>Status</td>
-                      <td><span className={`pill ${statusClass(latestRun.status)}`}>{latestRun.status}</span></td>
-                    </tr>
-                    <tr><td>Step</td><td>{latestRun.current_step}</td></tr>
-                    <tr><td>Started</td><td>{formatDateTime(latestRun.started_at)}</td></tr>
-                    <tr><td>Completed</td><td>{formatDateTime(latestRun.completed_at)}</td></tr>
-                    <tr><td>Model</td><td>{latestRun.model_provider} / {latestRun.model_name}</td></tr>
-                  </tbody>
-                </table>
+                <nav className="tool-strip report-links" aria-label="Analysis views">
+                  <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}>Summary</Link>
+                  <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/temporal`}>Timeline</Link>
+                  <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/logs`}>Logs</Link>
+                  <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-graph`}>Graph</Link>
+                  <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-summary`}>RCA</Link>
+                </nav>
               )}
-            </div>
-          </section>
 
-          <section className="panel" style={{marginTop: 14}}>
-            <h2>Analysis Runs</h2>
-            {runs.length === 0 && <div className="empty">No analysis runs</div>}
-            {runs.length > 0 && (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Run</th>
-                      <th>Status</th>
-                      <th>Step</th>
-                      <th>Started</th>
-                      <th>Completed</th>
-                      <th>Report</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <section className="grid three">
+                <Metric label="Case status" value={caseRecord.status} />
+                <Metric label="Runs" value={String(runs.length)} />
+                <Metric label="Latest templates" value={progressValue(latestRun, "templates")} />
+              </section>
+
+              {editingCase && (
+                <Card className="edit-case-panel">
+                  <SectionHeader eyebrow="Case" title="Edit Case" />
+                  <div className="grid two">
+                    <label className="field">
+                      Title
+                      <input
+                        required
+                        value={caseTitle}
+                        onChange={(event) => setCaseTitle(event.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      Product
+                      <input value={caseProduct} onChange={(event) => setCaseProduct(event.target.value)} />
+                    </label>
+                    <label className="field">
+                      Service
+                      <input value={caseService} onChange={(event) => setCaseService(event.target.value)} />
+                    </label>
+                    <label className="field">
+                      Environment
+                      <input
+                        value={caseEnvironment}
+                        onChange={(event) => setCaseEnvironment(event.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      Incident start
+                      <input
+                        type="datetime-local"
+                        value={caseIncidentStart}
+                        onChange={(event) => setCaseIncidentStart(event.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      Incident end
+                      <input
+                        type="datetime-local"
+                        value={caseIncidentEnd}
+                        onChange={(event) => setCaseIncidentEnd(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <label className="field">
+                    Issue description
+                    <textarea
+                      value={caseIssueDescription}
+                      onChange={(event) => setCaseIssueDescription(event.target.value)}
+                    />
+                  </label>
+                  <div className="form-actions">
+                    <Button
+                      disabled={savingCase || !caseTitle.trim()}
+                      onClick={() => void saveCase()}
+                    >
+                      {savingCase ? "Saving" : "Save case"}
+                    </Button>
+                    <Button variant="secondary" onClick={() => setEditingCase(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </Card>
+              )}
+
+                <Card className="upload-card">
+                  <SectionHeader eyebrow="Run" title="Analyze evidence" />
+                  <label className="field dropzone">
+                    Log/archive files
+                    <input
+                      accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
+                      multiple
+                      type="file"
+                      onChange={(event) => handleFileSelection(Array.from(event.target.files || []))}
+                    />
+                  </label>
+                  {uploadItems.length > 0 && (
+                    <div className="upload-progress-list">
+                      {uploadItems.map((item) => {
+                        const percent = uploadPercent(item);
+                        return (
+                          <div className="upload-progress-row" key={item.key}>
+                            <div className="upload-progress-header">
+                              <strong>{item.name}</strong>
+                              <Badge tone={statusTone(item.status)}>{item.status}</Badge>
+                            </div>
+                            <div className="progress-track compact" aria-label={`${item.name} upload progress`}>
+                              <div className="progress-fill" style={{width: `${percent}%`}} />
+                            </div>
+                            <div className="upload-progress-meta">
+                              <span>{percent}%</span>
+                              <span>{formatBytes(item.bytesSent)} / {formatBytes(item.size)}</span>
+                              {item.partNumber && item.partCount && (
+                                <span>part {item.partNumber}/{item.partCount}</span>
+                              )}
+                              {item.message && <span>{item.message}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="form-actions">
+                    <Button
+                      disabled={starting !== null || selectedFiles.length === 0}
+                      onClick={startUploadedAnalysis}
+                    >
+                      {starting === "files" ? "Uploading" : "Upload and analyze files"}
+                    </Button>
+                    <Button
+                      disabled={starting !== null}
+                      variant="secondary"
+                      onClick={startSampleAnalysis}
+                    >
+                      {starting === "sample" ? "Starting" : "Start sample/local analysis"}
+                    </Button>
+                  </div>
+                  <p className="muted">
+                    Uploaded files run through the local object store. The sample/local action uses the
+                    deterministic fixture set.
+                  </p>
+                </Card>
+
+                <ChatWorkspace
+                  caseId={caseId}
+                  run={latestRun}
+                  onEvidenceSelect={setSelectedEvidence}
+                />
+            </section>
+
+            <aside className="case-inspector workspace-inspector">
+              <CaseRunInspector
+                cancelling={trackedRun?.analysis_run_id === cancellingRunId}
+                caseId={caseId}
+                caseRecord={caseRecord}
+                events={trackedEvents}
+                run={trackedRun}
+                selectedEvidence={selectedEvidence}
+                onCancel={(run) => void cancelRun(run)}
+              />
+              <Card className="run-list-card">
+                <SectionHeader eyebrow="History" title="Analysis Runs" />
+                {runs.length === 0 && <EmptyState title="No analysis runs" />}
+                {runs.length > 0 && (
+                  <div className="run-list">
                     {runs.map((run) => (
-                      <tr key={run.analysis_run_id}>
-                        <td>#{run.run_number}</td>
-                        <td><span className={`pill ${statusClass(run.status)}`}>{run.status}</span></td>
-                        <td>{run.current_step}</td>
-                        <td>{formatDateTime(run.started_at)}</td>
-                        <td>{formatDateTime(run.completed_at)}</td>
-                        <td>
+                      <div
+                        className={`run-list-row ${run.analysis_run_id === trackedRun?.analysis_run_id ? "active" : ""}`}
+                        key={run.analysis_run_id}
+                      >
+                        <button
+                          className="run-select"
+                          type="button"
+                          onClick={() => setActiveRunId(run.analysis_run_id)}
+                        >
+                          <strong>Run #{run.run_number}</strong>
+                          <span>{run.current_step}</span>
+                        </button>
+                        <Badge tone={statusTone(run.status)}>{run.status}</Badge>
+                        <span className="muted">{formatDateTime(run.started_at)}</span>
+                        <div className="run-actions">
                           {run.status === "completed" && (
                             <Link href={`/cases/${caseId}/runs/${run.analysis_run_id}/summary`}>Summary</Link>
                           )}
-                        </td>
-                        <td>
                           {!terminalRunStatus(run.status) && (
-                            <button
-                              className="button danger"
+                            <Button
                               disabled={cancellingRunId === run.analysis_run_id}
-                              type="button"
+                              variant="danger"
                               onClick={() => void cancelRun(run)}
                             >
                               {cancellingRunId === run.analysis_run_id ? "Stopping" : "Terminate"}
-                            </button>
+                            </Button>
                           )}
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  </div>
+                )}
+              </Card>
+            </aside>
           </section>
-        </>
-      )}
+        )}
+      </div>
     </Shell>
   );
 }
