@@ -456,6 +456,25 @@ class SQLAlchemyStore:
             raise ValueError("user already exists") from exc
         return self._user_record(user)
 
+    def get_user_by_email(self, email: str) -> UserRecord | None:
+        with self._session() as session:
+            user = session.scalar(select(tables.User).where(tables.User.email == email))
+            return self._user_record(user) if user else None
+
+    def get_user_by_username(self, username: str) -> UserRecord | None:
+        with self._session() as session:
+            user = session.scalar(select(tables.User).where(tables.User.username == username))
+            return self._user_record(user) if user else None
+
+    def get_user_by_external_id(self, external_id: str) -> UserRecord | None:
+        with self._session() as session:
+            user = session.scalar(
+                select(tables.User)
+                .where(tables.User.external_id == external_id)
+                .order_by(tables.User.created_at.asc(), tables.User.id.asc())
+            )
+            return self._user_record(user) if user else None
+
     def authenticate(self, email_or_username: str, password: str) -> UserRecord | None:
         with self._session() as session:
             user = session.scalar(

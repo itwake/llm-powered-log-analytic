@@ -698,6 +698,12 @@ class MetadataStore(Protocol):
         external_id: str | None = None,
     ) -> UserRecord: ...
 
+    def get_user_by_email(self, email: str) -> UserRecord | None: ...
+
+    def get_user_by_username(self, username: str) -> UserRecord | None: ...
+
+    def get_user_by_external_id(self, external_id: str) -> UserRecord | None: ...
+
     def authenticate(self, email_or_username: str, password: str) -> UserRecord | None: ...
 
     def create_session(self, user_id: str) -> tuple[str, SessionRecord]: ...
@@ -1070,6 +1076,20 @@ class InMemoryStore:
         self.users_by_email[email] = user.id
         self.users_by_username[username] = user.id
         return user
+
+    def get_user_by_email(self, email: str) -> UserRecord | None:
+        user_id = self.users_by_email.get(email)
+        return self.users.get(user_id) if user_id else None
+
+    def get_user_by_username(self, username: str) -> UserRecord | None:
+        user_id = self.users_by_username.get(username)
+        return self.users.get(user_id) if user_id else None
+
+    def get_user_by_external_id(self, external_id: str) -> UserRecord | None:
+        for user in self.users.values():
+            if user.external_id == external_id:
+                return user
+        return None
 
     def authenticate(self, email_or_username: str, password: str) -> UserRecord | None:
         user_id = self.users_by_email.get(email_or_username) or self.users_by_username.get(

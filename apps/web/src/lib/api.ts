@@ -287,18 +287,6 @@ export interface AuthUserResponse {
   user: UserOut;
 }
 
-export interface LoginRequest {
-  email_or_username: string;
-  password: string;
-}
-
-export interface RegisterRequest {
-  email: string;
-  username: string;
-  full_name?: string | null;
-  password: string;
-}
-
 export interface CaseCreateRequest {
   title: string;
   issue_description?: string | null;
@@ -762,11 +750,7 @@ export interface AdminCaseGroupAccessListResponse {
 
 export const authApi = {
   me: () => request<AuthUserResponse>("/api/auth/me"),
-  login: (payload: LoginRequest) =>
-    request<AuthUserResponse>("/api/auth/login", {method: "POST", body: payload}),
   logout: () => request<{status: string}>("/api/auth/logout", {method: "POST"}),
-  register: (payload: RegisterRequest) =>
-    request<AuthUserResponse>("/api/auth/register", {method: "POST", body: payload}),
 };
 
 export const casesApi = {
