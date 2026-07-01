@@ -35,14 +35,15 @@ export function evidenceLogsHref(caseId: string, runId: string, refItem: Evidenc
 interface EvidenceChipProps {
   refItem: EvidenceRef;
   onClick?: (refItem: EvidenceRef) => void;
+  selected?: boolean;
 }
 
-export function EvidenceChip({onClick, refItem}: EvidenceChipProps) {
+export function EvidenceChip({onClick, refItem, selected = false}: EvidenceChipProps) {
   const label = formatEvidenceLabel(refItem);
   return (
     <button
       aria-label={`Evidence ${label}`}
-      className="evidence-chip"
+      className={`evidence-chip ${selected ? "selected" : ""}`}
       type="button"
       onClick={() => onClick?.(refItem)}
     >

@@ -1060,6 +1060,11 @@ p {
   gap: 10px;
 }
 
+.evidence-report-stack {
+  display: grid;
+  gap: 12px;
+}
+
 .detail-kv {
   display: grid;
 }

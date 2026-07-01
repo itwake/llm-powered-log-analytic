@@ -2,8 +2,10 @@
 
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { CausalSummaryResponse, ExportRequest, reportsApi } from "@/lib/api";
+import { reportsApi } from "@/lib/api";
+import type { CausalSummaryResponse, EvidenceRef, ExportRequest } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, formatPercent } from "@/lib/format";
+import { EvidenceChip, EvidenceDetail } from "@/components/Evidence";
 import { Shell } from "@/components/Shell";
 
 function textField(item: Record<string, unknown>, key: string): string {
@@ -20,6 +22,7 @@ export default function CausalSummaryPage() {
   const [feedbackType, setFeedbackType] = useState("useful");
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
+  const [selectedEvidence, setSelectedEvidence] = useState<EvidenceRef | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState<ExportRequest["export_type"] | null>(null);
@@ -35,6 +38,7 @@ export default function CausalSummaryPage() {
       setData(response);
       setSummaryDraft(response.summary_markdown);
       setCustomerUpdateDraft(response.customer_update_markdown);
+      setSelectedEvidence(response.evidence_refs[0] || null);
       setEditing(false);
     } catch (caught) {
       setError(apiErrorMessage(caught));
@@ -285,25 +289,28 @@ export default function CausalSummaryPage() {
               <h2>Evidence</h2>
               {data.evidence_refs.length === 0 && <div className="empty">No evidence refs</div>}
               {data.evidence_refs.length > 0 && (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>File</th>
-                        <th>Line</th>
-                        <th>Time</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.evidence_refs.map((ref) => (
-                        <tr key={`${ref.log_id}-${ref.line_number}`}>
-                          <td>{ref.file_path}</td>
-                          <td>{ref.line_number}</td>
-                          <td>{formatDateTime(ref.timestamp)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="evidence-report-stack">
+                  <div className="evidence-list">
+                    {data.evidence_refs.map((ref) => (
+                      <EvidenceChip
+                        key={`${ref.log_id}-${ref.line_number}`}
+                        refItem={ref}
+                        selected={selectedEvidence?.log_id === ref.log_id}
+                        onClick={setSelectedEvidence}
+                      />
+                    ))}
+                  </div>
+                  <EvidenceDetail
+                    caseId={caseId}
+                    refItem={selectedEvidence}
+                    runId={runId}
+                  />
+                  {selectedEvidence && (
+                    <p className="muted evidence-ref">
+                      {selectedEvidence.file_path}:{selectedEvidence.line_number} at{" "}
+                      {formatDateTime(selectedEvidence.timestamp)}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
