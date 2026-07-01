@@ -2,11 +2,11 @@
 
 LogAn is a case-based incident log diagnosis platform for Support, SRE, and development teams. Users create an incident case, upload related logs, run an analysis, and review five linked views: Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary.
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, step-level analysis manifest artifacts in local object storage or S3/MinIO, RBAC case access with per-case collaborators, admin user/audit/settings/retention APIs, optional API rate limiting, Prometheus `/metrics`, optional OpenTelemetry FastAPI tracing, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads with completed-upload analysis materialization, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, evidence-first LLM-backed causal summaries with cautious evidence-based fallback, synthetic checkout incident fixtures, tests, an authenticated Copilot-backed chat stream, a Next.js workbench shell with ECharts Temporal View and Cytoscape Causal Graph visualizations, a minimal admin view, and deployment scaffolding.
+This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, step-level analysis manifest artifacts in local object storage or S3/MinIO, RBAC case access with per-case collaborators, admin user/audit/settings/retention APIs, optional API rate limiting, Prometheus `/metrics`, optional OpenTelemetry FastAPI tracing, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads with completed-upload analysis materialization, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, evidence-first LLM-backed causal summaries with cautious evidence-based fallback, synthetic checkout incident fixtures, tests, an authenticated AI Platform-backed chat stream, a Next.js workbench shell with ECharts Temporal View and Cytoscape Causal Graph visualizations, a minimal admin view, and deployment scaffolding.
 
 ## Architecture
 
-- `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, real GitHub Copilot device-code auth, Copilot `/responses` gateway with streaming support, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters with lifecycle/idempotency tracking, opt-in external temporal/log report query paths, and a lightweight in-memory store for explicit tests/local experimentation.
+- `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, AI Platform chat gateway support, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters with lifecycle/idempotency tracking, opt-in external temporal/log report query paths, and a lightweight in-memory store for explicit tests/local experimentation.
 - `apps/workers`: Python log-analysis pipeline plus Temporal workflow/activity worker for ingestion, multi-line merge, timestamp parsing, redaction, templating, representative sampling, model annotation, label broadcasting, temporal aggregation, candidate causal graph generation with PGEM-style and Granger-style evidence, evidence-packet causal summary generation through the model gateway, cautious fallback summary rendering, and export generation.
 - `apps/web`: Next.js/React/TypeScript operational workbench shell aligned to final API shapes, with Apache ECharts for Temporal View stacked time windows and Cytoscape.js for the directed Causal Graph.
 - `infra/docker`: Dockerfiles for web, API, and worker. The web image builds the Next.js app and
@@ -46,8 +46,8 @@ flowchart LR
     pipeline --> sinks["Optional analytics sinks"]
     sinks --> clickhouse["ClickHouse"]
     sinks --> opensearch["OpenSearch"]
-    api --> copilot["GitHub Copilot /responses"]
-    pipeline --> copilot
+    api --> aiplatform["AI Platform chat completions"]
+    pipeline --> aiplatform
 
     api --> metrics["Prometheus metrics"]
     api --> traces["OpenTelemetry traces"]
@@ -116,7 +116,7 @@ real Drain3 where the dependency set is available, install:
 python3 -m pip install -e ".[drain3]"
 ```
 
-Copy `.env.example` to `.env` for local services. The tests do not require Docker, GitHub Copilot credentials, or real external services.
+Copy `.env.example` to `.env` for local services. The tests do not require Docker, AI Platform credentials, or real external services.
 
 ## Test Commands
 
@@ -158,7 +158,7 @@ The Playwright config starts FastAPI on `127.0.0.1:8000` and the Next.js workben
 behavior. E2E uses `LOGAN_STORE_BACKEND=memory`, `LOGAN_OBJECT_STORE_BACKEND=local`, and
 `.logan/e2e-object-store`; the in-memory store is reset when the API process exits. It also sets
 `LOGAN_LLM_PROVIDER=mock` so the sample/local analysis path is deterministic and does not require
-Docker, GitHub Copilot credentials, MinIO, ClickHouse, OpenSearch, Temporal, or an external
+Docker, AI Platform credentials, MinIO, ClickHouse, OpenSearch, Temporal, or an external
 database.
 
 Run the full-stack Docker smoke when Docker resources are available:
@@ -171,21 +171,10 @@ make full-stack-down
 The smoke stack starts PostgreSQL, MinIO, ClickHouse, OpenSearch, Temporal, the API, and the
 worker. It uses durable SQLAlchemy/PostgreSQL metadata, MinIO presigned uploads, Temporal
 orchestration, mock LLM annotation, and real ClickHouse/OpenSearch sink/query paths. It does not
-use or require Copilot credentials.
+use or require AI Platform credentials.
 Docker Compose keeps this PostgreSQL path by using `LOGAN_COMPOSE_DATABASE_URL`, so the default
 local SQLite `LOGAN_DATABASE_URL=sqlite:///.logan/logan.db` in `.env` does not affect full-stack
 smoke runs.
-
-Run the real Copilot staging smoke only when explicitly opted in:
-
-```bash
-LOGAN_GITHUB_COPILOT_TOKEN=... make copilot-staging-smoke
-# or
-LOGAN_GITHUB_SOURCE_TOKEN=... make copilot-staging-smoke
-```
-
-The staging smoke is skipped by default and never writes tokens to fixtures, compose files, or
-logs.
 
 ## Run API and Web Together
 
@@ -213,7 +202,7 @@ External analytics sinks and service-backed report queries are disabled by defau
 so local runs and tests make no ClickHouse or OpenSearch network calls.
 
 Prometheus metrics are enabled by default at `GET /metrics`. The exposition includes
-low-cardinality API request, rate-limit, analysis pipeline, Copilot gateway, and analytics sink
+low-cardinality API request, rate-limit, analysis pipeline, model gateway, and analytics sink
 metrics. Labels intentionally avoid tokens, database URLs, object-store secrets, cookies, raw log
 text, prompts, case text, and file paths. Set `LOGAN_METRICS_ENABLED=false` to disable the
 endpoint or `LOGAN_METRICS_PATH=/internal/metrics` to change its path.
@@ -244,11 +233,11 @@ Tests assert that model inputs are redacted, representative samples are used, an
 
 ## Security Notes
 
-- GitHub Copilot is the default LLM provider (`github_copilot`) and `gpt-5.4` is the default model.
-- The default backend LLM runtime is GitHub Copilot Plugin `/responses`; OpenAI and Anthropic fallbacks are not configured.
+- AI Platform is the only production LLM provider (`ai_platform`) and `gpt-5.4` is the default
+  model.
 - `POST /api/chat/stream` streams authenticated case-workspace answers over SSE using compact redacted analysis context when a case/run is available.
-- Tests inject deterministic mocked Copilot auth and model gateways through `create_app(...)` or pipeline gateway arguments.
-- GitHub source OAuth and Copilot plugin tokens are encrypted at rest, decrypted only in backend services, and never returned to frontend responses.
+- Tests inject deterministic mocked model gateways through `create_app(...)` or pipeline gateway arguments.
+- AI Platform credentials are server-side configuration only and are never returned to frontend responses.
 - Sensitive data redaction covers email, IP, bearer tokens, passwords, secrets, API keys, JWTs, UUIDs, card-like values, URL query secrets, and tenant/customer IDs before model calls.
 - Causal graph fields use `candidate_cause`, `confidence`, `evidence`, and `needs_validation`; summaries use cautious language.
 - PGEM-style transition scores and Granger-style lagged-linear scores are candidate causal evidence only. They help rank directions for validation; they do not prove root cause truth.
@@ -257,9 +246,9 @@ Tests assert that model inputs are redacted, representative samples are used, an
 
 See `.env.example` for the full list. Key defaults:
 
-- `LOGAN_LLM_PROVIDER=github_copilot`
+- `LOGAN_LLM_PROVIDER=ai_platform`
 - `LOGAN_LLM_PROVIDER=mock` is supported for deterministic local/CI E2E analysis only; production
-  paths should keep `github_copilot`.
+  paths should use `ai_platform`.
 - `LOGAN_DATABASE_URL=sqlite:///.logan/logan.db` by default for local durable metadata; set it to another `sqlite:///...` path or `postgresql+psycopg://user:pass@host:5432/db` for PostgreSQL.
 - `LOGAN_STORE_BACKEND=auto`; `auto` uses SQLAlchemy with SQLite/PostgreSQL. Use `memory` only for explicit ephemeral tests, or `sqlalchemy` to require a configured database URL.
 - `LOGAN_ANALYSIS_ORCHESTRATOR=local`; set to `temporal` to have the API create the SQLAlchemy run and start `AnalyzeCaseWorkflow`.
@@ -272,14 +261,18 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_S3_MULTIPART_THRESHOLD_BYTES=104857600`, `LOGAN_S3_MULTIPART_PART_SIZE_BYTES=67108864`, and `LOGAN_S3_MULTIPART_MAX_PARTS=10000` control S3/MinIO multipart upload planning. Local uploads remain direct authenticated API `PUT` requests.
 - `LOGAN_STEP_ARTIFACTS_ENABLED=true` writes one safe `step_manifest` JSON artifact per completed pipeline step.
 - `LOGAN_STEP_ARTIFACT_FAILURE_MODE=warn`; use `fail` only when step artifact storage errors should fail analysis runs.
-- `LOGAN_COPILOT_MODEL=gpt-5.4`
-- `LOGAN_COPILOT_REASONING_EFFORT=high`
-- `LOGAN_COPILOT_OAUTH_CLIENT_ID=Iv1.b507a08c87ecfe98`
-- `LOGAN_GITHUB_COPILOT_TOKEN=` optional server-side Copilot plugin token for tests/dev.
-- `LOGAN_GITHUB_SOURCE_TOKEN=` optional server-side GitHub source OAuth/PAT token for tests/dev; it is exchanged for a Copilot plugin token per call.
-- `LOGAN_COPILOT_BASE_URL=` optional override for the Copilot API base URL.
-- `LOGAN_COPILOT_TIMEOUT_SECONDS=30`
-- `LOGAN_COPILOT_TOKEN_CACHE_SKEW_SECONDS=60`
+- `LOGAN_AI_PLATFORM_MODEL=gpt-5.4`
+- `LOGAN_AI_PLATFORM_REASONING_EFFORT=high`
+- `LOGAN_LLM_PROVIDER=ai_platform` routes model calls to AI Platform chat completions.
+- `LOGAN_AI_PLATFORM_CHAT_HOST=` and `LOGAN_AI_PLATFORM_CHAT_URI=/v1/api/v1/chat/completions`
+  configure the chat endpoint.
+- `LOGAN_AI_PLATFORM_TOKEN=` can provide a direct trust token. Alternatively set
+  `LOGAN_AI_PLATFORM_USERNAME`, `LOGAN_AI_PLATFORM_PASSWORD`, `LOGAN_AI_PLATFORM_USERCASE`,
+  `LOGAN_AI_PLATFORM_IB2B_HOST`, and `LOGAN_AI_PLATFORM_IB2B_URI` to exchange credentials for a
+  short-lived JWT.
+- `LOGAN_AI_PLATFORM_TRUST_TOKEN_HEADER=X-XXXX-E2E-Trust-Token`,
+  `LOGAN_AI_PLATFORM_TRACKING_PREFIX=EFP`, and
+  `LOGAN_AI_PLATFORM_MAX_COMPLETION_TOKENS=4096` mirror the AI Platform client defaults.
 - `LOGAN_CREDENTIAL_ENCRYPTION_KEY=change-me-local-key`
 - `LOGAN_RAW_LOG_RETENTION_DAYS=30`
 - `LOGAN_REPORT_RETENTION_DAYS=365`

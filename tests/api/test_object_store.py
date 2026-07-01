@@ -299,11 +299,11 @@ def test_step_manifest_writer_puts_s3_object_with_safe_json_body() -> None:
         id="event-1",
         case_id="case-1",
         analysis_run_id="run-1",
-        step_name="copilot_annotation",
+        step_name="ai_platform_annotation",
         event_type="completed",
         status="completed",
         attempt=1,
-        idempotency_key="copilot_annotation:attempt:1",
+        idempotency_key="ai_platform_annotation:attempt:1",
         metadata={
             "annotations": 3,
             "raw_text": "raw secret log line",
@@ -321,13 +321,13 @@ def test_step_manifest_writer_puts_s3_object_with_safe_json_body() -> None:
     )
 
     assert written.object_uri == (
-        "s3://logan/cases/case-1/analysis-runs/run-1/steps/copilot_annotation.json"
+        "s3://logan/cases/case-1/analysis-runs/run-1/steps/ai_platform_annotation.json"
     )
     assert len(written.sha256) == 64
     assert fake_client.put_object_calls
     put_call = fake_client.put_object_calls[0]
     assert put_call["Bucket"] == "logan"
-    assert put_call["Key"] == "cases/case-1/analysis-runs/run-1/steps/copilot_annotation.json"
+    assert put_call["Key"] == "cases/case-1/analysis-runs/run-1/steps/ai_platform_annotation.json"
     assert put_call["ContentType"] == "application/json"
     assert put_call["Metadata"] == {
         "sha256": written.sha256,

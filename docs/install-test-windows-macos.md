@@ -12,7 +12,7 @@ Drain3's legacy `jsonpickle` pin.
 - Node.js 20.9 or newer with npm
 - Docker Desktop for full-stack smoke tests
 
-The Python unit tests do not require Docker, GitHub Copilot credentials, MinIO,
+The Python unit tests do not require Docker, AI Platform credentials, MinIO,
 ClickHouse, OpenSearch, Temporal, or PostgreSQL.
 
 ## Windows PowerShell
@@ -171,29 +171,6 @@ docker compose --profile smoke run --rm -T --build smoke
 docker compose down --remove-orphans -v
 ```
 
-## Optional Copilot Staging Smoke
-
-The real Copilot smoke is skipped by default. Run it only with a test token that
-is safe for staging:
-
-Windows PowerShell:
-
-```powershell
-$env:LOGAN_GITHUB_COPILOT_TOKEN = "<token>"
-$env:LOGAN_RUN_COPILOT_STAGING_SMOKE = "true"
-python -m pytest -q tests/staging/test_copilot_smoke.py
-Remove-Item Env:LOGAN_GITHUB_COPILOT_TOKEN
-Remove-Item Env:LOGAN_RUN_COPILOT_STAGING_SMOKE
-```
-
-macOS:
-
-```bash
-LOGAN_GITHUB_COPILOT_TOKEN="<token>" \
-LOGAN_RUN_COPILOT_STAGING_SMOKE=true \
-python -m pytest -q tests/staging/test_copilot_smoke.py
-```
-
 ## Troubleshooting
 
 - `jsonpickle==1.5.1` cannot be resolved: use the default install
@@ -204,13 +181,13 @@ python -m pytest -q tests/staging/test_copilot_smoke.py
 - Step artifact path errors on Windows: pull the latest `master`; local step
   manifests use short hashed paths under `.logan/object-store/step-artifacts/`.
 - Playwright cannot find Chromium: rerun `npm run e2e:install`.
-- Copilot auth fails with `CERTIFICATE_VERIFY_FAILED`: export your corporate
-  root CA chain as a PEM file and set `LOGAN_COPILOT_CA_BUNDLE` to that path
+- AI Platform calls fail with `CERTIFICATE_VERIFY_FAILED`: export your corporate
+  root CA chain as a PEM file and set `LOGAN_AI_PLATFORM_CA_BUNDLE` to that path
   before starting the API. `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` are also
-  honored when `LOGAN_COPILOT_CA_BUNDLE` is not set.
-- Copilot calls fail with `ReadTimeout`: make sure the API process inherits
+  honored when `LOGAN_AI_PLATFORM_CA_BUNDLE` is not set.
+- AI Platform calls fail with `ReadTimeout`: make sure the API process inherits
   `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, and `NO_PROXY`, or set
-  `LOGAN_COPILOT_PROXY_URL` explicitly. Increase `LOGAN_COPILOT_TIMEOUT_SECONDS`
+  `LOGAN_AI_PLATFORM_PROXY_URL` explicitly. Increase `LOGAN_AI_PLATFORM_TIMEOUT_SECONDS`
   for slow enterprise proxies. On Windows, restart PowerShell after changing
   System Properties or `setx`, then verify with
   `python -c "import os; print(os.getenv('HTTPS_PROXY'))"`.

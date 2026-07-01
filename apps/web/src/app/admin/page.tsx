@@ -291,7 +291,6 @@ export default function AdminPage() {
                     <th>User</th>
                     <th>Role</th>
                     <th>Active</th>
-                    <th>Copilot</th>
                     <th>Created</th>
                   </tr>
                 </thead>
@@ -323,7 +322,6 @@ export default function AdminPage() {
                           {user.is_active ? "active" : "inactive"}
                         </label>
                       </td>
-                      <td>{user.has_copilot_credential ? "connected" : "not connected"}</td>
                       <td>{formatDateTime(user.created_at)}</td>
                     </tr>
                   ))}

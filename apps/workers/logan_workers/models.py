@@ -136,7 +136,7 @@ class TemplateAnnotation(TemplateAnnotationResult):
     annotation_id: str
     template_id: str
     analysis_run_id: str
-    model_provider: str = "github_copilot"
+    model_provider: str = "ai_platform"
     model_name: str = "gpt-5.4"
     prompt_version: str = "annotation_v1"
     raw_model_response: dict[str, Any] = Field(default_factory=dict)

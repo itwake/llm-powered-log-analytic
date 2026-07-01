@@ -371,27 +371,11 @@ class CredentialRecord:
     encrypted_token: bytes
     token_hint: str
     github_base_url: str
-    runtime_type: str = "github_copilot"
+    runtime_type: str = "ai_platform"
     key_id: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     expires_at: datetime | None = None
     revoked_at: datetime | None = None
-
-
-@dataclass
-class CopilotAuthRecord:
-    auth_id: str
-    user_id: str
-    device_code: str
-    user_code: str
-    verification_uri: str
-    verification_uri_complete: str
-    expires_in: int
-    interval: int
-    poll_count: int = 0
-    github_base_url: str = "https://github.com"
-    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -642,9 +626,7 @@ class RetentionResultRecord:
     step_artifacts_deleted: int = 0
 
 
-COPILOT_AUTH_CREDENTIAL_TYPES = frozenset(
-    {"github_source_oauth", "copilot_plugin_token"}
-)
+REVOCABLE_CREDENTIAL_TYPES = frozenset({"github_source_oauth", "ai_platform_token"})
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -781,12 +763,6 @@ class MetadataStore(Protocol):
     ) -> int: ...
 
     def has_credential(self, user_id: str) -> bool: ...
-
-    def create_copilot_auth(self, record: CopilotAuthRecord) -> CopilotAuthRecord: ...
-
-    def get_copilot_auth(self, auth_id: str) -> CopilotAuthRecord | None: ...
-
-    def update_copilot_auth(self, record: CopilotAuthRecord) -> CopilotAuthRecord: ...
 
     def create_case(self, *, user_id: str, data: dict[str, Any]) -> CaseRecord: ...
 
@@ -1031,7 +1007,6 @@ class InMemoryStore:
         self.users_by_username: dict[str, str] = {}
         self.sessions_by_hash: dict[str, SessionRecord] = {}
         self.credentials_by_user: dict[tuple[str, str], CredentialRecord] = {}
-        self.copilot_auth: dict[str, CopilotAuthRecord] = {}
         self.cases: dict[str, CaseRecord] = {}
         self.case_collaborators: dict[tuple[str, str], CaseCollaboratorRecord] = {}
         self.policy_groups: dict[str, PolicyGroupRecord] = {}
@@ -1311,20 +1286,8 @@ class InMemoryStore:
     def has_credential(self, user_id: str) -> bool:
         return any(
             self.get_credential(user_id=user_id, credential_type=credential_type) is not None
-            for credential_type in COPILOT_AUTH_CREDENTIAL_TYPES
+            for credential_type in REVOCABLE_CREDENTIAL_TYPES
         )
-
-    def create_copilot_auth(self, record: CopilotAuthRecord) -> CopilotAuthRecord:
-        self.copilot_auth[record.auth_id] = record
-        return record
-
-    def get_copilot_auth(self, auth_id: str) -> CopilotAuthRecord | None:
-        return self.copilot_auth.get(auth_id)
-
-    def update_copilot_auth(self, record: CopilotAuthRecord) -> CopilotAuthRecord:
-        record.updated_at = record.updated_at or datetime.now(UTC)
-        self.copilot_auth[record.auth_id] = record
-        return record
 
     def create_case(self, *, user_id: str, data: dict[str, Any]) -> CaseRecord:
         case_id = str(uuid.uuid4())
@@ -1859,9 +1822,9 @@ class InMemoryStore:
             status="processing",
             config=config,
             model_provider=self.settings.llm_provider,
-            model_name=config.get("model", {}).get("model", self.settings.copilot_model),
+            model_name=config.get("model", {}).get("model", self.settings.ai_platform_model),
             model_reasoning_effort=config.get("model", {}).get(
-                "reasoning_effort", self.settings.copilot_reasoning_effort
+                "reasoning_effort", self.settings.ai_platform_reasoning_effort
             ),
             created_by=user_id,
             started_at=datetime.now(UTC),

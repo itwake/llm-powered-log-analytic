@@ -4,7 +4,7 @@ NPM ?= npm
 SCALE_PROFILE ?= quick
 SCALE_TARGET_BYTES ?=
 
-.PHONY: setup up migrate test evaluate scale-benchmark e2e lint api worker web full-stack-up full-stack-smoke full-stack-down copilot-staging-smoke temporal-retry-smoke openapi-snapshot
+.PHONY: setup up migrate test evaluate scale-benchmark e2e lint api worker web full-stack-up full-stack-smoke full-stack-down temporal-retry-smoke openapi-snapshot
 
 setup:
 	$(NPM) install
@@ -57,9 +57,6 @@ full-stack-smoke: full-stack-up
 
 full-stack-down:
 	$(COMPOSE) down --remove-orphans
-
-copilot-staging-smoke:
-	LOGAN_RUN_COPILOT_STAGING_SMOKE=true python3 -m pytest -q tests/staging/test_copilot_smoke.py
 
 temporal-retry-smoke:
 	LOGAN_RUN_TEMPORAL_INTEGRATION=true python3 -m pytest -q tests/integration/test_temporal_retry.py

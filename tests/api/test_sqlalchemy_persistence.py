@@ -9,13 +9,12 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, func, select
 
-from logan_workers.activities.inference import MockCopilotAnnotationGateway
+from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
 
 from app.config import Settings
 from app.core.security import decrypt_token
 from app.main import create_app
 from app.models import tables
-from app.services.copilot_auth_service import MockGitHubDeviceClient
 from app.sqlalchemy_store import (
     SQLAlchemyStore,
     _postgres_incremental_migration_paths,
@@ -32,7 +31,7 @@ PIPELINE_STEPS = [
     "preprocess_redact",
     "drain_templating",
     "representative_sampling",
-    "copilot_annotation",
+    "ai_platform_annotation",
     "broadcast_annotations",
     "temporal_aggregation",
     "causal_graph",
@@ -76,8 +75,7 @@ def test_postgres_incremental_migration_paths_skip_initial_schema() -> None:
 async def _client(store: SQLAlchemyStore) -> AsyncClient:
     app = create_app(
         store=store,
-        copilot_auth_client=MockGitHubDeviceClient(),
-        model_gateway=MockCopilotAnnotationGateway(),
+        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
 
@@ -211,46 +209,35 @@ def test_sqlalchemy_credentials_persist_expiration_and_revocation(tmp_path: Path
     )
     future_expires_at = datetime(2035, 1, 1, tzinfo=UTC)
 
-    saved_plugin = store.save_credential(
+    saved_token = store.save_credential(
         user_id=user.id,
-        credential_type="copilot_plugin_token",
-        token="persisted-plugin-token",
+        credential_type="ai_platform_token",
+        token="persisted-ai-platform-token",
         github_base_url="https://github.com",
         expires_at=future_expires_at,
     )
 
-    assert saved_plugin.expires_at == future_expires_at
-    with store.session_factory() as session:
-        row = session.scalar(
-            select(tables.CopilotCredential).where(
-                tables.CopilotCredential.id == saved_plugin.id
-            )
-        )
-        assert row is not None
-        row_expires_at = row.expires_at
-        assert row_expires_at is not None
-        if row_expires_at.tzinfo is None:
-            row_expires_at = row_expires_at.replace(tzinfo=UTC)
-        assert row_expires_at == future_expires_at
+    assert saved_token.expires_at == future_expires_at
 
-    active_plugin = store.get_credential(
-        user_id=user.id, credential_type="copilot_plugin_token"
+    active_token = store.get_credential(
+        user_id=user.id, credential_type="ai_platform_token"
     )
-    assert active_plugin is not None
+    assert active_token is not None
+    assert active_token.expires_at == future_expires_at
     assert decrypt_token(
-        active_plugin.encrypted_token, store.settings.credential_encryption_key
-    ) == "persisted-plugin-token"
-    assert active_plugin.key_id == store.settings.credential_encryption_key_id
+        active_token.encrypted_token, store.settings.credential_encryption_key
+    ) == "persisted-ai-platform-token"
+    assert active_token.key_id == store.settings.credential_encryption_key_id
     assert store.has_credential(user.id) is True
 
     store.save_credential(
         user_id=user.id,
-        credential_type="copilot_plugin_token",
-        token="expired-plugin-token",
+        credential_type="ai_platform_token",
+        token="expired-ai-platform-token",
         github_base_url="https://github.com",
         expires_at=datetime(2020, 1, 1, tzinfo=UTC),
     )
-    assert store.get_credential(user_id=user.id, credential_type="copilot_plugin_token") is None
+    assert store.get_credential(user_id=user.id, credential_type="ai_platform_token") is None
     assert store.has_credential(user.id) is False
 
     store.save_credential(
@@ -263,7 +250,7 @@ def test_sqlalchemy_credentials_persist_expiration_and_revocation(tmp_path: Path
 
     assert store.revoke_credentials(user.id) == 2
     assert store.get_credential(user_id=user.id, credential_type="github_source_oauth") is None
-    assert store.get_credential(user_id=user.id, credential_type="copilot_plugin_token") is None
+    assert store.get_credential(user_id=user.id, credential_type="ai_platform_token") is None
     assert store.has_credential(user.id) is False
 
 
@@ -561,17 +548,6 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     )
     assert login.status_code == 200, login.text
 
-    started_auth = await client.post(
-        "/api/copilot/auth/start", json={"github_base_url": "https://github.com"}
-    )
-    assert started_auth.status_code == 200, started_auth.text
-    auth_id = started_auth.json()["auth_id"]
-    assert (await client.post("/api/copilot/auth/check", json={"auth_id": auth_id})).json()[
-        "status"
-    ] == "pending"
-    authorized = await client.post("/api/copilot/auth/check", json={"auth_id": auth_id})
-    assert authorized.json()["status"] == "authorized"
-
     case = await client.post(
         "/api/cases",
         json={
@@ -663,7 +639,6 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
 
     me = await recreated_client.get("/api/auth/me")
     assert me.status_code == 200, me.text
-    assert me.json()["user"]["has_copilot_credential"] is True
 
     listed = await recreated_client.get("/api/cases")
     assert listed.status_code == 200, listed.text
@@ -817,9 +792,9 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     model_invocation_metadata = model_invocations[0].metadata
     assert model_invocation_metadata == {
         "analysis_run_id": run_id,
-        "model_provider": "github_copilot",
+        "model_provider": "ai_platform",
         "model_name": "gpt-5.4",
-        "model_reasoning_effort": app_settings.copilot_reasoning_effort,
+        "model_reasoning_effort": app_settings.ai_platform_reasoning_effort,
         "prompt_version": "annotation_v1",
         "representative_sample_count": progress["representative_samples"],
         "model_input_count": progress["templates"],
@@ -847,7 +822,7 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     assert run_list.status_code == 200, run_list.text
     assert run_list.json()["total"] == 1
     assert run_list.json()["items"][0]["analysis_run_id"] == run_id
-    assert run_list.json()["items"][0]["model_provider"] == "github_copilot"
+    assert run_list.json()["items"][0]["model_provider"] == "ai_platform"
 
     summary = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
     assert summary.status_code == 200, summary.text
@@ -909,14 +884,14 @@ async def test_sqlalchemy_fanout_scopes_raw_file_ids_per_run(tmp_path: Path) -> 
         user_id=user.id,
         input_paths=input_paths,
         config={"default_window_size_seconds": 60},
-        gateway=MockCopilotAnnotationGateway(),
+        gateway=MockAIPlatformAnnotationGateway(),
     )
     second = await store.start_analysis(
         case_id=case.id,
         user_id=user.id,
         input_paths=input_paths,
         config={"default_window_size_seconds": 60},
-        gateway=MockCopilotAnnotationGateway(),
+        gateway=MockAIPlatformAnnotationGateway(),
     )
 
     assert first.status == "completed"
@@ -973,7 +948,7 @@ async def test_sqlalchemy_local_analysis_materializes_s3_input_uri(
         user_id=user.id,
         input_paths=[f"s3://logan/{key}"],
         config={"default_window_size_seconds": 60},
-        gateway=MockCopilotAnnotationGateway(),
+        gateway=MockAIPlatformAnnotationGateway(),
         s3_client_factory=lambda _: fake_s3,
     )
 
@@ -1037,7 +1012,7 @@ async def test_sqlalchemy_report_endpoints_read_fanout_without_result_json(
         user_id=user.id,
         input_paths=input_paths,
         config={"default_window_size_seconds": 60},
-        gateway=MockCopilotAnnotationGateway(),
+        gateway=MockAIPlatformAnnotationGateway(),
     )
     assert run.status == "completed"
     assert store.get_analysis_result(case.id, run.id) is not None
@@ -1200,7 +1175,7 @@ async def test_sqlalchemy_retention_scrubs_raw_text_and_preserves_reports(
         user_id=user.id,
         input_paths=[str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
         config={"default_window_size_seconds": 60},
-        gateway=MockCopilotAnnotationGateway(),
+        gateway=MockAIPlatformAnnotationGateway(),
     )
     assert run.status == "completed"
     result = store.get_analysis_result(case.id, run.id)

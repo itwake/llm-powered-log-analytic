@@ -270,7 +270,7 @@ export default function CaseWorkspacePage() {
     }
   }
 
-  async function askCopilot(latestRun: AnalysisRunResponse) {
+  async function askModel(latestRun: AnalysisRunResponse) {
     const question = askQuestion.trim();
     if (!question || askStreaming) {
       return;
@@ -408,7 +408,7 @@ export default function CaseWorkspacePage() {
 
           {latestRun && (
             <section className="panel ask-panel" style={{marginTop: 14}}>
-              <h2>Copilot Ask</h2>
+              <h2>AI Platform Ask</h2>
               <label className="field">
                 Question
                 <textarea
@@ -423,7 +423,7 @@ export default function CaseWorkspacePage() {
                     className="button"
                     disabled={!askQuestion.trim()}
                     type="button"
-                    onClick={() => void askCopilot(latestRun)}
+                    onClick={() => void askModel(latestRun)}
                   >
                     Ask
                   </button>
