@@ -255,21 +255,14 @@ async def _authenticated_client(
     )
     transport = ASGITransport(app=app)
     client = AsyncClient(transport=transport, base_url="http://testserver")
-    register = await client.post(
-        "/api/auth/register",
-        json={
-            "email": "engineer@example.com",
-            "username": "engineer",
-            "full_name": "LogAn Engineer",
-            "password": "password123",
-        },
+    user = store.register_user(
+        email="engineer@example.com",
+        username="engineer",
+        full_name="LogAn Engineer",
+        password="password123",
     )
-    assert register.status_code == 200, register.text
-    login = await client.post(
-        "/api/auth/login",
-        json={"email_or_username": "engineer", "password": "password123"},
-    )
-    assert login.status_code == 200
+    token, _ = store.create_session(user.id)
+    client.cookies.set("logan_session", token)
     return client, store, store.users_by_username["engineer"]
 
 
@@ -282,23 +275,16 @@ async def _register_and_login(
     full_name: str | None = None,
     role: str = "engineer",
 ) -> str:
-    register = await client.post(
-        "/api/auth/register",
-        json={
-            "email": email,
-            "username": username,
-            "full_name": full_name,
-            "password": "password123",
-        },
+    user = store.register_user(
+        email=email,
+        username=username,
+        full_name=full_name,
+        password="password123",
     )
-    assert register.status_code == 200, register.text
     user_id = store.users_by_username[username]
     store.users[user_id].role = role
-    login = await client.post(
-        "/api/auth/login",
-        json={"email_or_username": username, "password": "password123"},
-    )
-    assert login.status_code == 200, login.text
+    token, _ = store.create_session(user.id)
+    client.cookies.set("logan_session", token)
     return user_id
 
 
@@ -690,11 +676,8 @@ async def test_organization_isolation_and_policy_group_case_access(tmp_path: Pat
         organization_id="org-two",
     )
     org_two_user.role = "admin"
-    org_two_login = await org_two_admin.post(
-        "/api/auth/login",
-        json={"email_or_username": "org-two-admin", "password": "password123"},
-    )
-    assert org_two_login.status_code == 200, org_two_login.text
+    org_two_token, _ = store.create_session(org_two_user.id)
+    org_two_admin.cookies.set("logan_session", org_two_token)
 
     case_id = await _create_case(owner)
     org_two_case = store.create_case(

@@ -1,46 +1,11 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-type TestUser = {
-  email: string;
-  username: string;
-  password: string;
-};
+const SSO_USERNAME = "playwright-sso";
 
-function uniqueUser(testInfo: TestInfo, label: string): TestUser {
-  const suffix = `${label}-${Date.now()}-${testInfo.workerIndex}-${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
-  return {
-    email: `e2e-${suffix}@example.com`,
-    username: `e2e-${suffix}`,
-    password: "Password123!",
-  };
-}
-
-async function registerThroughUi(page: Page, user: TestUser) {
-  await page.goto("/register");
-  await expect(page.getByRole("heading", {name: "Register"})).toBeVisible();
-  await page.getByLabel("Email").fill(user.email);
-  await page.getByLabel("Username").fill(user.username);
-  await page.getByLabel("Full name").fill("Playwright Engineer");
-  await page.getByLabel("Password").fill(user.password);
-  await Promise.all([
-    page.waitForURL(/\/cases$/, {timeout: 30_000}),
-    page.getByRole("button", {name: "Create account"}).click(),
-  ]);
-  await expect(page.getByText(user.username)).toBeVisible();
-}
-
-async function signInThroughUi(page: Page, user: TestUser) {
+async function signInThroughUi(page: Page) {
   await page.goto("/login");
-  await expect(page.getByRole("heading", {name: "Sign in"})).toBeVisible();
-  await page.getByLabel("Email or username").fill(user.username);
-  await page.getByLabel("Password").fill(user.password);
-  await Promise.all([
-    page.waitForURL(/\/cases$/, {timeout: 30_000}),
-    page.getByRole("button", {name: "Sign in"}).click(),
-  ]);
-  await expect(page.getByText(user.username)).toBeVisible();
+  await page.waitForURL(/\/cases$/, {timeout: 30_000});
+  await expect(page.getByText(SSO_USERNAME)).toBeVisible();
 }
 
 async function clickApply(page: Page) {
@@ -53,31 +18,20 @@ async function expectFirstTableRow(page: Page) {
   await expect(page.locator("tbody tr").first()).toBeVisible({timeout: 30_000});
 }
 
-test("auth smoke shows login errors and accepts an existing account", async ({page}, testInfo) => {
-  const user = uniqueUser(testInfo, "auth");
-
-  await page.goto("/login");
-  await page.getByLabel("Email or username").fill(`missing-${user.username}`);
-  await page.getByLabel("Password").fill("wrong-password");
-  await page.getByRole("button", {name: "Sign in"}).click();
-  await expect(page.getByText("invalid credentials")).toBeVisible();
-
-  await registerThroughUi(page, user);
+test("auth smoke redirects through SSO and establishes a session", async ({page}) => {
+  await signInThroughUi(page);
   await page.context().clearCookies();
-  await signInThroughUi(page, user);
+  await page.goto("/cases");
+  await page.waitForURL(/\/cases$/, {timeout: 30_000});
+  await expect(page.getByText(SSO_USERNAME)).toBeVisible();
 });
 
-test("sample case analysis can be explored through report views", async ({page}, testInfo) => {
+test("sample case analysis can be explored through report views", async ({page}) => {
   test.setTimeout(180_000);
 
+  await signInThroughUi(page);
   await page.goto("/cases");
   await expect(page.getByRole("heading", {name: "Cases"})).toBeVisible();
-  await expect(page.getByRole("link", {name: "Sign in"})).toBeVisible();
-
-  const user = uniqueUser(testInfo, "flow");
-  await page.getByRole("link", {name: "Sign in"}).click();
-  await page.getByRole("link", {name: "Register"}).click();
-  await registerThroughUi(page, user);
 
   await page.getByRole("link", {name: "New case", exact: true}).click();
   await expect(page.getByRole("heading", {name: "New Case"})).toBeVisible();

@@ -80,6 +80,26 @@ async def _client(store: SQLAlchemyStore) -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
 
 
+def _authenticate_client(
+    client: AsyncClient,
+    store: SQLAlchemyStore,
+    *,
+    email: str,
+    username: str,
+    full_name: str | None,
+    password: str = "password123",
+) -> str:
+    user = store.register_user(
+        email=email,
+        username=username,
+        full_name=full_name,
+        password=password,
+    )
+    token, _ = store.create_session(user.id)
+    client.cookies.set("logan_session", token)
+    return user.id
+
+
 def _analytics_counts(store: SQLAlchemyStore, run_id: str) -> dict[str, int]:
     with store.session_factory() as session:
         return {
@@ -532,22 +552,13 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     client = await _client(store)
 
-    register = await client.post(
-        "/api/auth/register",
-        json={
-            "email": "persistent.engineer@example.com",
-            "username": "persistent-engineer",
-            "full_name": "Persistent Engineer",
-            "password": "password123",
-        },
+    _authenticate_client(
+        client,
+        store,
+        email="persistent.engineer@example.com",
+        username="persistent-engineer",
+        full_name="Persistent Engineer",
     )
-    assert register.status_code == 200, register.text
-    login = await client.post(
-        "/api/auth/login",
-        json={"email_or_username": "persistent-engineer", "password": "password123"},
-    )
-    assert login.status_code == 200, login.text
-
     case = await client.post(
         "/api/cases",
         json={
