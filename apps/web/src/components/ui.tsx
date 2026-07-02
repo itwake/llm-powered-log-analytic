@@ -1,4 +1,5 @@
 import Box from "@mui/material/Box";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import MuiButton from "@mui/material/Button";
 import type { ButtonProps as MuiButtonProps } from "@mui/material/Button";
 import MuiCard from "@mui/material/Card";
@@ -15,6 +16,10 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md";
 export type BadgeTone = "neutral" | "info" | "success" | "warning" | "danger";
 type CardTone = "default" | "subtle";
+interface InfoGridRow {
+  label: string;
+  value: ReactNode;
+}
 
 export function statusTone(status: string | null | undefined): BadgeTone {
   if (status === "ready" || status === "completed" || status === "success") {
@@ -46,6 +51,7 @@ interface ButtonProps extends Omit<MuiButtonProps, "variant" | "size" | "color">
 export function Button({
   children,
   size = "md",
+  sx,
   variant = "primary",
   type = "button",
   ...props
@@ -57,6 +63,27 @@ export function Button({
         ? "outlined"
         : "text";
   const color = variant === "danger" ? "error" : variant === "ghost" ? "inherit" : "primary";
+  const variantSx = {
+    ...(variant === "secondary"
+      ? {
+          bgcolor: "rgba(255,255,255,0.82)",
+          borderColor: "rgba(91,92,246,0.22)",
+          color: "primary.dark",
+          "&:hover": {
+            bgcolor: "rgba(91,92,246,0.08)",
+            borderColor: "rgba(91,92,246,0.32)",
+          },
+        }
+      : {}),
+    ...(variant === "ghost"
+      ? {
+          bgcolor: "rgba(91,92,246,0.07)",
+          color: "primary.dark",
+          "&:hover": { bgcolor: "rgba(91,92,246,0.12)" },
+        }
+      : {}),
+  };
+  const sxArray = Array.isArray(sx) ? sx : sx ? [sx] : [];
 
   return (
     <MuiButton
@@ -64,6 +91,7 @@ export function Button({
       size={size === "sm" ? "small" : "medium"}
       type={type}
       variant={mappedVariant}
+      sx={[variantSx, ...sxArray]}
       {...props}
     >
       {children}
@@ -76,7 +104,7 @@ interface BadgeProps extends Omit<ChipProps, "children" | "color" | "size" | "la
   children?: ReactNode;
 }
 
-export function Badge({ children, tone = "neutral", variant = "filled", ...props }: BadgeProps) {
+export function Badge({ children, tone = "neutral", variant = "outlined", ...props }: BadgeProps) {
   const color =
     tone === "danger"
       ? "error"
@@ -89,7 +117,7 @@ export function Badge({ children, tone = "neutral", variant = "filled", ...props
       color={color}
       label={children}
       size="small"
-      variant={tone === "neutral" ? "outlined" : variant}
+      variant={variant}
       {...props}
     />
   );
@@ -104,12 +132,13 @@ export function Card({ children, sx, tone = "default", ...props }: CardProps) {
   return (
     <MuiCard
       sx={{
-        bgcolor: tone === "subtle" ? "grey.50" : "background.paper",
+        bgcolor: tone === "subtle" ? "rgba(217,236,255,0.55)" : "background.paper",
+        borderRadius: 4,
         ...sx,
       }}
       {...props}
     >
-      <CardContent sx={{ "&:last-child": { pb: 3 }, p: { xs: 2, sm: 3 } }}>
+      <CardContent sx={{ "&:last-child": { pb: { xs: 2.5, sm: 3.5 } }, p: { xs: 2.5, sm: 3.5 } }}>
         {children}
       </CardContent>
     </MuiCard>
@@ -119,17 +148,20 @@ export function Card({ children, sx, tone = "default", ...props }: CardProps) {
 interface EmptyStateProps extends HTMLAttributes<HTMLDivElement> {
   title?: string;
   children?: ReactNode;
+  icon?: ReactNode;
 }
 
-export function EmptyState({ title, children, ...props }: EmptyStateProps) {
+export function EmptyState({ title, children, icon, ...props }: EmptyStateProps) {
   return (
     <Box
       {...props}
       sx={{
         alignItems: "center",
-        border: "1px dashed",
-        borderColor: "divider",
-        borderRadius: 2,
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(244,247,255,0.72))",
+        border: "1px solid",
+        borderColor: "rgba(91,92,246,0.12)",
+        borderRadius: 4,
         color: "text.secondary",
         display: "flex",
         flexDirection: "column",
@@ -140,8 +172,22 @@ export function EmptyState({ title, children, ...props }: EmptyStateProps) {
         textAlign: "center",
       }}
     >
+      <Box
+        sx={{
+          alignItems: "center",
+          bgcolor: "rgba(91,92,246,0.1)",
+          borderRadius: "50%",
+          color: "primary.main",
+          display: "flex",
+          height: 46,
+          justifyContent: "center",
+          width: 46,
+        }}
+      >
+        {icon || <AutoAwesomeIcon fontSize="small" />}
+      </Box>
       {title && (
-        <Typography color="text.primary" sx={{ fontWeight: 750 }} variant="h6">
+        <Typography color="text.primary" component="p" sx={{ fontWeight: 750 }} variant="subtitle1">
           {title}
         </Typography>
       )}
@@ -172,6 +218,40 @@ export function FieldHint({ children, ...props }: HTMLAttributes<HTMLParagraphEl
   );
 }
 
+export function InfoGrid({ minColumnWidth = 220, rows }: { minColumnWidth?: number; rows: InfoGridRow[] }) {
+  return (
+    <Box
+      sx={{
+        display: "grid",
+        gap: 1.25,
+        gridTemplateColumns: { xs: "1fr", sm: `repeat(auto-fit, minmax(${minColumnWidth}px, 1fr))` },
+      }}
+    >
+      {rows.map((row) => (
+        <Box
+          key={row.label}
+          sx={{
+            bgcolor: "rgba(91,92,246,0.055)",
+            border: "1px solid",
+            borderColor: "rgba(91,92,246,0.1)",
+            borderRadius: 3,
+            p: 1.75,
+          }}
+        >
+          <Typography
+            color="text.secondary"
+            sx={{ display: "block", fontWeight: 800, letterSpacing: 0.4, mb: 0.5, textTransform: "uppercase" }}
+            variant="caption"
+          >
+            {row.label}
+          </Typography>
+          <Box sx={{ color: "text.primary", fontWeight: 750, overflowWrap: "anywhere" }}>{row.value}</Box>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 interface SectionHeaderProps extends HTMLAttributes<HTMLDivElement> {
   title: string;
   eyebrow?: string;
@@ -188,11 +268,15 @@ export function SectionHeader({ actions, eyebrow, title, ...props }: SectionHead
     >
       <Box>
         {eyebrow && (
-          <Typography color="text.secondary" sx={{ fontWeight: 800, textTransform: "uppercase" }} variant="caption">
+          <Typography
+            color="primary"
+            sx={{ display: "block", fontWeight: 850, letterSpacing: 0.5, mb: 0.5, textTransform: "uppercase" }}
+            variant="caption"
+          >
             {eyebrow}
           </Typography>
         )}
-        <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+        <Typography component="h2" sx={{ fontWeight: 850 }} variant="h6">
           {title}
         </Typography>
       </Box>

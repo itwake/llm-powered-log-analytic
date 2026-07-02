@@ -8,11 +8,6 @@ import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
@@ -27,7 +22,7 @@ import {
 } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
 import { Metric } from "@/components/Shell";
-import { Button, Card, EmptyState } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, InfoGrid } from "@/components/ui";
 
 function retentionValue(result: RetentionRunResponse | null, key: keyof RetentionRunResponse): string {
   return result ? String(result[key]) : "n/a";
@@ -270,7 +265,12 @@ export default function AdminPage() {
         minWidth: 170,
         renderCell: (params) => formatDateTime(params.row.created_at),
       },
-      { field: "action", headerName: "Action", minWidth: 180 },
+      {
+        field: "action",
+        headerName: "Action",
+        minWidth: 180,
+        renderCell: (params) => <Badge tone="info">{params.row.action}</Badge>,
+      },
       {
         field: "user_id",
         headerName: "User",
@@ -331,14 +331,17 @@ export default function AdminPage() {
             <Typography component="h2" gutterBottom sx={{ fontWeight: 800 }} variant="h6">
               Settings
             </Typography>
-            <Table size="small">
-              <TableBody>
-                <TableRow><TableCell>Configured store</TableCell><TableCell>{settings.configured_store_backend}</TableCell></TableRow>
-                <TableRow><TableCell>Orchestrator</TableCell><TableCell>{settings.orchestrator}</TableCell></TableRow>
-                <TableRow><TableCell>Rate limit</TableCell><TableCell>{settings.rate_limit.enabled ? `${settings.rate_limit.requests_per_minute}/min` : "disabled"}</TableCell></TableRow>
-                <TableRow><TableCell>Analytics</TableCell><TableCell>{JSON.stringify(settings.analytics)}</TableCell></TableRow>
-              </TableBody>
-            </Table>
+            <InfoGrid
+              rows={[
+                { label: "Configured store", value: settings.configured_store_backend },
+                { label: "Orchestrator", value: settings.orchestrator },
+                {
+                  label: "Rate limit",
+                  value: settings.rate_limit.enabled ? `${settings.rate_limit.requests_per_minute}/min` : "disabled",
+                },
+                { label: "Analytics", value: JSON.stringify(settings.analytics) },
+              ]}
+            />
           </Card>
 
           <Card>
@@ -352,19 +355,14 @@ export default function AdminPage() {
                 </Button>
               </Stack>
               <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "minmax(280px, 0.6fr) minmax(0, 1fr)" } }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Policy</TableCell>
-                      <TableCell>Days</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    <TableRow><TableCell>Audit</TableCell><TableCell>{settings.retention_days.audit}</TableCell></TableRow>
-                    <TableRow><TableCell>Raw logs</TableCell><TableCell>{settings.retention_days.raw_log}</TableCell></TableRow>
-                    <TableRow><TableCell>Reports</TableCell><TableCell>{settings.retention_days.report}</TableCell></TableRow>
-                  </TableBody>
-                </Table>
+                <InfoGrid
+                  minColumnWidth={130}
+                  rows={[
+                    { label: "Audit", value: `${settings.retention_days.audit} days` },
+                    { label: "Raw logs", value: `${settings.retention_days.raw_log} days` },
+                    { label: "Reports", value: `${settings.retention_days.report} days` },
+                  ]}
+                />
                 <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" } }}>
                   <Metric label="Audits deleted" value={retentionValue(retention, "audit_logs_deleted")} />
                   <Metric label="Raw lines scrubbed" value={retentionValue(retention, "raw_log_lines_scrubbed")} />
@@ -396,7 +394,7 @@ export default function AdminPage() {
                 </Stack>
               </Stack>
               {policyGroups.length === 0 ? (
-                <EmptyState title="No policy groups" />
+                <EmptyState title="No Data Found" />
               ) : (
                 <Box sx={{ minHeight: 360 }}>
                   <DataGrid
@@ -463,7 +461,7 @@ export default function AdminPage() {
                 </Stack>
               </Stack>
               {auditLogs.length === 0 ? (
-                <EmptyState title="No audit logs" />
+                <EmptyState title="No Data Found" />
               ) : (
                 <Box sx={{ minHeight: 520 }}>
                   <DataGrid

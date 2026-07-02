@@ -52,6 +52,38 @@ export default function CasesPage() {
     void load();
   }
 
+  const caseItems = data?.items || [];
+  const overviewMetrics = [
+    {
+      label: "Total Cases",
+      value: data ? String(data.total || caseItems.length) : "n/a",
+      icon: "TC",
+      color: "primary.main",
+      bg: "rgba(91,92,246,0.12)",
+    },
+    {
+      label: "Ready",
+      value: String(caseItems.filter((item) => item.status === "ready" || item.status === "completed").length),
+      icon: "RD",
+      color: "success.main",
+      bg: "rgba(16,185,129,0.14)",
+    },
+    {
+      label: "Processing",
+      value: String(caseItems.filter((item) => ["processing", "uploading", "queued", "running"].includes(item.status)).length),
+      icon: "PR",
+      color: "warning.main",
+      bg: "rgba(249,115,22,0.13)",
+    },
+    {
+      label: "Failed / Attention",
+      value: String(caseItems.filter((item) => ["failed", "cancelled", "error"].includes(item.status)).length),
+      icon: "AT",
+      color: "error.main",
+      bg: "rgba(239,68,68,0.12)",
+    },
+  ];
+
   return (
     <Stack spacing={2.5}>
       <Stack
@@ -75,36 +107,77 @@ export default function CasesPage() {
         </Button>
       </Stack>
 
+      <Box
+        component="section"
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" },
+        }}
+      >
+        {overviewMetrics.map((metric) => (
+          <Card key={metric.label} sx={{ overflow: "hidden" }}>
+            <Stack direction="row" spacing={1.75} sx={{ alignItems: "center" }}>
+              <Box
+                sx={{
+                  alignItems: "center",
+                  bgcolor: metric.bg,
+                  borderRadius: "50%",
+                  color: metric.color,
+                  display: "flex",
+                  flex: "0 0 auto",
+                  fontSize: 12,
+                  fontWeight: 900,
+                  height: 48,
+                  justifyContent: "center",
+                  width: 48,
+                }}
+              >
+                {metric.icon}
+              </Box>
+              <Box>
+                <Typography color="text.secondary" variant="body2">
+                  {metric.label}
+                </Typography>
+                <Typography sx={{ fontWeight: 900 }} variant="h4">
+                  {metric.value}
+                </Typography>
+              </Box>
+            </Stack>
+          </Card>
+        ))}
+      </Box>
+
       <Card>
         <Box component="form" onSubmit={submit}>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { xs: "stretch", md: "center" } }}>
-          <FormControl sx={{ minWidth: 180 }}>
-            <InputLabel id="case-status-filter-label">Status</InputLabel>
-            <Select
-              label="Status"
-              labelId="case-status-filter-label"
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
-            >
-              <MenuItem value="">Any</MenuItem>
-              <MenuItem value="created">Created</MenuItem>
-              <MenuItem value="uploading">Uploading</MenuItem>
-              <MenuItem value="processing">Processing</MenuItem>
-              <MenuItem value="ready">Ready</MenuItem>
-              <MenuItem value="failed">Failed</MenuItem>
-              <MenuItem value="cancelled">Cancelled</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField
-            label="Product"
-            sx={{ minWidth: { md: 260 } }}
-            value={product}
-            onChange={(event) => setProduct(event.target.value)}
-          />
-          <Button disabled={loading} type="submit" variant="secondary">
-            Apply
-          </Button>
-        </Stack>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { xs: "stretch", md: "center" } }}>
+            <FormControl sx={{ minWidth: { xs: "100%", md: 220 } }}>
+              <InputLabel id="case-status-filter-label">Status</InputLabel>
+              <Select
+                label="Status"
+                labelId="case-status-filter-label"
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+              >
+                <MenuItem value="">Any</MenuItem>
+                <MenuItem value="created">Created</MenuItem>
+                <MenuItem value="uploading">Uploading</MenuItem>
+                <MenuItem value="processing">Processing</MenuItem>
+                <MenuItem value="ready">Ready</MenuItem>
+                <MenuItem value="failed">Failed</MenuItem>
+                <MenuItem value="cancelled">Cancelled</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              label="Product"
+              sx={{ minWidth: { xs: "100%", md: 280 } }}
+              value={product}
+              onChange={(event) => setProduct(event.target.value)}
+            />
+            <Button disabled={loading} type="submit" variant="secondary">
+              Apply
+            </Button>
+          </Stack>
         </Box>
       </Card>
 
@@ -145,9 +218,20 @@ export default function CasesPage() {
           }}
         >
           {data.items.map((item) => (
-            <MuiCard key={item.case_id}>
+            <MuiCard
+              key={item.case_id}
+              sx={{
+                borderColor: "rgba(91,92,246,0.1)",
+                borderRadius: 5,
+                transition: "transform 160ms ease, box-shadow 160ms ease",
+                "&:hover": {
+                  boxShadow: "0 22px 55px rgba(36,59,122,0.14)",
+                  transform: "translateY(-4px)",
+                },
+              }}
+            >
               <CardActionArea component={Link} href={`/cases/${item.case_id}`} sx={{ height: "100%" }}>
-                <CardContent sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", p: 2.5 }}>
+                <CardContent sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%", p: 3 }}>
                   <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between" }}>
                     <Typography color="text.secondary" sx={{ fontWeight: 800 }} variant="caption">
                       {item.case_key}

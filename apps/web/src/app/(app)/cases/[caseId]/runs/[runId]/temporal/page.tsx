@@ -4,7 +4,6 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
-import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -52,6 +51,19 @@ function windowEnd(windowStart: string, windowSizeSeconds: number): string {
     return windowStart;
   }
   return new Date(start.getTime() + windowSizeSeconds * 1000).toISOString();
+}
+
+function windowSizeLabel(seconds: number): string {
+  if (seconds === 60) {
+    return "1 minute";
+  }
+  if (seconds === 300) {
+    return "5 minutes";
+  }
+  if (seconds === 900) {
+    return "15 minutes";
+  }
+  return `${seconds}s`;
 }
 
 interface SelectedWindow {
@@ -135,14 +147,34 @@ export default function TemporalPage() {
   const chartPalette = useMemo(
     () => [
       theme.palette.primary.main,
-      theme.palette.success.main,
-      theme.palette.error.main,
-      theme.palette.warning.main,
       theme.palette.info.main,
+      theme.palette.success.main,
+      theme.palette.warning.main,
+      theme.palette.error.main,
       theme.palette.secondary.main,
     ],
     [theme],
   );
+
+  const peakLogs = useMemo(() => {
+    let peak = 0;
+    totals.forEach((value) => {
+      peak = Math.max(peak, value);
+    });
+    return peak;
+  }, [totals]);
+  const groupLabel = {
+    golden_signal: "Golden signal",
+    service: "Service",
+    fault_category: "Fault category",
+    template: "Template",
+  }[groupBy] || groupBy;
+  const temporalKpis = [
+    { label: "Total windows", value: String(windows.length), tone: "primary" },
+    { label: "Peak logs", value: String(peakLogs), tone: "info" },
+    { label: "Group", value: groupLabel, tone: "success" },
+    { label: "Window size", value: windowSizeLabel(windowSizeSeconds), tone: "warning" },
+  ];
 
   const chartOption = useMemo<EChartsCoreOption>(() => ({
     color: chartPalette,
@@ -284,28 +316,32 @@ export default function TemporalPage() {
           <FormControl sx={{ minWidth: 160 }}>
             <InputLabel id="temporal-window-label">Window</InputLabel>
             <Select
+              inputProps={{ "aria-label": "Window" }}
               label="Window"
               labelId="temporal-window-label"
+              native
               value={String(windowSizeSeconds)}
               onChange={(event) => setWindowSizeSeconds(Number(event.target.value))}
             >
-              <MenuItem value="60">1 minute</MenuItem>
-              <MenuItem value="300">5 minutes</MenuItem>
-              <MenuItem value="900">15 minutes</MenuItem>
+              <option value="60">1 minute</option>
+              <option value="300">5 minutes</option>
+              <option value="900">15 minutes</option>
             </Select>
           </FormControl>
           <FormControl sx={{ minWidth: 190 }}>
             <InputLabel id="temporal-group-label">Group</InputLabel>
             <Select
+              inputProps={{ "aria-label": "Group" }}
               label="Group"
               labelId="temporal-group-label"
+              native
               value={groupBy}
               onChange={(event) => setGroupBy(event.target.value)}
             >
-              <MenuItem value="golden_signal">Golden signal</MenuItem>
-              <MenuItem value="service">Service</MenuItem>
-              <MenuItem value="fault_category">Fault category</MenuItem>
-              <MenuItem value="template">Template</MenuItem>
+              <option value="golden_signal">Golden signal</option>
+              <option value="service">Service</option>
+              <option value="fault_category">Fault category</option>
+              <option value="template">Template</option>
             </Select>
           </FormControl>
           <Button disabled={loading} type="submit" variant="secondary">
@@ -315,11 +351,55 @@ export default function TemporalPage() {
       </Stack>
 
       {error && <Alert severity="error">{error}</Alert>}
+      <Box
+        component="section"
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" },
+        }}
+      >
+        {temporalKpis.map((item) => (
+          <Card key={item.label}>
+            <Stack spacing={0.75}>
+              <Box
+                sx={{
+                  bgcolor:
+                    item.tone === "primary"
+                      ? "rgba(91,92,246,0.12)"
+                      : item.tone === "info"
+                        ? "rgba(6,182,212,0.14)"
+                        : item.tone === "success"
+                          ? "rgba(16,185,129,0.14)"
+                          : "rgba(249,115,22,0.13)",
+                  borderRadius: "50%",
+                  height: 12,
+                  width: 12,
+                }}
+              />
+              <Typography color="text.secondary" variant="body2">
+                {item.label}
+              </Typography>
+              <Typography sx={{ fontWeight: 900, overflowWrap: "anywhere" }} variant="h5">
+                {item.value}
+              </Typography>
+            </Stack>
+          </Card>
+        ))}
+      </Box>
       <Card>
         {loading && <EmptyState title="Loading temporal data" />}
         {!loading && data && data.series.length === 0 && <EmptyState title="No temporal data" />}
         {!loading && data && data.series.length > 0 && (
           <Stack spacing={2}>
+            <Box>
+              <Typography component="h2" sx={{ fontWeight: 850 }} variant="h6">
+                Temporal aggregation
+              </Typography>
+              <Typography color="text.secondary">
+                Click a bar to isolate the incident window and jump into the matching log slice.
+              </Typography>
+            </Box>
             <Box
               aria-label="Temporal stacked bar chart"
               className="temporal-chart"
@@ -330,7 +410,17 @@ export default function TemporalPage() {
               data-testid="temporal-selection-summary"
               direction={{ xs: "column", sm: "row" }}
               spacing={1.5}
-              sx={{ alignItems: { xs: "flex-start", sm: "center" }, border: 1, borderColor: "divider", borderRadius: 2, justifyContent: "space-between", p: 2 }}
+              sx={{
+                alignItems: { xs: "flex-start", sm: "center" },
+                background: selectedWindow
+                  ? "linear-gradient(135deg, rgba(91,92,246,0.12), rgba(6,182,212,0.12))"
+                  : "rgba(91,92,246,0.05)",
+                border: 1,
+                borderColor: "rgba(91,92,246,0.16)",
+                borderRadius: 4,
+                justifyContent: "space-between",
+                p: 2.5,
+              }}
             >
               {selectedWindow ? (
                 <>

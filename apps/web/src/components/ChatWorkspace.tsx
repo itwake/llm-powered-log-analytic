@@ -184,20 +184,46 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
   const composerDisabled = !run || Boolean(streamingMessageId);
 
   return (
-    <Card>
+    <Card sx={{ background: "linear-gradient(180deg, #ffffff, rgba(230,225,255,0.26))" }}>
       <Stack spacing={2}>
-        <Box>
-          <Typography color="text.secondary" sx={{ fontWeight: 800, textTransform: "uppercase" }} variant="caption">
-            Incident Copilot
-          </Typography>
-          <Typography component="h2" sx={{ fontWeight: 850 }} variant="h6">
-            Analysis Chat
-          </Typography>
-        </Box>
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <Box
+            sx={{
+              alignItems: "center",
+              background: "linear-gradient(135deg, #5b5cf6, #06b6d4)",
+              borderRadius: "50%",
+              boxShadow: "0 14px 28px rgba(91,92,246,0.22)",
+              color: "#ffffff",
+              display: "flex",
+              flex: "0 0 auto",
+              fontWeight: 900,
+              height: 46,
+              justifyContent: "center",
+              width: 46,
+            }}
+          >
+            AI
+          </Box>
+          <Box>
+            <Typography color="primary" sx={{ fontWeight: 850, letterSpacing: 0.5, textTransform: "uppercase" }} variant="caption">
+              Incident Copilot
+            </Typography>
+            <Typography component="h2" sx={{ fontWeight: 900 }} variant="h6">
+              Analysis Chat
+            </Typography>
+          </Box>
+        </Stack>
 
         {messages.length === 0 && (
           <Stack spacing={1.5}>
-            <EmptyState title="Ask about this incident">
+            <EmptyState
+              icon={
+                <Box component="span" sx={{ fontSize: 13, fontWeight: 900 }}>
+                  AI
+                </Box>
+              }
+              title="Ask about this incident"
+            >
               Use the latest run context to investigate symptoms, timeline, evidence, and likely root cause.
             </EmptyState>
             <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
@@ -222,8 +248,9 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
             spacing={2}
             sx={{
               border: 1,
-              borderColor: "divider",
-              borderRadius: 2,
+              borderColor: "rgba(91,92,246,0.12)",
+              borderRadius: 4,
+              bgcolor: "rgba(255,255,255,0.72)",
               maxHeight: 520,
               minHeight: 320,
               overflowY: "auto",
@@ -241,8 +268,12 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
                 >
                   <Box
                     sx={{
-                      bgcolor: isUser ? "primary.main" : "grey.100",
-                      borderRadius: 2,
+                      background: isUser
+                        ? "linear-gradient(135deg, #5b5cf6, #8b5cf6)"
+                        : "linear-gradient(180deg, #ffffff, #f7f5ff)",
+                      border: isUser ? 0 : "1px solid rgba(91,92,246,0.12)",
+                      borderRadius: 4,
+                      boxShadow: isUser ? "0 12px 24px rgba(91,92,246,0.22)" : "0 10px 22px rgba(36,59,122,0.06)",
                       color: isUser ? "primary.contrastText" : "text.primary",
                       maxWidth: "min(760px, 92%)",
                       p: 1.5,
@@ -300,6 +331,12 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
               minRows={3}
               multiline
               placeholder="Ask about this incident, logs, timeline, or likely root cause..."
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: 4,
+                  p: 0.5,
+                },
+              }}
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={handleKeyDown}

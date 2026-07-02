@@ -369,7 +369,12 @@ export default function CausalGraphPage() {
           </Typography>
         ),
       },
-      { field: "method", headerName: "Method", minWidth: 140 },
+      {
+        field: "method",
+        headerName: "Method",
+        minWidth: 140,
+        renderCell: (params) => <Badge tone="info">{params.row.method}</Badge>,
+      },
       {
         field: "confidence",
         headerName: "Confidence",
@@ -552,7 +557,7 @@ export default function CausalGraphPage() {
             Candidate Edges
           </Typography>
           {!loading && data && data.edges.length === 0 ? (
-            <EmptyState title="No edges match the filter" />
+            <EmptyState title="No Data Found" />
           ) : (
             <Box sx={{ minHeight: 420 }}>
               <DataGrid

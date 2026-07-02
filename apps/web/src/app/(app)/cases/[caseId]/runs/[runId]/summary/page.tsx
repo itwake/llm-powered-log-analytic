@@ -4,7 +4,6 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
-import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -155,17 +154,19 @@ export default function SummaryPage() {
           <FormControl sx={{ minWidth: 220 }}>
             <InputLabel id="summary-signal-label">Signal</InputLabel>
             <Select
+              inputProps={{ "aria-label": "Signal" }}
               label="Signal"
               labelId="summary-signal-label"
+              native
               value={goldenSignal}
               onChange={(event) => setGoldenSignal(event.target.value)}
             >
-              <MenuItem value="">All offending</MenuItem>
-              <MenuItem value="error">Error</MenuItem>
-              <MenuItem value="availability">Availability</MenuItem>
-              <MenuItem value="latency">Latency</MenuItem>
-              <MenuItem value="saturation">Saturation</MenuItem>
-              <MenuItem value="traffic">Traffic</MenuItem>
+              <option value="">All offending</option>
+              <option value="error">Error</option>
+              <option value="availability">Availability</option>
+              <option value="latency">Latency</option>
+              <option value="saturation">Saturation</option>
+              <option value="traffic">Traffic</option>
             </Select>
           </FormControl>
           <Button disabled={loading} type="submit" variant="secondary">
@@ -186,7 +187,7 @@ export default function SummaryPage() {
 
       <Card>
         {!loading && data && data.items.length === 0 ? (
-          <EmptyState title="No summary rows" />
+          <EmptyState title="No Data Found" />
         ) : (
           <Box sx={{ minHeight: 520 }}>
             <DataGrid

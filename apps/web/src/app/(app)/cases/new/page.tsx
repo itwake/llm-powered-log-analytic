@@ -130,83 +130,84 @@ export default function NewCasePage() {
 
         <Card>
           <Box component="form" onSubmit={submit}>
-          <Stack spacing={2.5}>
-            {error && <Alert severity="error">{error}</Alert>}
-            <SectionHeader eyebrow="Incident" title="Case details" />
-            <TextField
-              label="Title"
-              required
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-            <TextField
-              label="Issue description"
-              minRows={4}
-              multiline
-              value={issueDescription}
-              onChange={(event) => setIssueDescription(event.target.value)}
-            />
-            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" } }}>
-              <TextField label="Product" value={product} onChange={(event) => setProduct(event.target.value)} />
-              <TextField label="Service" value={service} onChange={(event) => setService(event.target.value)} />
-              <TextField label="Environment" value={environment} onChange={(event) => setEnvironment(event.target.value)} />
+            <Stack spacing={2.5}>
+              {error && <Alert severity="error">{error}</Alert>}
+              <SectionHeader eyebrow="Incident" title="Case details" />
               <TextField
-                label="Incident start"
-                slotProps={{ inputLabel: { shrink: true } }}
-                type="datetime-local"
-                value={incidentStart}
-                onChange={(event) => setIncidentStart(event.target.value)}
+                label="Title"
+                required
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
               />
               <TextField
-                label="Incident end"
-                slotProps={{ inputLabel: { shrink: true } }}
-                type="datetime-local"
-                value={incidentEnd}
-                onChange={(event) => setIncidentEnd(event.target.value)}
+                label="Issue description"
+                minRows={4}
+                multiline
+                value={issueDescription}
+                onChange={(event) => setIssueDescription(event.target.value)}
               />
-            </Box>
+              <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" } }}>
+                <TextField label="Product" value={product} onChange={(event) => setProduct(event.target.value)} />
+                <TextField label="Service" value={service} onChange={(event) => setService(event.target.value)} />
+                <TextField label="Environment" value={environment} onChange={(event) => setEnvironment(event.target.value)} />
+                <TextField
+                  label="Incident start"
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  type="datetime-local"
+                  value={incidentStart}
+                  onChange={(event) => setIncidentStart(event.target.value)}
+                />
+                <TextField
+                  label="Incident end"
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  type="datetime-local"
+                  value={incidentEnd}
+                  onChange={(event) => setIncidentEnd(event.target.value)}
+                />
+              </Box>
 
-            <Box
-              component="label"
-              sx={{
-                border: "1px dashed",
-                borderColor: "divider",
-                borderRadius: 2,
-                cursor: "pointer",
-                display: "grid",
-                gap: 1,
-                p: 2,
-              }}
-            >
-              <Typography sx={{ fontWeight: 750 }}>Log/archive files</Typography>
-              <input
-                accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
-                multiple
-                type="file"
-                onChange={(event) => setSelectedFiles(Array.from(event.target.files || []))}
-              />
-              <FieldHint>
-                {selectedFiles.length
-                  ? `${selectedFiles.length} file(s) selected`
-                  : "Upload logs or continue with the local sample data."}
-              </FieldHint>
-            </Box>
-            {selectedFiles.length > 0 && (
-              <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
-                {selectedFiles.map((file) => (
-                  <Chip key={`${file.name}-${file.size}`} label={`${file.name} - ${formatBytes(file.size)}`} />
-                ))}
+              <Box
+                component="label"
+                sx={{
+                  background: "linear-gradient(135deg, rgba(217,236,255,0.5), rgba(230,225,255,0.45))",
+                  border: "1px dashed",
+                  borderColor: "rgba(91,92,246,0.28)",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  display: "grid",
+                  gap: 1,
+                  p: 2.5,
+                }}
+              >
+                <Typography sx={{ fontWeight: 800 }}>Log/archive files</Typography>
+                <input
+                  accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
+                  multiple
+                  type="file"
+                  onChange={(event) => setSelectedFiles(Array.from(event.target.files || []))}
+                />
+                <FieldHint>
+                  {selectedFiles.length
+                    ? `${selectedFiles.length} file(s) selected`
+                    : "Upload logs or continue with the local sample data."}
+                </FieldHint>
+              </Box>
+              {selectedFiles.length > 0 && (
+                <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+                  {selectedFiles.map((file) => (
+                    <Chip key={`${file.name}-${file.size}`} label={`${file.name} - ${formatBytes(file.size)}`} />
+                  ))}
+                </Stack>
+              )}
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                <Button disabled={submitting} name="mode" type="submit" value="create">
+                  {submitting && submitMode === "create" ? "Creating" : "Create case"}
+                </Button>
+                <Button disabled={submitting} name="mode" type="submit" value="start" variant="secondary">
+                  {submitting && submitMode === "start" ? "Starting" : startButtonLabel}
+                </Button>
               </Stack>
-            )}
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-              <Button disabled={submitting} name="mode" type="submit" value="create">
-                {submitting && submitMode === "create" ? "Creating" : "Create case"}
-              </Button>
-              <Button disabled={submitting} name="mode" type="submit" value="start" variant="secondary">
-                {submitting && submitMode === "start" ? "Starting" : startButtonLabel}
-              </Button>
             </Stack>
-          </Stack>
           </Box>
         </Card>
       </Box>

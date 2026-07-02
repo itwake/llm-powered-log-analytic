@@ -33,6 +33,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "@/components/Link";
 import { authApi, casesApi } from "@/lib/api";
 import type { CaseResponse, UserOut } from "@/lib/api";
+import { loganTokens } from "@/theme";
 
 interface ShellProps {
   children: ReactNode;
@@ -69,15 +70,23 @@ function displayNameFromEmail(email: string | null | undefined): string | null {
 function navSx(collapsed: boolean) {
   return {
     borderRadius: 2,
+    color: "#d9e3f5",
     minHeight: 40,
     justifyContent: collapsed ? "center" : "flex-start",
     px: collapsed ? 1.25 : 1.5,
+    transition: "background-color 160ms ease, color 160ms ease, transform 160ms ease",
+    "&:hover": {
+      bgcolor: "rgba(255,255,255,0.08)",
+      color: "#ffffff",
+      transform: "translateX(2px)",
+    },
     "&.Mui-selected": {
-      bgcolor: "action.selected",
-      color: "text.primary",
+      bgcolor: "rgba(91, 92, 246, 0.28)",
+      boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.08)",
+      color: "#ffffff",
       fontWeight: 800,
       "&:hover": {
-        bgcolor: "action.hover",
+        bgcolor: "rgba(91, 92, 246, 0.34)",
       },
     },
   };
@@ -251,7 +260,7 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
     return links;
   }, [activeCaseId, activeRunId]);
 
-  const signedInDisplayName = displayNameFromEmail(user?.email) || user?.username || "Signed in";
+  const signedInDisplayName = user?.username || displayNameFromEmail(user?.email) || "Signed in";
   const headerTitle =
     caseTitle ||
     selectedCase?.title ||
@@ -309,9 +318,9 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
       <Box
         component="aside"
         sx={{
-          bgcolor: "background.paper",
+          bgcolor: loganTokens.sidebarBg,
           borderBottom: { xs: 1, md: 0 },
-          borderColor: "divider",
+          borderColor: loganTokens.sidebarBorder,
           borderRight: { md: 1 },
           display: "flex",
           flexDirection: "column",
@@ -335,20 +344,63 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
           }}
         >
           {!sidebarCollapsed && (
-            <Typography
+            <Stack
               component={Link}
+              direction="row"
               href="/cases"
-              sx={{ color: "text.primary", fontWeight: 850, letterSpacing: 0, textDecoration: "none" }}
-              variant="h6"
+              spacing={1.25}
+              sx={{ alignItems: "center", color: "#ffffff", textDecoration: "none" }}
             >
-              LogAn
-            </Typography>
+              <Box
+                sx={{
+                  alignItems: "center",
+                  background: "linear-gradient(135deg, #5b5cf6, #06b6d4)",
+                  borderRadius: 2,
+                  boxShadow: "0 10px 24px rgba(6,182,212,0.25)",
+                  display: "flex",
+                  fontSize: 12,
+                  fontWeight: 900,
+                  height: 34,
+                  justifyContent: "center",
+                  width: 34,
+                }}
+              >
+                LA
+              </Box>
+              <Box>
+                <Typography sx={{ fontWeight: 900, lineHeight: 1 }} variant="h6">
+                  LogAn
+                </Typography>
+                <Typography sx={{ color: loganTokens.sidebarMuted, fontSize: 11, fontWeight: 700 }}>
+                  Incident Workbench
+                </Typography>
+              </Box>
+            </Stack>
+          )}
+          {sidebarCollapsed && (
+            <Box
+              sx={{
+                alignItems: "center",
+                background: "linear-gradient(135deg, #5b5cf6, #06b6d4)",
+                borderRadius: 2,
+                color: "#ffffff",
+                display: "flex",
+                fontSize: 12,
+                fontWeight: 900,
+                height: 34,
+                justifyContent: "center",
+                width: 34,
+              }}
+            >
+              LA
+            </Box>
           )}
           <Tooltip title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
             <IconButton
               aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-pressed={sidebarCollapsed}
               size="small"
+              sx={{ color: "#d9e3f5", "&:hover": { bgcolor: "rgba(255,255,255,0.08)" } }}
               onClick={toggleSidebar}
             >
               {sidebarCollapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
@@ -374,22 +426,22 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
             />
           </List>
 
-          <Divider sx={{ my: 1.5 }} />
+          <Divider sx={{ borderColor: loganTokens.sidebarBorder, my: 1.5 }} />
 
           {!sidebarCollapsed && (
-            <Typography color="text.secondary" sx={{ fontWeight: 800, px: 1.5, py: 0.75, textTransform: "uppercase" }} variant="caption">
+            <Typography sx={{ color: loganTokens.sidebarMuted, fontWeight: 850, letterSpacing: 0.8, px: 1.5, py: 0.75, textTransform: "uppercase" }} variant="caption">
               Cases
             </Typography>
           )}
           <List aria-label="Cases" dense disablePadding sx={{ display: "grid", gap: 0.5 }}>
             {casesLoading && sidebarCases.length === 0 && (
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center", color: "text.secondary", px: 1.5, py: 1 }}>
-                <CircularProgress size={14} />
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", color: loganTokens.sidebarMuted, px: 1.5, py: 1 }}>
+                <CircularProgress size={14} sx={{ color: loganTokens.sidebarMuted }} />
                 {!sidebarCollapsed && <Typography variant="body2">Loading cases</Typography>}
               </Stack>
             )}
             {!casesLoading && sidebarCases.length === 0 && !sidebarCollapsed && (
-              <Typography color="text.secondary" sx={{ px: 1.5, py: 1 }} variant="body2">
+              <Typography sx={{ color: loganTokens.sidebarMuted, px: 1.5, py: 1 }} variant="body2">
                 No cases yet
               </Typography>
             )}
@@ -411,6 +463,7 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
                       sx={{
                         bgcolor: caseDotColor(item.status),
                         borderRadius: "999px",
+                        boxShadow: "0 0 0 3px rgba(255,255,255,0.08)",
                         flex: "0 0 auto",
                         height: 9,
                         mr: sidebarCollapsed ? 0 : 1.5,
@@ -434,9 +487,9 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
 
           {reportLinks.length > 0 && (
             <>
-              <Divider sx={{ my: 1.5 }} />
+              <Divider sx={{ borderColor: loganTokens.sidebarBorder, my: 1.5 }} />
               {!sidebarCollapsed && (
-                <Typography color="text.secondary" sx={{ fontWeight: 800, px: 1.5, py: 0.75, textTransform: "uppercase" }} variant="caption">
+                <Typography sx={{ color: loganTokens.sidebarMuted, fontWeight: 850, letterSpacing: 0.8, px: 1.5, py: 0.75, textTransform: "uppercase" }} variant="caption">
                   Current analysis
                 </Typography>
               )}
@@ -464,9 +517,9 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
             </>
           )}
 
-          <Divider sx={{ my: 1.5 }} />
+          <Divider sx={{ borderColor: loganTokens.sidebarBorder, my: 1.5 }} />
           {!sidebarCollapsed && (
-            <Typography color="text.secondary" sx={{ fontWeight: 800, px: 1.5, py: 0.75, textTransform: "uppercase" }} variant="caption">
+            <Typography sx={{ color: loganTokens.sidebarMuted, fontWeight: 850, letterSpacing: 0.8, px: 1.5, py: 0.75, textTransform: "uppercase" }} variant="caption">
               Settings
             </Typography>
           )}
@@ -492,17 +545,17 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
           </List>
         </Box>
 
-        <Divider />
+        <Divider sx={{ borderColor: loganTokens.sidebarBorder }} />
         <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", px: sidebarCollapsed ? 1 : 2, py: 1.5 }}>
-          <Avatar sx={{ bgcolor: "primary.main", fontSize: 13, fontWeight: 850, height: 34, width: 34 }}>
+          <Avatar sx={{ background: "linear-gradient(135deg, #5b5cf6, #06b6d4)", fontSize: 13, fontWeight: 850, height: 36, width: 36 }}>
             {signedInDisplayName.slice(0, 2).toUpperCase()}
           </Avatar>
           {!sidebarCollapsed && (
             <Box sx={{ minWidth: 0 }}>
-              <Typography noWrap sx={{ fontWeight: 800 }} variant="body2">
+              <Typography noWrap sx={{ color: "#ffffff", fontWeight: 800 }} variant="body2">
                 {signedInDisplayName}
               </Typography>
-              <Typography color="text.secondary" noWrap variant="caption">
+              <Typography noWrap sx={{ color: loganTokens.sidebarMuted }} variant="caption">
                 AI Platform
               </Typography>
             </Box>
@@ -516,9 +569,8 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
           sx={{
             alignItems: "center",
             backdropFilter: "blur(10px)",
-            bgcolor: "rgba(247, 247, 248, 0.88)",
-            borderBottom: 1,
-            borderColor: "divider",
+            bgcolor: "rgba(243, 245, 255, 0.72)",
+            borderBottom: "1px solid rgba(91,92,246,0.08)",
             display: "flex",
             gap: 2,
             justifyContent: "space-between",
@@ -534,7 +586,7 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
           </Typography>
           <Box sx={{ flex: "0 0 auto" }}>
             {authState === "loading" && <Chip color="default" label="Checking session" variant="outlined" />}
-            {authState === "signed-in" && <Chip icon={<InsightsIcon />} label={`${signedInDisplayName} - AI Platform`} variant="outlined" />}
+            {authState === "signed-in" && <Chip icon={<InsightsIcon />} label="AI Platform" variant="outlined" />}
             {authState === "signed-out" && (
               <Chip component={Link} clickable href="/login" label="Continue with SSO" variant="outlined" />
             )}
@@ -558,10 +610,21 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
 
 export function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <Card>
-      <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
+    <Card sx={{ border: "1px solid rgba(91,92,246,0.1)", borderRadius: 4, overflow: "hidden" }}>
+      <CardContent sx={{ p: 2.5, position: "relative", "&:last-child": { pb: 2.5 } }}>
+        <Box
+          sx={{
+            bgcolor: "primary.main",
+            borderRadius: "999px",
+            height: 8,
+            left: 18,
+            position: "absolute",
+            top: 16,
+            width: 36,
+          }}
+        />
         <Stack spacing={0.75}>
-          <Typography color="text.secondary" variant="body2">
+          <Typography color="text.secondary" sx={{ pt: 1.25 }} variant="body2">
             {label}
           </Typography>
           <Typography component="strong" sx={{ fontWeight: 850 }} variant="h5">

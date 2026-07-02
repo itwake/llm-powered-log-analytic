@@ -362,9 +362,18 @@ export default function CaseWorkspacePage() {
       {!loading && caseRecord && (
         <Box sx={{ display: "grid", gap: 2.5, gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.45fr) minmax(380px, 0.75fr)" } }}>
           <Stack spacing={2.5}>
-            <Card>
+            <Card
+              sx={{
+                background:
+                  "linear-gradient(135deg, rgba(255,255,255,0.96), rgba(217,236,255,0.72))",
+                overflow: "hidden",
+              }}
+            >
               <Stack direction={{ xs: "column", lg: "row" }} spacing={2.5} sx={{ alignItems: { xs: "flex-start", lg: "center" }, justifyContent: "space-between" }}>
                 <Stack spacing={1.5} sx={{ minWidth: 0 }}>
+                  <Typography color="primary" sx={{ fontWeight: 900, letterSpacing: 0.5, textTransform: "uppercase" }} variant="caption">
+                    Incident Overview
+                  </Typography>
                   <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
                     <Typography color="text.secondary" sx={{ fontWeight: 800 }} variant="caption">
                       {caseRecord.case_key}
@@ -388,30 +397,40 @@ export default function CaseWorkspacePage() {
                     )}
                   </Stack>
                 </Stack>
-                <Stack direction={{ xs: "column", sm: "row", lg: "column" }} spacing={1} sx={{ width: { xs: "100%", sm: "auto" } }}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ flexWrap: "wrap", justifyContent: { lg: "flex-end" }, width: { xs: "100%", sm: "auto" } }}>
+                  {latestRun?.status === "completed" && (
+                    <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}>
+                      Open latest report
+                    </Button>
+                  )}
                   <Button disabled={savingCase || deletingCase} variant="secondary" onClick={() => setEditingCase((current) => !current)}>
                     {editingCase ? "Close edit" : "Edit case"}
                   </Button>
                   <Button disabled={deletingCase} variant="danger" onClick={() => void deleteCase()}>
                     {deletingCase ? "Deleting" : "Delete case"}
                   </Button>
-                  {latestRun?.status === "completed" && (
-                    <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}>
-                      Open latest report
-                    </Button>
-                  )}
                 </Stack>
               </Stack>
             </Card>
 
             {latestRun && (
-              <Card>
-                <Stack aria-label="Analysis views" direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
-                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`} variant="secondary">Summary</Button>
-                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/temporal`} variant="secondary">Timeline</Button>
-                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/logs`} variant="secondary">Logs</Button>
-                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-graph`} variant="secondary">Graph</Button>
-                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-summary`} variant="secondary">RCA</Button>
+              <Card sx={{ bgcolor: "rgba(255,255,255,0.78)" }}>
+                <Stack
+                  aria-label="Analysis views"
+                  direction="row"
+                  sx={{
+                    bgcolor: "rgba(91,92,246,0.08)",
+                    borderRadius: 4,
+                    flexWrap: "wrap",
+                    gap: 0.75,
+                    p: 0.75,
+                  }}
+                >
+                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`} size="sm" variant="ghost">Summary</Button>
+                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/temporal`} size="sm" variant="ghost">Timeline</Button>
+                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/logs`} size="sm" variant="ghost">Logs</Button>
+                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-graph`} size="sm" variant="ghost">Graph</Button>
+                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-summary`} size="sm" variant="ghost">RCA</Button>
                 </Stack>
               </Card>
             )}
@@ -465,15 +484,16 @@ export default function CaseWorkspacePage() {
               onEvidenceSelect={setSelectedEvidence}
             />
 
-            <Card>
+            <Card sx={{ background: "linear-gradient(180deg, #ffffff, rgba(217,236,255,0.32))" }}>
               <Stack spacing={2}>
                 <SectionHeader eyebrow="Run" title="Analyze evidence" />
                 <Box
                   component="label"
                   sx={{
+                    bgcolor: "rgba(91,92,246,0.05)",
                     border: "1px dashed",
-                    borderColor: "divider",
-                    borderRadius: 2,
+                    borderColor: "rgba(91,92,246,0.24)",
+                    borderRadius: 4,
                     cursor: "pointer",
                     display: "grid",
                     gap: 1,
@@ -500,7 +520,7 @@ export default function CaseWorkspacePage() {
                     {uploadItems.map((item) => {
                       const percent = uploadPercent(item);
                       return (
-                        <Box key={item.key} sx={{ border: 1, borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                        <Box key={item.key} sx={{ bgcolor: "background.paper", border: 1, borderColor: "rgba(91,92,246,0.12)", borderRadius: 3, p: 1.5 }}>
                           <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between" }}>
                             <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>{item.name}</Typography>
                             <Badge tone={statusTone(item.status)}>{item.status}</Badge>
@@ -555,7 +575,16 @@ export default function CaseWorkspacePage() {
                       {runs.map((run) => {
                         const active = run.analysis_run_id === trackedRun?.analysis_run_id;
                         return (
-                          <Box key={run.analysis_run_id} sx={{ border: 1, borderColor: active ? "primary.main" : "divider", borderRadius: 2, overflow: "hidden" }}>
+                          <Box
+                            key={run.analysis_run_id}
+                            sx={{
+                              bgcolor: active ? "rgba(91,92,246,0.08)" : "background.paper",
+                              border: 1,
+                              borderColor: active ? "primary.main" : "rgba(91,92,246,0.12)",
+                              borderRadius: 3,
+                              overflow: "hidden",
+                            }}
+                          >
                             <ListItemButton selected={active} onClick={() => setActiveRunId(run.analysis_run_id)}>
                               <ListItemText
                                 primary={

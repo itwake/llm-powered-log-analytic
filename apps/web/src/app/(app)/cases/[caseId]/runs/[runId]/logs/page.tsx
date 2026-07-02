@@ -4,7 +4,6 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
-import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
@@ -182,14 +181,16 @@ export default function LogsPage() {
           <FormControl sx={{ minWidth: 180 }}>
             <InputLabel id="logs-service-label">Service</InputLabel>
             <Select
+              inputProps={{ "aria-label": "Service" }}
               label="Service"
               labelId="logs-service-label"
+              native
               value={service}
               onChange={(event) => setService(event.target.value)}
             >
-              <MenuItem value="">Any</MenuItem>
+              <option value="">Any</option>
               {serviceOptions.map((value) => (
-                <MenuItem key={value} value={value}>{value}</MenuItem>
+                <option key={value} value={value}>{value}</option>
               ))}
             </Select>
           </FormControl>
@@ -218,7 +219,7 @@ export default function LogsPage() {
       )}
       <Card>
         {!loading && data && data.items.length === 0 ? (
-          <EmptyState title="No logs found" />
+          <EmptyState title="No rows found" />
         ) : (
           <Box sx={{ minHeight: 640 }}>
             <DataGrid

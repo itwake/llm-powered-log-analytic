@@ -2,18 +2,13 @@
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useEffect, useState } from "react";
 import { capabilitiesApi, CapabilitiesResponse } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
-import { Card } from "@/components/ui";
+import { Badge, Card, InfoGrid } from "@/components/ui";
 
 function providerLabel(provider: string): string {
   return provider === "ai_platform" ? "AI Platform" : provider;
@@ -68,27 +63,20 @@ export default function AIPlatformSettingsPage() {
           </Typography>
           {loading && <Skeleton height={150} variant="rounded" />}
           {!loading && capabilities && (
-            <Table size="small">
-              <TableBody>
-                <TableRow>
-                  <TableCell>Provider</TableCell>
-                  <TableCell>{providerLabel(capabilities.models.provider)}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Default model</TableCell>
-                  <TableCell>{capabilities.models.default_model}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Status</TableCell>
-                  <TableCell>
-                    <Chip
-                      color={capabilities.models.provider === "ai_platform" ? "success" : "warning"}
-                      label={capabilities.models.provider === "ai_platform" ? "configured" : "check configuration"}
-                    />
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+            <InfoGrid
+              rows={[
+                { label: "Provider", value: providerLabel(capabilities.models.provider) },
+                { label: "Default model", value: capabilities.models.default_model },
+                {
+                  label: "Status",
+                  value: (
+                    <Badge tone={capabilities.models.provider === "ai_platform" ? "success" : "warning"}>
+                      {capabilities.models.provider === "ai_platform" ? "configured" : "check configuration"}
+                    </Badge>
+                  ),
+                },
+              ]}
+            />
           )}
         </Card>
 
@@ -98,22 +86,13 @@ export default function AIPlatformSettingsPage() {
           </Typography>
           {loading && <Skeleton height={150} variant="rounded" />}
           {!loading && capabilities && (
-            <Table size="small">
-              <TableBody>
-                <TableRow>
-                  <TableCell>Supported models</TableCell>
-                  <TableCell>{capabilities.models.supported_models.join(", ")}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Views</TableCell>
-                  <TableCell>{capabilities.views.join(", ")}</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Uploads</TableCell>
-                  <TableCell>{capabilities.upload.supported_extensions.join(", ")}</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+            <InfoGrid
+              rows={[
+                { label: "Supported models", value: capabilities.models.supported_models.join(", ") },
+                { label: "Views", value: capabilities.views.join(", ") },
+                { label: "Uploads", value: capabilities.upload.supported_extensions.join(", ") },
+              ]}
+            />
           )}
         </Card>
       </Box>
