@@ -10,6 +10,7 @@ import type { AnalysisRunResponse, EvidenceRef } from "@/lib/api";
 import { chatApi } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
 import { EvidenceChip } from "@/components/Evidence";
+import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { Button, Card, EmptyState } from "@/components/ui";
 
 interface ChatWorkspaceProps {
@@ -46,6 +47,13 @@ function makeId(prefix: string): string {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
+}
+
+function messageStatusLabel(status: ChatMessageStatus): string | null {
+  if (status === "streaming") return "Streaming response";
+  if (status === "error") return "Response error";
+  if (status === "cancelled") return "Cancelled";
+  return null;
 }
 
 export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspaceProps) {
@@ -224,7 +232,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
               }
               title="Ask about this incident"
             >
-              Use the latest run context to investigate symptoms, timeline, evidence, and likely root cause.
+              Ask about symptoms, timelines, evidence, likely root cause, and next actions. AI Analyst supports tables, lists, and code blocks.
             </EmptyState>
             <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
               {QUICK_PROMPTS.map((prompt) => (
@@ -259,6 +267,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
           >
             {messages.map((message) => {
               const isUser = message.role === "user";
+              const statusLabel = messageStatusLabel(message.status);
               return (
                 <Stack
                   component="article"
@@ -266,6 +275,13 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
                   spacing={0.75}
                   sx={{ alignItems: isUser ? "flex-end" : "flex-start" }}
                 >
+                  <Typography
+                    color={isUser ? "text.secondary" : "primary"}
+                    sx={{ fontWeight: 800 }}
+                    variant="caption"
+                  >
+                    {isUser ? "You" : "AI Analyst"}
+                  </Typography>
                   <Box
                     sx={{
                       background: isUser
@@ -275,32 +291,46 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
                       borderRadius: "14px",
                       boxShadow: isUser ? "0 12px 24px rgba(91,92,246,0.22)" : "0 10px 22px rgba(36,59,122,0.06)",
                       color: isUser ? "primary.contrastText" : "text.primary",
-                      maxWidth: "min(760px, 92%)",
-                      p: 1.5,
-                      whiteSpace: "pre-wrap",
+                      maxWidth: isUser ? "min(680px, 88%)" : "min(860px, 96%)",
+                      overflowWrap: "anywhere",
+                      p: isUser ? 1.5 : { xs: 1.5, sm: 2 },
+                      whiteSpace: isUser ? "pre-wrap" : "normal",
                       wordBreak: "break-word",
                     }}
                   >
-                    {message.content || (
+                    {message.content ? (
+                      isUser ? (
+                        <Typography sx={{ color: "inherit", whiteSpace: "pre-wrap", wordBreak: "break-word" }} variant="body2">
+                          {message.content}
+                        </Typography>
+                      ) : (
+                        <MarkdownMessage content={message.content} />
+                      )
+                    ) : (
                       <Typography color={isUser ? "primary.contrastText" : "text.secondary"} variant="body2">
                         {message.status === "streaming" ? "Analyzing run context..." : "No response"}
                       </Typography>
                     )}
                   </Box>
-                  {message.status !== "complete" && (
+                  {statusLabel && (
                     <Typography color="text.secondary" variant="caption">
-                      {message.status}
+                      {statusLabel}
                     </Typography>
                   )}
                   {message.role === "assistant" && message.evidenceRefs.length > 0 && (
-                    <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
-                      {message.evidenceRefs.map((refItem) => (
-                        <EvidenceChip
-                          key={`${refItem.log_id}-${refItem.line_number}`}
-                          refItem={refItem}
-                          onClick={onEvidenceSelect}
-                        />
-                      ))}
+                    <Stack spacing={0.75} sx={{ maxWidth: "min(760px, 92%)" }}>
+                      <Typography color="text.secondary" sx={{ fontWeight: 800, textTransform: "uppercase" }} variant="caption">
+                        Evidence references
+                      </Typography>
+                      <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+                        {message.evidenceRefs.map((refItem) => (
+                          <EvidenceChip
+                            key={`${refItem.log_id}-${refItem.line_number}`}
+                            refItem={refItem}
+                            onClick={onEvidenceSelect}
+                          />
+                        ))}
+                      </Stack>
                     </Stack>
                   )}
                 </Stack>
