@@ -50,8 +50,10 @@ The AI Platform gateway exchanges `LOGAN_AI_PLATFORM_USERNAME`, `LOGAN_AI_PLATFO
 `LOGAN_AI_PLATFORM_USERCASE` through the configured iB2B endpoint when `LOGAN_AI_PLATFORM_TOKEN`
 is not set. It posts chat-completions payloads to `LOGAN_AI_PLATFORM_CHAT_HOST` plus
 `LOGAN_AI_PLATFORM_CHAT_URI` with the configured trust-token header, correlation id, and user
-session id. Streaming API callers receive a normalized single-delta stream from the completed chat
-response.
+session id. Provider-side completion storage is disabled by default; set
+`LOGAN_AI_PLATFORM_STORE_COMPLETIONS=true` only when stored completions and provider-side request
+metadata are intended. Streaming API callers receive a normalized single-delta stream from the
+completed chat response.
 
 `POST /api/chat/stream` accepts the same `ChatRequest` shape as `POST /api/chat` and requires the
 session cookie. Because it is a POST stream, web clients use `fetch` plus `ReadableStream` rather
