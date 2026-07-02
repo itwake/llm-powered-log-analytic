@@ -10,7 +10,8 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { casesApi, runsApi } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
-import { Button, Card, FieldHint, SectionHeader } from "@/components/ui";
+import { FileUploadDropzone } from "@/components/FileUploadDropzone";
+import { Button, Card, SectionHeader } from "@/components/ui";
 
 function emptyToNull(value: string): string | null {
   return value.trim() ? value.trim() : null;
@@ -166,32 +167,17 @@ export default function NewCasePage() {
                 />
               </Box>
 
-              <Box
-                component="label"
-                sx={{
-                  background: "linear-gradient(135deg, rgba(217,236,255,0.5), rgba(230,225,255,0.45))",
-                  border: "1px dashed",
-                  borderColor: "rgba(91,92,246,0.28)",
-                  borderRadius: "14px",
-                  cursor: "pointer",
-                  display: "grid",
-                  gap: 1,
-                  p: 2.5,
-                }}
-              >
-                <Typography sx={{ fontWeight: 800 }}>Log/archive files</Typography>
-                <input
-                  accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
-                  multiple
-                  type="file"
-                  onChange={(event) => setSelectedFiles(Array.from(event.target.files || []))}
-                />
-                <FieldHint>
-                  {selectedFiles.length
+              <FileUploadDropzone
+                accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
+                description="Attach incident evidence now, or continue with sample data when starting analysis."
+                files={selectedFiles}
+                hint={
+                  selectedFiles.length
                     ? `${selectedFiles.length} file(s) selected`
-                    : "Upload logs or continue with the local sample data."}
-                </FieldHint>
-              </Box>
+                    : "Upload logs or continue with the local sample data."
+                }
+                onFilesSelected={setSelectedFiles}
+              />
               {selectedFiles.length > 0 && (
                 <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
                   {selectedFiles.map((file) => (

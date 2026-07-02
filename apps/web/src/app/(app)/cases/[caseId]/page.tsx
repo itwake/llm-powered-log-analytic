@@ -26,6 +26,7 @@ import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
 import { CaseAnalysisNav } from "@/components/CaseAnalysisNav";
 import { CaseRunInspector } from "@/components/CaseRunInspector";
 import { ChatWorkspace } from "@/components/ChatWorkspace";
+import { FileUploadDropzone } from "@/components/FileUploadDropzone";
 import { Badge, Button, Card, EmptyState, SectionHeader, statusTone } from "@/components/ui";
 
 type UploadItemStatus = "queued" | "preparing" | "hashing" | "uploading" | "verifying" | "completed" | "failed";
@@ -475,27 +476,12 @@ export default function CaseWorkspacePage() {
             <Card sx={{ background: "linear-gradient(180deg, #ffffff, rgba(217,236,255,0.32))" }}>
               <Stack spacing={2}>
                 <SectionHeader eyebrow="Run" title="Analyze evidence" />
-                <Box
-                  component="label"
-                  sx={{
-                    bgcolor: "rgba(91,92,246,0.05)",
-                    border: "1px dashed",
-                    borderColor: "rgba(91,92,246,0.24)",
-                    borderRadius: "14px",
-                    cursor: "pointer",
-                    display: "grid",
-                    gap: 1,
-                    p: 2,
-                  }}
-                >
-                  <Typography sx={{ fontWeight: 750 }}>Log/archive files</Typography>
-                  <input
-                    accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
-                    multiple
-                    type="file"
-                    onChange={(event) => handleFileSelection(Array.from(event.target.files || []))}
-                  />
-                </Box>
+                <FileUploadDropzone
+                  accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
+                  description="Select logs or archives to upload into this incident run."
+                  files={selectedFiles}
+                  onFilesSelected={handleFileSelection}
+                />
                 {selectedFiles.length > 0 && (
                   <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
                     {selectedFiles.map((file, index) => (
