@@ -76,7 +76,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
   async function sendMessage(prompt?: string) {
     const question = (prompt ?? input).trim();
     if (!run) {
-      setError("Start an analysis run before asking the copilot.");
+      setError("Start an analysis run before asking LogAn AI.");
       return;
     }
     if (!question || streamingMessageId) {
@@ -206,7 +206,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
           </Box>
           <Box>
             <Typography color="primary" sx={{ fontWeight: 850, letterSpacing: 0.5, textTransform: "uppercase" }} variant="caption">
-              Incident Copilot
+              AI Analyst
             </Typography>
             <Typography component="h2" sx={{ fontWeight: 900 }} variant="h6">
               Analysis Chat
@@ -312,7 +312,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
         {error && <Alert severity="error">{error}</Alert>}
         {!run && (
           <Typography color="text.secondary" variant="caption">
-            Start an analysis run before asking the copilot.
+            Start an analysis run before asking LogAn AI.
           </Typography>
         )}
 
@@ -325,7 +325,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
         >
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: "flex-end" }}>
             <TextField
-              aria-label="Ask the incident copilot"
+              aria-label="Ask LogAn AI"
               disabled={composerDisabled}
               fullWidth
               minRows={3}
