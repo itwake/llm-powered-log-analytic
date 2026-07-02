@@ -1,9 +1,13 @@
 "use client";
 
-import Link from "next/link";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Link from "@/components/Link";
 import type { EvidenceRef } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
-import { EmptyState } from "@/components/ui";
+import { Button, EmptyState } from "@/components/ui";
 
 export function formatEvidenceLabel(ref: EvidenceRef): string {
   const fileName = ref.file_path.split(/[\\/]/).filter(Boolean).pop() || ref.file_path;
@@ -26,7 +30,7 @@ export function evidenceLogsHref(caseId: string, runId: string, refItem: Evidenc
     }
   }
   if (refItem.template_id) {
-    const params = new URLSearchParams({q: refItem.template_id});
+    const params = new URLSearchParams({ q: refItem.template_id });
     return `${basePath}?${params.toString()}`;
   }
   return basePath;
@@ -38,17 +42,18 @@ interface EvidenceChipProps {
   selected?: boolean;
 }
 
-export function EvidenceChip({onClick, refItem, selected = false}: EvidenceChipProps) {
+export function EvidenceChip({ onClick, refItem, selected = false }: EvidenceChipProps) {
   const label = formatEvidenceLabel(refItem);
   return (
-    <button
+    <Chip
       aria-label={`Evidence ${label}`}
-      className={`evidence-chip ${selected ? "selected" : ""}`}
-      type="button"
+      clickable
+      color={selected ? "primary" : "default"}
+      component="button"
+      label={label}
+      variant={selected ? "filled" : "outlined"}
       onClick={() => onClick?.(refItem)}
-    >
-      {label}
-    </button>
+    />
   );
 }
 
@@ -58,7 +63,7 @@ interface EvidenceDetailProps {
   refItem: EvidenceRef | null;
 }
 
-export function EvidenceDetail({caseId, refItem, runId}: EvidenceDetailProps) {
+export function EvidenceDetail({ caseId, refItem, runId }: EvidenceDetailProps) {
   if (!refItem) {
     return (
       <EmptyState title="Selected evidence">
@@ -68,19 +73,33 @@ export function EvidenceDetail({caseId, refItem, runId}: EvidenceDetailProps) {
   }
 
   return (
-    <div className="evidence-detail">
-      <div className="section-header compact">
-        <div>
-          <span className="eyebrow">Selected evidence</span>
-          <h2>{refItem.file_path}</h2>
-        </div>
+    <Stack spacing={2}>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: { xs: "flex-start", sm: "center" }, justifyContent: "space-between" }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography color="text.secondary" sx={{ fontWeight: 800, textTransform: "uppercase" }} variant="caption">
+            Selected evidence
+          </Typography>
+          <Typography component="h2" sx={{ fontWeight: 800, overflowWrap: "anywhere" }} variant="h6">
+            {refItem.file_path}
+          </Typography>
+        </Box>
         {runId && (
-          <Link className="button secondary" href={evidenceLogsHref(caseId, runId, refItem)}>
+          <Button component={Link} href={evidenceLogsHref(caseId, runId, refItem)} variant="secondary">
             Open logs around this evidence
-          </Link>
+          </Button>
         )}
-      </div>
-      <dl className="detail-kv detail-list">
+      </Stack>
+      <Box
+        component="dl"
+        sx={{
+          display: "grid",
+          gap: 1,
+          gridTemplateColumns: "110px minmax(0, 1fr)",
+          m: 0,
+          "& dt": { color: "text.secondary" },
+          "& dd": { m: 0, overflowWrap: "anywhere" },
+        }}
+      >
         <dt>Line</dt>
         <dd>{refItem.line_number}</dd>
         <dt>Timestamp</dt>
@@ -89,7 +108,7 @@ export function EvidenceDetail({caseId, refItem, runId}: EvidenceDetailProps) {
         <dd>{refItem.template_id || "n/a"}</dd>
         <dt>Log id</dt>
         <dd>{refItem.log_id}</dd>
-      </dl>
-    </div>
+      </Box>
+    </Stack>
   );
 }

@@ -1,8 +1,18 @@
 "use client";
 
-import Link from "next/link";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import LinearProgress from "@mui/material/LinearProgress";
+import List from "@mui/material/List";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemText from "@mui/material/ListItemText";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Link from "@/components/Link";
 import {
   AnalysisRunResponse,
   CaseResponse,
@@ -97,7 +107,7 @@ function isoToLocalDateTime(value: string | null): string {
 }
 
 export default function CaseWorkspacePage() {
-  const {caseId} = useParams<{caseId: string}>();
+  const { caseId } = useParams<{ caseId: string }>();
   const router = useRouter();
   const [caseRecord, setCaseRecord] = useState<CaseResponse | null>(null);
   const [runs, setRuns] = useState<AnalysisRunResponse[]>([]);
@@ -158,7 +168,7 @@ export default function CaseWorkspacePage() {
       runsApi.events(caseId, runId),
     ]);
     upsertRun(run);
-    setRunEvents((current) => ({...current, [runId]: events.items}));
+    setRunEvents((current) => ({ ...current, [runId]: events.items }));
     return run;
   }
 
@@ -181,7 +191,7 @@ export default function CaseWorkspacePage() {
         return [...current, nextItem];
       }
       const next = [...current];
-      next[existing] = {...next[existing], ...nextItem};
+      next[existing] = { ...next[existing], ...nextItem };
       return next;
     });
   }
@@ -217,7 +227,7 @@ export default function CaseWorkspacePage() {
         await refreshRunProgress(runId);
       } catch {
         if (!cancelled) {
-          setRunEvents((current) => ({...current, [runId]: current[runId] || []}));
+          setRunEvents((current) => ({ ...current, [runId]: current[runId] || [] }));
         }
       }
     }
@@ -255,15 +265,15 @@ export default function CaseWorkspacePage() {
       });
       const run = await runsApi.start(caseId, {
         input_file_ids: uploaded.map((file) => file.file_id),
-        config: {default_window_size_seconds: 60},
-      }, {background: true});
+        config: { default_window_size_seconds: 60 },
+      }, { background: true });
       setActiveRunId(run.analysis_run_id);
       await refreshRunProgress(run.analysis_run_id);
     } catch (caught) {
       setUploadItems((current) =>
         current.map((item) =>
-          item.status === "completed" ? item : {...item, status: "failed", message: apiErrorMessage(caught)}
-        )
+          item.status === "completed" ? item : { ...item, status: "failed", message: apiErrorMessage(caught) },
+        ),
       );
       setError(apiErrorMessage(caught));
     } finally {
@@ -277,8 +287,8 @@ export default function CaseWorkspacePage() {
     try {
       const run = await runsApi.start(caseId, {
         input_paths: [],
-        config: {default_window_size_seconds: 60},
-      }, {background: true});
+        config: { default_window_size_seconds: 60 },
+      }, { background: true });
       setActiveRunId(run.analysis_run_id);
       await refreshRunProgress(run.analysis_run_id);
     } catch (caught) {
@@ -303,7 +313,7 @@ export default function CaseWorkspacePage() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
       setCaseRecord(updated);
-      window.dispatchEvent(new CustomEvent("logan:case-saved", {detail: updated}));
+      window.dispatchEvent(new CustomEvent("logan:case-saved", { detail: updated }));
       setEditingCase(false);
     } catch (caught) {
       setError(apiErrorMessage(caught));
@@ -320,7 +330,7 @@ export default function CaseWorkspacePage() {
     setError(null);
     try {
       await casesApi.remove(caseId);
-      window.dispatchEvent(new CustomEvent("logan:case-deleted", {detail: {caseId}}));
+      window.dispatchEvent(new CustomEvent("logan:case-deleted", { detail: { caseId } }));
       router.push("/cases");
     } catch (caught) {
       setError(apiErrorMessage(caught));
@@ -345,199 +355,188 @@ export default function CaseWorkspacePage() {
   const trackedEvents = trackedRun ? runEvents[trackedRun.analysis_run_id] || [] : [];
 
   return (
-    <div className="page-stack">
-        {error && <div className="alert error">{error}</div>}
-        {loading && <Card><EmptyState title="Loading case" /></Card>}
+    <Stack spacing={2.5}>
+      {error && <Alert severity="error">{error}</Alert>}
+      {loading && <Card><EmptyState title="Loading case" /></Card>}
 
-        {!loading && caseRecord && (
-          <section className="case-workspace">
-            <section className="case-main page-stack">
-              <section className="case-hero">
-                <div className="case-hero-main case-hero-copy">
-                  <div className="case-hero-meta">
-                    <span>{caseRecord.case_key}</span>
+      {!loading && caseRecord && (
+        <Box sx={{ display: "grid", gap: 2.5, gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.45fr) minmax(380px, 0.75fr)" } }}>
+          <Stack spacing={2.5}>
+            <Card>
+              <Stack direction={{ xs: "column", lg: "row" }} spacing={2.5} sx={{ alignItems: { xs: "flex-start", lg: "center" }, justifyContent: "space-between" }}>
+                <Stack spacing={1.5} sx={{ minWidth: 0 }}>
+                  <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+                    <Typography color="text.secondary" sx={{ fontWeight: 800 }} variant="caption">
+                      {caseRecord.case_key}
+                    </Typography>
                     <Badge tone={statusTone(caseRecord.status)}>{caseRecord.status}</Badge>
                     {latestRun && <Badge tone={statusTone(latestRun.status)}>{latestRun.status}</Badge>}
-                  </div>
-                  <h1>{valueLabel(caseRecord.title)}</h1>
-                  <p>{valueLabel(caseRecord.issue_description)}</p>
-                  <div className="case-hero-facts">
-                    {caseRecord.product && <span>{caseRecord.product}</span>}
-                    {caseRecord.service && <span>{caseRecord.service}</span>}
-                    {caseRecord.environment && <span>{caseRecord.environment}</span>}
-                    {caseRecord.incident_start && <span>{formatDateTime(caseRecord.incident_start)}</span>}
+                  </Stack>
+                  <Typography component="h1" sx={{ fontWeight: 850, overflowWrap: "anywhere" }} variant="h3">
+                    {valueLabel(caseRecord.title)}
+                  </Typography>
+                  <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
+                    {valueLabel(caseRecord.issue_description)}
+                  </Typography>
+                  <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+                    {caseRecord.product && <Chip label={caseRecord.product} variant="outlined" />}
+                    {caseRecord.service && <Chip label={caseRecord.service} variant="outlined" />}
+                    {caseRecord.environment && <Chip label={caseRecord.environment} variant="outlined" />}
+                    {caseRecord.incident_start && <Chip label={formatDateTime(caseRecord.incident_start)} variant="outlined" />}
                     {!caseRecord.product && !caseRecord.service && !caseRecord.environment && !caseRecord.incident_start && (
-                      <span>Metadata not set</span>
+                      <Chip label="Metadata not set" variant="outlined" />
                     )}
-                  </div>
-                </div>
-                <div className="case-hero-actions">
-                  <Button
-                    disabled={savingCase || deletingCase}
-                    variant="secondary"
-                    onClick={() => setEditingCase((current) => !current)}
-                  >
+                  </Stack>
+                </Stack>
+                <Stack direction={{ xs: "column", sm: "row", lg: "column" }} spacing={1} sx={{ width: { xs: "100%", sm: "auto" } }}>
+                  <Button disabled={savingCase || deletingCase} variant="secondary" onClick={() => setEditingCase((current) => !current)}>
                     {editingCase ? "Close edit" : "Edit case"}
                   </Button>
-                  <Button
-                    disabled={deletingCase}
-                    variant="danger"
-                    onClick={() => void deleteCase()}
-                  >
+                  <Button disabled={deletingCase} variant="danger" onClick={() => void deleteCase()}>
                     {deletingCase ? "Deleting" : "Delete case"}
                   </Button>
                   {latestRun?.status === "completed" && (
-                    <Link
-                      className="button"
-                      href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}
-                    >
+                    <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}>
                       Open latest report
-                    </Link>
+                    </Button>
                   )}
-                </div>
-              </section>
+                </Stack>
+              </Stack>
+            </Card>
 
-              {latestRun && (
-                <nav className="tool-strip report-links" aria-label="Analysis views">
-                  <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}>Summary</Link>
-                  <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/temporal`}>Timeline</Link>
-                  <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/logs`}>Logs</Link>
-                  <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-graph`}>Graph</Link>
-                  <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-summary`}>RCA</Link>
-                </nav>
-              )}
+            {latestRun && (
+              <Card>
+                <Stack aria-label="Analysis views" direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`} variant="secondary">Summary</Button>
+                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/temporal`} variant="secondary">Timeline</Button>
+                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/logs`} variant="secondary">Logs</Button>
+                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-graph`} variant="secondary">Graph</Button>
+                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-summary`} variant="secondary">RCA</Button>
+                </Stack>
+              </Card>
+            )}
 
-              {editingCase && (
-                <Card className="edit-case-panel">
+            {editingCase && (
+              <Card>
+                <Stack spacing={2.5}>
                   <SectionHeader eyebrow="Case" title="Edit Case" />
-                  <div className="grid two">
-                    <label className="field">
-                      Title
-                      <input
-                        required
-                        value={caseTitle}
-                        onChange={(event) => setCaseTitle(event.target.value)}
-                      />
-                    </label>
-                    <label className="field">
-                      Product
-                      <input value={caseProduct} onChange={(event) => setCaseProduct(event.target.value)} />
-                    </label>
-                    <label className="field">
-                      Service
-                      <input value={caseService} onChange={(event) => setCaseService(event.target.value)} />
-                    </label>
-                    <label className="field">
-                      Environment
-                      <input
-                        value={caseEnvironment}
-                        onChange={(event) => setCaseEnvironment(event.target.value)}
-                      />
-                    </label>
-                    <label className="field">
-                      Incident start
-                      <input
-                        type="datetime-local"
-                        value={caseIncidentStart}
-                        onChange={(event) => setCaseIncidentStart(event.target.value)}
-                      />
-                    </label>
-                    <label className="field">
-                      Incident end
-                      <input
-                        type="datetime-local"
-                        value={caseIncidentEnd}
-                        onChange={(event) => setCaseIncidentEnd(event.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <label className="field">
-                    Issue description
-                    <textarea
-                      value={caseIssueDescription}
-                      onChange={(event) => setCaseIssueDescription(event.target.value)}
+                  <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" } }}>
+                    <TextField required label="Title" value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} />
+                    <TextField label="Product" value={caseProduct} onChange={(event) => setCaseProduct(event.target.value)} />
+                    <TextField label="Service" value={caseService} onChange={(event) => setCaseService(event.target.value)} />
+                    <TextField label="Environment" value={caseEnvironment} onChange={(event) => setCaseEnvironment(event.target.value)} />
+                    <TextField
+                      label="Incident start"
+                      slotProps={{ inputLabel: { shrink: true } }}
+                      type="datetime-local"
+                      value={caseIncidentStart}
+                      onChange={(event) => setCaseIncidentStart(event.target.value)}
                     />
-                  </label>
-                  <div className="form-actions">
-                    <Button
-                      disabled={savingCase || !caseTitle.trim()}
-                      onClick={() => void saveCase()}
-                    >
+                    <TextField
+                      label="Incident end"
+                      slotProps={{ inputLabel: { shrink: true } }}
+                      type="datetime-local"
+                      value={caseIncidentEnd}
+                      onChange={(event) => setCaseIncidentEnd(event.target.value)}
+                    />
+                  </Box>
+                  <TextField
+                    label="Issue description"
+                    minRows={4}
+                    multiline
+                    value={caseIssueDescription}
+                    onChange={(event) => setCaseIssueDescription(event.target.value)}
+                  />
+                  <Stack direction="row" spacing={1.5}>
+                    <Button disabled={savingCase || !caseTitle.trim()} onClick={() => void saveCase()}>
                       {savingCase ? "Saving" : "Save case"}
                     </Button>
                     <Button variant="secondary" onClick={() => setEditingCase(false)}>
                       Cancel
                     </Button>
-                  </div>
-                </Card>
-              )}
+                  </Stack>
+                </Stack>
+              </Card>
+            )}
 
-              <ChatWorkspace
-                caseId={caseId}
-                run={latestRun}
-                onEvidenceSelect={setSelectedEvidence}
-              />
+            <ChatWorkspace
+              caseId={caseId}
+              run={latestRun}
+              onEvidenceSelect={setSelectedEvidence}
+            />
 
-              <Card className="upload-card">
-                  <SectionHeader eyebrow="Run" title="Analyze evidence" />
-                  <label className="field dropzone">
-                    Log/archive files
-                    <input
-                      accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
-                      multiple
-                      type="file"
-                      onChange={(event) => handleFileSelection(Array.from(event.target.files || []))}
-                    />
-                  </label>
-                  {uploadItems.length > 0 && (
-                    <div className="upload-progress-list">
-                      {uploadItems.map((item) => {
-                        const percent = uploadPercent(item);
-                        return (
-                          <div className="upload-progress-row" key={item.key}>
-                            <div className="upload-progress-header">
-                              <strong>{item.name}</strong>
-                              <Badge tone={statusTone(item.status)}>{item.status}</Badge>
-                            </div>
-                            <div className="progress-track compact" aria-label={`${item.name} upload progress`}>
-                              <div className="progress-fill" style={{width: `${percent}%`}} />
-                            </div>
-                            <div className="upload-progress-meta">
-                              <span>{percent}%</span>
-                              <span>{formatBytes(item.bytesSent)} / {formatBytes(item.size)}</span>
-                              {item.partNumber && item.partCount && (
-                                <span>part {item.partNumber}/{item.partCount}</span>
-                              )}
-                              {item.message && <span>{item.message}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div className="form-actions">
-                    <Button
-                      disabled={starting !== null || selectedFiles.length === 0}
-                      onClick={startUploadedAnalysis}
-                    >
-                      {starting === "files" ? "Uploading" : "Upload and analyze files"}
-                    </Button>
-                    <Button
-                      disabled={starting !== null}
-                      variant="secondary"
-                      onClick={startSampleAnalysis}
-                    >
-                      {starting === "sample" ? "Starting" : "Start sample/local analysis"}
-                    </Button>
-                  </div>
-                  <p className="muted">
-                    Uploaded files run through the local object store. The sample/local action uses the
-                    deterministic fixture set.
-                  </p>
-                </Card>
-            </section>
+            <Card>
+              <Stack spacing={2}>
+                <SectionHeader eyebrow="Run" title="Analyze evidence" />
+                <Box
+                  component="label"
+                  sx={{
+                    border: "1px dashed",
+                    borderColor: "divider",
+                    borderRadius: 2,
+                    cursor: "pointer",
+                    display: "grid",
+                    gap: 1,
+                    p: 2,
+                  }}
+                >
+                  <Typography sx={{ fontWeight: 750 }}>Log/archive files</Typography>
+                  <input
+                    accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
+                    multiple
+                    type="file"
+                    onChange={(event) => handleFileSelection(Array.from(event.target.files || []))}
+                  />
+                </Box>
+                {selectedFiles.length > 0 && (
+                  <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+                    {selectedFiles.map((file, index) => (
+                      <Chip key={uploadKey(file, index)} label={`${file.name || "upload.bin"} - ${formatBytes(file.size)}`} />
+                    ))}
+                  </Stack>
+                )}
+                {uploadItems.length > 0 && (
+                  <Stack spacing={1.5}>
+                    {uploadItems.map((item) => {
+                      const percent = uploadPercent(item);
+                      return (
+                        <Box key={item.key} sx={{ border: 1, borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                          <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                            <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>{item.name}</Typography>
+                            <Badge tone={statusTone(item.status)}>{item.status}</Badge>
+                          </Stack>
+                          <LinearProgress aria-label={`${item.name} upload progress`} sx={{ borderRadius: 999, my: 1, height: 8 }} value={percent} variant="determinate" />
+                          <Stack direction="row" sx={{ color: "text.secondary", flexWrap: "wrap", gap: 1.5 }}>
+                            <Typography variant="caption">{percent}%</Typography>
+                            <Typography variant="caption">{formatBytes(item.bytesSent)} / {formatBytes(item.size)}</Typography>
+                            {item.partNumber && item.partCount && (
+                              <Typography variant="caption">part {item.partNumber}/{item.partCount}</Typography>
+                            )}
+                            {item.message && <Typography variant="caption">{item.message}</Typography>}
+                          </Stack>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                )}
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                  <Button disabled={starting !== null || selectedFiles.length === 0} onClick={startUploadedAnalysis}>
+                    {starting === "files" ? "Uploading" : "Upload and analyze files"}
+                  </Button>
+                  <Button disabled={starting !== null} variant="secondary" onClick={startSampleAnalysis}>
+                    {starting === "sample" ? "Starting" : "Start sample/local analysis"}
+                  </Button>
+                </Stack>
+                <Typography color="text.secondary">
+                  Uploaded files run through the local object store. The sample/local action uses the
+                  deterministic fixture set.
+                </Typography>
+              </Stack>
+            </Card>
+          </Stack>
 
-            <aside className="case-inspector workspace-inspector">
+          <Box component="aside" sx={{ alignSelf: "start", position: { xl: "sticky" }, top: { xl: 88 } }}>
+            <Stack spacing={2}>
               <CaseRunInspector
                 cancelling={trackedRun?.analysis_run_id === cancellingRunId}
                 caseId={caseId}
@@ -547,48 +546,50 @@ export default function CaseWorkspacePage() {
                 selectedEvidence={selectedEvidence}
                 onCancel={(run) => void cancelRun(run)}
               />
-              <Card className="run-list-card">
-                <SectionHeader eyebrow="History" title="Analysis Runs" />
-                {runs.length === 0 && <EmptyState title="No analysis runs" />}
-                {runs.length > 0 && (
-                  <div className="run-list">
-                    {runs.map((run) => (
-                      <div
-                        className={`run-list-row ${run.analysis_run_id === trackedRun?.analysis_run_id ? "active" : ""}`}
-                        key={run.analysis_run_id}
-                      >
-                        <button
-                          className="run-select"
-                          type="button"
-                          onClick={() => setActiveRunId(run.analysis_run_id)}
-                        >
-                          <strong>Run #{run.run_number}</strong>
-                          <span>{run.current_step}</span>
-                        </button>
-                        <Badge tone={statusTone(run.status)}>{run.status}</Badge>
-                        <span className="muted">{formatDateTime(run.started_at)}</span>
-                        <div className="run-actions">
-                          {run.status === "completed" && (
-                            <Link href={`/cases/${caseId}/runs/${run.analysis_run_id}/summary`}>Summary</Link>
-                          )}
-                          {!terminalRunStatus(run.status) && (
-                            <Button
-                              disabled={cancellingRunId === run.analysis_run_id}
-                              variant="danger"
-                              onClick={() => void cancelRun(run)}
-                            >
-                              {cancellingRunId === run.analysis_run_id ? "Stopping" : "Terminate"}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <Card>
+                <Stack spacing={2}>
+                  <SectionHeader eyebrow="History" title="Analysis Runs" />
+                  {runs.length === 0 && <EmptyState title="No analysis runs" />}
+                  {runs.length > 0 && (
+                    <List disablePadding sx={{ display: "grid", gap: 1 }}>
+                      {runs.map((run) => {
+                        const active = run.analysis_run_id === trackedRun?.analysis_run_id;
+                        return (
+                          <Box key={run.analysis_run_id} sx={{ border: 1, borderColor: active ? "primary.main" : "divider", borderRadius: 2, overflow: "hidden" }}>
+                            <ListItemButton selected={active} onClick={() => setActiveRunId(run.analysis_run_id)}>
+                              <ListItemText
+                                primary={
+                                  <Typography sx={{ fontWeight: 850 }}>
+                                    Run #{run.run_number}
+                                  </Typography>
+                                }
+                                secondary={`${run.current_step} - ${formatDateTime(run.started_at)}`}
+                              />
+                              <Badge tone={statusTone(run.status)}>{run.status}</Badge>
+                            </ListItemButton>
+                            <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1, px: 2, pb: 1.5 }}>
+                              {run.status === "completed" && (
+                                <Button component={Link} href={`/cases/${caseId}/runs/${run.analysis_run_id}/summary`} size="sm" variant="secondary">
+                                  Summary
+                                </Button>
+                              )}
+                              {!terminalRunStatus(run.status) && (
+                                <Button disabled={cancellingRunId === run.analysis_run_id} size="sm" variant="danger" onClick={() => void cancelRun(run)}>
+                                  {cancellingRunId === run.analysis_run_id ? "Stopping" : "Terminate"}
+                                </Button>
+                              )}
+                            </Stack>
+                          </Box>
+                        );
+                      })}
+                    </List>
+                  )}
+                </Stack>
               </Card>
-            </aside>
-          </section>
-        )}
-    </div>
+            </Stack>
+          </Box>
+        </Box>
+      )}
+    </Stack>
   );
 }

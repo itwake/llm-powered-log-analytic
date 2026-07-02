@@ -1,11 +1,22 @@
 "use client";
 
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { reportsApi } from "@/lib/api";
 import type { CausalSummaryResponse, EvidenceRef, ExportRequest } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, formatPercent } from "@/lib/format";
+import { Metric } from "@/components/Shell";
 import { EvidenceChip, EvidenceDetail } from "@/components/Evidence";
+import { Badge, Button, Card, EmptyState } from "@/components/ui";
 
 function textField(item: Record<string, unknown>, key: string): string {
   const value = item[key];
@@ -13,7 +24,7 @@ function textField(item: Record<string, unknown>, key: string): string {
 }
 
 export default function CausalSummaryPage() {
-  const {caseId, runId} = useParams<{caseId: string; runId: string}>();
+  const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
   const [data, setData] = useState<CausalSummaryResponse | null>(null);
   const [editing, setEditing] = useState(false);
   const [summaryDraft, setSummaryDraft] = useState("");
@@ -133,189 +144,202 @@ export default function CausalSummaryPage() {
   }
 
   return (
-    <>
-      <div className="toolbar">
-        <h1>Causal Summary</h1>
-        {!editing && data && (
-          <button className="button" type="button" onClick={startEditing}>
-            Edit
-          </button>
-        )}
-        <button
-          className="button"
-          disabled={exporting !== null || editing}
-          type="button"
-          onClick={() => void createExport("markdown")}
-        >
-          {exporting === "markdown" ? "Exporting" : "Export Markdown"}
-        </button>
-        <button
-          className="button secondary"
-          disabled={exporting !== null || editing}
-          type="button"
-          onClick={() => void createExport("html")}
-        >
-          {exporting === "html" ? "Exporting" : "Export HTML"}
-        </button>
-        <button
-          className="button secondary"
-          disabled={exporting !== null || editing}
-          type="button"
-          onClick={() => void createExport("json")}
-        >
-          {exporting === "json" ? "Exporting" : "Export JSON"}
-        </button>
-      </div>
+    <Stack spacing={2.5}>
+      <Stack direction={{ xs: "column", lg: "row" }} spacing={2} sx={{ alignItems: { xs: "flex-start", lg: "center" }, justifyContent: "space-between" }}>
+        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+          Causal Summary
+        </Typography>
+        <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+          {!editing && data && (
+            <Button type="button" onClick={startEditing}>
+              Edit
+            </Button>
+          )}
+          <Button disabled={exporting !== null || editing} type="button" onClick={() => void createExport("markdown")}>
+            {exporting === "markdown" ? "Exporting" : "Export Markdown"}
+          </Button>
+          <Button disabled={exporting !== null || editing} type="button" variant="secondary" onClick={() => void createExport("html")}>
+            {exporting === "html" ? "Exporting" : "Export HTML"}
+          </Button>
+          <Button disabled={exporting !== null || editing} type="button" variant="secondary" onClick={() => void createExport("json")}>
+            {exporting === "json" ? "Exporting" : "Export JSON"}
+          </Button>
+        </Stack>
+      </Stack>
 
-      {error && <div className="alert error">{error}</div>}
-      {statusMessage && <div className="alert success">{statusMessage}</div>}
-      {loading && <section className="panel"><div className="empty">Loading causal summary</div></section>}
+      {error && <Alert severity="error">{error}</Alert>}
+      {statusMessage && <Alert severity="success">{statusMessage}</Alert>}
+      {loading && <Card><EmptyState title="Loading causal summary" /></Card>}
 
       {!loading && data && (
         <>
-          <section className="grid four">
-            <div className="panel metric">
-              <span className="muted">Confidence</span>
-              <strong>{formatPercent(data.confidence)}</strong>
-            </div>
-            <div className="panel metric">
-              <span className="muted">Evidence refs</span>
-              <strong>{String(data.evidence_refs.length)}</strong>
-            </div>
-            <div className="panel metric">
-              <span className="muted">Next actions</span>
-              <strong>{String(data.next_actions.length)}</strong>
-            </div>
-            <div className="panel metric">
-              <span className="muted">Status</span>
-              <strong>
-                <span className={`pill ${data.edited ? "amber" : "green"}`}>
-                  {data.edited ? "Edited" : "Generated"}
-                </span>
-              </strong>
-            </div>
-          </section>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" } }}>
+            <Metric label="Confidence" value={formatPercent(data.confidence)} />
+            <Metric label="Evidence refs" value={String(data.evidence_refs.length)} />
+            <Metric label="Next actions" value={String(data.next_actions.length)} />
+            <Card>
+              <Stack spacing={0.75}>
+                <Typography color="text.secondary" variant="body2">Status</Typography>
+                <Box>
+                  <Badge tone={data.edited ? "warning" : "success"}>
+                    {data.edited ? "Edited" : "Generated"}
+                  </Badge>
+                </Box>
+              </Stack>
+            </Card>
+          </Box>
 
-          <section className="report-grid" style={{marginTop: 14}}>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.45fr) minmax(340px, 0.7fr)" } }}>
             {editing ? (
-              <form className="panel summary-editor" onSubmit={saveSummary}>
-                <label className="field">
-                  Summary markdown
-                  <textarea
-                    className="summary-textarea"
-                    maxLength={12000}
+              <Card>
+                <Box component="form" onSubmit={saveSummary}>
+                <Stack spacing={2}>
+                  <TextField
+                    label="Summary markdown"
+                    maxRows={24}
+                    minRows={12}
+                    multiline
                     required
                     value={summaryDraft}
+                    slotProps={{ htmlInput: { maxLength: 12000 } }}
                     onChange={(event) => setSummaryDraft(event.target.value)}
                   />
-                </label>
-                <label className="field">
-                  Customer update markdown
-                  <textarea
-                    className="customer-update-textarea"
-                    maxLength={12000}
+                  <TextField
+                    label="Customer update markdown"
+                    maxRows={18}
+                    minRows={8}
+                    multiline
                     value={customerUpdateDraft}
+                    slotProps={{ htmlInput: { maxLength: 12000 } }}
                     onChange={(event) => setCustomerUpdateDraft(event.target.value)}
                   />
-                </label>
-                <div className="form-actions">
-                  <button className="button" disabled={saving} type="submit">
-                    {saving ? "Saving" : "Save"}
-                  </button>
-                  <button className="button secondary" disabled={saving} type="button" onClick={cancelEditing}>
-                    Cancel
-                  </button>
-                </div>
-              </form>
+                  <Stack direction="row" spacing={1.5}>
+                    <Button disabled={saving} type="submit">
+                      {saving ? "Saving" : "Save"}
+                    </Button>
+                    <Button disabled={saving} type="button" variant="secondary" onClick={cancelEditing}>
+                      Cancel
+                    </Button>
+                  </Stack>
+                </Stack>
+                </Box>
+              </Card>
             ) : (
-              <div className="summary-stack">
-                <div className="markdown-view">{data.summary_markdown}</div>
-                <div className="panel">
-                  <h2>Customer Update</h2>
-                  <div className="customer-update-view">
+              <Stack spacing={2}>
+                <Card>
+                  <Box
+                    className="markdown-view"
+                    sx={{ overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}
+                  >
+                    {data.summary_markdown}
+                  </Box>
+                </Card>
+                <Card>
+                  <Typography component="h2" gutterBottom sx={{ fontWeight: 800 }} variant="h6">
+                    Customer Update
+                  </Typography>
+                  <Box
+                    className="customer-update-view"
+                    sx={{ overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}
+                  >
                     {data.customer_update_markdown || "No customer update"}
-                  </div>
-                </div>
-              </div>
+                  </Box>
+                </Card>
+              </Stack>
             )}
-            <div className="panel">
-              <h2>Feedback</h2>
-              <form onSubmit={submitFeedback}>
-                <label className="field">
-                  Type
-                  <select value={feedbackType} onChange={(event) => setFeedbackType(event.target.value)}>
-                    <option value="useful">Useful</option>
-                    <option value="needs_correction">Needs correction</option>
-                    <option value="wrong_causal_edge">Wrong causal edge</option>
-                  </select>
-                </label>
-                <label className="field">
-                  Rating
-                  <select value={rating} onChange={(event) => setRating(Number(event.target.value))}>
-                    <option value={5}>5</option>
-                    <option value={3}>3</option>
-                    <option value={1}>1</option>
-                  </select>
-                </label>
-                <label className="field">
-                  Comment
-                  <textarea value={comment} onChange={(event) => setComment(event.target.value)} />
-                </label>
-                <button className="button" disabled={submittingFeedback} type="submit">
+            <Card>
+              <Stack component="form" spacing={2} onSubmit={submitFeedback}>
+                <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+                  Feedback
+                </Typography>
+                <FormControl>
+                  <InputLabel id="feedback-type-label">Type</InputLabel>
+                  <Select
+                    label="Type"
+                    labelId="feedback-type-label"
+                    value={feedbackType}
+                    onChange={(event) => setFeedbackType(event.target.value)}
+                  >
+                    <MenuItem value="useful">Useful</MenuItem>
+                    <MenuItem value="needs_correction">Needs correction</MenuItem>
+                    <MenuItem value="wrong_causal_edge">Wrong causal edge</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl>
+                  <InputLabel id="feedback-rating-label">Rating</InputLabel>
+                  <Select
+                    label="Rating"
+                    labelId="feedback-rating-label"
+                    value={String(rating)}
+                    onChange={(event) => setRating(Number(event.target.value))}
+                  >
+                    <MenuItem value="5">5</MenuItem>
+                    <MenuItem value="3">3</MenuItem>
+                    <MenuItem value="1">1</MenuItem>
+                  </Select>
+                </FormControl>
+                <TextField label="Comment" minRows={4} multiline value={comment} onChange={(event) => setComment(event.target.value)} />
+                <Button disabled={submittingFeedback} type="submit">
                   {submittingFeedback ? "Submitting" : "Submit feedback"}
-                </button>
-              </form>
-            </div>
-          </section>
+                </Button>
+              </Stack>
+            </Card>
+          </Box>
 
-          <section className="grid two" style={{marginTop: 14}}>
-            <div className="panel">
-              <h2>Next Actions</h2>
-              {data.next_actions.length === 0 && <div className="empty">No next actions</div>}
-              {data.next_actions.map((action, index) => (
-                <p key={`${textField(action, "title")}-${index}`}>
-                  <strong>{textField(action, "title")}</strong>
-                  <br />
-                  {textField(action, "description")}
-                  <br />
-                  <span className="muted">
-                    {textField(action, "priority")} | {textField(action, "owner_role")}
-                  </span>
-                </p>
-              ))}
-            </div>
-            <div className="panel">
-              <h2>Evidence</h2>
-              {data.evidence_refs.length === 0 && <div className="empty">No evidence refs</div>}
-              {data.evidence_refs.length > 0 && (
-                <div className="evidence-report-stack">
-                  <div className="evidence-list">
-                    {data.evidence_refs.map((ref) => (
-                      <EvidenceChip
-                        key={`${ref.log_id}-${ref.line_number}`}
-                        refItem={ref}
-                        selected={selectedEvidence?.log_id === ref.log_id}
-                        onClick={setSelectedEvidence}
-                      />
-                    ))}
-                  </div>
-                  <EvidenceDetail
-                    caseId={caseId}
-                    refItem={selectedEvidence}
-                    runId={runId}
-                  />
-                  {selectedEvidence && (
-                    <p className="muted evidence-ref">
-                      {selectedEvidence.file_path}:{selectedEvidence.line_number} at{" "}
-                      {formatDateTime(selectedEvidence.timestamp)}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" } }}>
+            <Card>
+              <Stack spacing={2}>
+                <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+                  Next Actions
+                </Typography>
+                {data.next_actions.length === 0 && <EmptyState title="No next actions" />}
+                {data.next_actions.map((action, index) => (
+                  <Box key={`${textField(action, "title")}-${index}`} sx={{ border: 1, borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                    <Typography sx={{ fontWeight: 800 }}>{textField(action, "title")}</Typography>
+                    <Typography>{textField(action, "description")}</Typography>
+                    <Typography color="text.secondary" variant="caption">
+                      {textField(action, "priority")} | {textField(action, "owner_role")}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            </Card>
+            <Card>
+              <Stack spacing={2}>
+                <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+                  Evidence
+                </Typography>
+                {data.evidence_refs.length === 0 && <EmptyState title="No evidence refs" />}
+                {data.evidence_refs.length > 0 && (
+                  <Stack spacing={2}>
+                    <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+                      {data.evidence_refs.map((ref) => (
+                        <EvidenceChip
+                          key={`${ref.log_id}-${ref.line_number}`}
+                          refItem={ref}
+                          selected={selectedEvidence?.log_id === ref.log_id}
+                          onClick={setSelectedEvidence}
+                        />
+                      ))}
+                    </Stack>
+                    <EvidenceDetail
+                      caseId={caseId}
+                      refItem={selectedEvidence}
+                      runId={runId}
+                    />
+                    {selectedEvidence && (
+                      <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }} variant="body2">
+                        {selectedEvidence.file_path}:{selectedEvidence.line_number} at{" "}
+                        {formatDateTime(selectedEvidence.timestamp)}
+                      </Typography>
+                    )}
+                  </Stack>
+                )}
+              </Stack>
+            </Card>
+          </Box>
         </>
       )}
-    </>
+    </Stack>
   );
 }

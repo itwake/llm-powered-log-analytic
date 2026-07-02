@@ -14,8 +14,13 @@ async function clickApply(page: Page) {
   await expect(apply).toBeEnabled();
 }
 
-async function expectFirstTableRow(page: Page) {
-  await expect(page.locator("tbody tr").first()).toBeVisible({timeout: 30_000});
+async function expectFirstDataRow(page: Page) {
+  const dataGridRow = page.locator('.MuiDataGrid-row, [role="row"][data-rowindex]').first();
+  try {
+    await expect(dataGridRow).toBeVisible({timeout: 30_000});
+  } catch {
+    await expect(page.locator("tbody tr").first()).toBeVisible({timeout: 30_000});
+  }
 }
 
 test("auth smoke redirects through SSO and establishes a session", async ({page}) => {
@@ -54,12 +59,12 @@ test("sample case analysis can be explored through report views", async ({page})
   await expect(page.getByText("Raw lines")).toBeVisible();
   await expect(page.getByText("Offending templates")).toBeVisible();
   await expect(page.getByText("Review reduction")).toBeVisible();
-  await expectFirstTableRow(page);
+  await expectFirstDataRow(page);
 
   await page.getByLabel("Signal").selectOption("error");
   await clickApply(page);
-  await expectFirstTableRow(page);
-  await expect(page.locator("tbody tr").filter({hasText: "error"}).first()).toBeVisible();
+  await expectFirstDataRow(page);
+  await expect(page.locator('.MuiDataGrid-row, [role="row"][data-rowindex], tbody tr').filter({hasText: "error"}).first()).toBeVisible();
 
   await Promise.all([
     page.waitForURL(/\/temporal$/, {timeout: 60_000}),
@@ -81,10 +86,10 @@ test("sample case analysis can be explored through report views", async ({page})
 
   await expect(page.getByRole("heading", {name: "Tabular Logs"})).toBeVisible();
   await expect(page.getByTestId("logs-window-filter")).toBeVisible();
-  await expectFirstTableRow(page);
+  await expectFirstDataRow(page);
   await page.getByLabel("Keyword").fill("checkout");
   await clickApply(page);
-  await expectFirstTableRow(page);
+  await expectFirstDataRow(page);
   await expect(page.getByText("/checkout").first()).toBeVisible();
 
   await Promise.all([

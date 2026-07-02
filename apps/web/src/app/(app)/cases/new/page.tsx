@@ -1,10 +1,16 @@
 "use client";
 
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { casesApi, runsApi } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
-import { Card, FieldHint, SectionHeader } from "@/components/ui";
+import { Button, Card, FieldHint, SectionHeader } from "@/components/ui";
 
 function emptyToNull(value: string): string | null {
   return value.trim() ? value.trim() : null;
@@ -61,7 +67,7 @@ export default function NewCasePage() {
         incident_end: localDateTimeToIso(incidentEnd),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
-      window.dispatchEvent(new CustomEvent("logan:case-saved", {detail: created}));
+      window.dispatchEvent(new CustomEvent("logan:case-saved", { detail: created }));
       if (mode === "start") {
         const uploaded = selectedFiles.length
           ? await casesApi.uploadFiles(created.case_id, selectedFiles)
@@ -69,7 +75,7 @@ export default function NewCasePage() {
         const run = await runsApi.start(created.case_id, {
           input_file_ids: uploaded.map((file) => file.file_id),
           input_paths: [],
-          config: {default_window_size_seconds: 60},
+          config: { default_window_size_seconds: 60 },
         });
         router.push(`/cases/${created.case_id}/runs/${run.analysis_run_id}/summary`);
         return;
@@ -87,82 +93,92 @@ export default function NewCasePage() {
     : "Create and start sample/local analysis";
 
   return (
-    <div className="page-stack">
-        <section className="page-hero compact">
-          <div>
-            <span className="eyebrow">Case intake</span>
-            <h1>New Case</h1>
-            <p>Capture the incident context and choose whether to launch analysis immediately.</p>
-          </div>
-        </section>
+    <Stack spacing={2.5}>
+      <Box>
+        <Typography color="text.secondary" sx={{ fontWeight: 800, textTransform: "uppercase" }} variant="caption">
+          Case intake
+        </Typography>
+        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+          New Case
+        </Typography>
+        <Typography color="text.secondary">
+          Capture the incident context and choose whether to launch analysis immediately.
+        </Typography>
+      </Box>
 
-        <section className="case-create-layout">
-          <div className="intake-side">
-            <Card>
-              <SectionHeader eyebrow="Onboarding" title="Create an incident workspace" />
-              <p className="muted">
-                Add the incident context, attach logs when available, then start analysis or save
-                the workspace for later.
-              </p>
-            </Card>
-            <Card>
-              <SectionHeader eyebrow="Evidence" title="Upload plan" />
-              <p className="muted">
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "320px minmax(0, 1fr)" } }}>
+        <Stack spacing={2}>
+          <Card>
+            <SectionHeader eyebrow="Onboarding" title="Create an incident workspace" />
+            <Typography color="text.secondary" sx={{ mt: 2 }}>
+              Add the incident context, attach logs when available, then start analysis or save
+              the workspace for later.
+            </Typography>
+          </Card>
+          <Card>
+            <SectionHeader eyebrow="Evidence" title="Upload plan" />
+            <Stack spacing={1.5} sx={{ mt: 2 }}>
+              <Typography color="text.secondary">
                 Selected log and archive files are uploaded to the local object store before analysis.
-              </p>
-              <p className="muted">
+              </Typography>
+              <Typography color="text.secondary">
                 With no files selected, the sample/local action runs the deterministic fixture set.
-              </p>
-            </Card>
-          </div>
+              </Typography>
+            </Stack>
+          </Card>
+        </Stack>
 
-          <form className="panel intake-form" onSubmit={submit}>
-            {error && <div className="alert error">{error}</div>}
+        <Card>
+          <Box component="form" onSubmit={submit}>
+          <Stack spacing={2.5}>
+            {error && <Alert severity="error">{error}</Alert>}
             <SectionHeader eyebrow="Incident" title="Case details" />
-            <label className="field">
-              Title
-              <input required value={title} onChange={(event) => setTitle(event.target.value)} />
-            </label>
-            <label className="field">
-              Issue description
-              <textarea
-                value={issueDescription}
-                onChange={(event) => setIssueDescription(event.target.value)}
+            <TextField
+              label="Title"
+              required
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+            />
+            <TextField
+              label="Issue description"
+              minRows={4}
+              multiline
+              value={issueDescription}
+              onChange={(event) => setIssueDescription(event.target.value)}
+            />
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" } }}>
+              <TextField label="Product" value={product} onChange={(event) => setProduct(event.target.value)} />
+              <TextField label="Service" value={service} onChange={(event) => setService(event.target.value)} />
+              <TextField label="Environment" value={environment} onChange={(event) => setEnvironment(event.target.value)} />
+              <TextField
+                label="Incident start"
+                slotProps={{ inputLabel: { shrink: true } }}
+                type="datetime-local"
+                value={incidentStart}
+                onChange={(event) => setIncidentStart(event.target.value)}
               />
-            </label>
-            <div className="grid two">
-              <label className="field">
-                Product
-                <input value={product} onChange={(event) => setProduct(event.target.value)} />
-              </label>
-              <label className="field">
-                Service
-                <input value={service} onChange={(event) => setService(event.target.value)} />
-              </label>
-              <label className="field">
-                Environment
-                <input value={environment} onChange={(event) => setEnvironment(event.target.value)} />
-              </label>
-              <label className="field">
-                Incident start
-                <input
-                  type="datetime-local"
-                  value={incidentStart}
-                  onChange={(event) => setIncidentStart(event.target.value)}
-                />
-              </label>
-              <label className="field">
-                Incident end
-                <input
-                  type="datetime-local"
-                  value={incidentEnd}
-                  onChange={(event) => setIncidentEnd(event.target.value)}
-                />
-              </label>
-            </div>
+              <TextField
+                label="Incident end"
+                slotProps={{ inputLabel: { shrink: true } }}
+                type="datetime-local"
+                value={incidentEnd}
+                onChange={(event) => setIncidentEnd(event.target.value)}
+              />
+            </Box>
 
-            <label className="field dropzone">
-              Log/archive files
+            <Box
+              component="label"
+              sx={{
+                border: "1px dashed",
+                borderColor: "divider",
+                borderRadius: 2,
+                cursor: "pointer",
+                display: "grid",
+                gap: 1,
+                p: 2,
+              }}
+            >
+              <Typography sx={{ fontWeight: 750 }}>Log/archive files</Typography>
               <input
                 accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
                 multiple
@@ -174,39 +190,26 @@ export default function NewCasePage() {
                   ? `${selectedFiles.length} file(s) selected`
                   : "Upload logs or continue with the local sample data."}
               </FieldHint>
-            </label>
+            </Box>
             {selectedFiles.length > 0 && (
-              <div className="file-list file-chip-list">
+              <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
                 {selectedFiles.map((file) => (
-                  <div className="file-chip" key={`${file.name}-${file.size}`}>
-                    <span>{file.name}</span>
-                    <small>{formatBytes(file.size)}</small>
-                  </div>
+                  <Chip key={`${file.name}-${file.size}`} label={`${file.name} - ${formatBytes(file.size)}`} />
                 ))}
-              </div>
+              </Stack>
             )}
-            <div className="form-actions">
-              <button
-                className="button"
-                disabled={submitting}
-                name="mode"
-                type="submit"
-                value="create"
-              >
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+              <Button disabled={submitting} name="mode" type="submit" value="create">
                 {submitting && submitMode === "create" ? "Creating" : "Create case"}
-              </button>
-              <button
-                className="button secondary"
-                disabled={submitting}
-                name="mode"
-                type="submit"
-                value="start"
-              >
+              </Button>
+              <Button disabled={submitting} name="mode" type="submit" value="start" variant="secondary">
                 {submitting && submitMode === "start" ? "Starting" : startButtonLabel}
-              </button>
-            </div>
-          </form>
-        </section>
-    </div>
+              </Button>
+            </Stack>
+          </Stack>
+          </Box>
+        </Card>
+      </Box>
+    </Stack>
   );
 }

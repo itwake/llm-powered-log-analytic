@@ -1,6 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Checkbox from "@mui/material/Checkbox";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { useEffect, useMemo, useState } from "react";
 import {
   AdminAuditLog,
   AdminPolicyGroup,
@@ -11,6 +27,7 @@ import {
 } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
 import { Metric } from "@/components/Shell";
+import { Button, Card, EmptyState } from "@/components/ui";
 
 function retentionValue(result: RetentionRunResponse | null, key: keyof RetentionRunResponse): string {
   return result ? String(result[key]) : "n/a";
@@ -43,8 +60,8 @@ export default function AdminPage() {
     try {
       const [settingsResponse, usersResponse, auditResponse, groupsResponse] = await Promise.all([
         adminApi.settings(),
-        adminApi.users({limit: 100}),
-        adminApi.auditLogs({limit: 50}),
+        adminApi.users({ limit: 100 }),
+        adminApi.auditLogs({ limit: 50 }),
         adminApi.policyGroups(),
       ]);
       setSettings(settingsResponse);
@@ -67,7 +84,7 @@ export default function AdminPage() {
     setError(null);
     setNotice(null);
     try {
-      const updated = await adminApi.updateUser(user.id, {role});
+      const updated = await adminApi.updateUser(user.id, { role });
       setUsers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setNotice("User updated");
       void refreshAuditLogs();
@@ -83,7 +100,7 @@ export default function AdminPage() {
     setError(null);
     setNotice(null);
     try {
-      const updated = await adminApi.updateUser(user.id, {is_active: isActive});
+      const updated = await adminApi.updateUser(user.id, { is_active: isActive });
       setUsers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setNotice("User updated");
       void refreshAuditLogs();
@@ -95,7 +112,7 @@ export default function AdminPage() {
   }
 
   async function refreshAuditLogs() {
-    const auditResponse = await adminApi.auditLogs({limit: 50});
+    const auditResponse = await adminApi.auditLogs({ limit: 50 });
     setAuditLogs(auditResponse.items);
   }
 
@@ -124,7 +141,7 @@ export default function AdminPage() {
     setError(null);
     setNotice(null);
     try {
-      const group = await adminApi.createPolicyGroup({name});
+      const group = await adminApi.createPolicyGroup({ name });
       setPolicyGroups((current) => [...current, group].sort((left, right) => left.name.localeCompare(right.name)));
       setNewGroupName("");
       setNotice("Policy group created");
@@ -141,7 +158,7 @@ export default function AdminPage() {
     setError(null);
     setNotice(null);
     try {
-      const content = await adminApi.exportAuditLogs({format: auditExportFormat, limit: 1000});
+      const content = await adminApi.exportAuditLogs({ format: auditExportFormat, limit: 1000 });
       const blob = new Blob([content], {
         type: auditExportFormat === "csv" ? "text/csv" : "application/octet-stream",
       });
@@ -160,230 +177,312 @@ export default function AdminPage() {
     }
   }
 
-  return (
-    <>
-      <div className="toolbar">
-        <h1>Admin</h1>
-        <button className="button secondary" disabled={loading} type="button" onClick={() => void load()}>
-          Refresh
-        </button>
-      </div>
+  const policyColumns = useMemo<GridColDef<AdminPolicyGroup>[]>(
+    () => [
+      {
+        field: "name",
+        headerName: "Name",
+        flex: 1,
+        minWidth: 220,
+        renderCell: (params) => (
+          <Box sx={{ py: 1, whiteSpace: "normal", overflowWrap: "anywhere" }}>
+            <Typography sx={{ fontWeight: 800 }}>{params.row.name}</Typography>
+            <Typography color="text.secondary" variant="caption">{params.row.id}</Typography>
+          </Box>
+        ),
+      },
+      { field: "slug", headerName: "Slug", minWidth: 160 },
+      { field: "member_count", headerName: "Members", minWidth: 120, type: "number" },
+      {
+        field: "updated_at",
+        headerName: "Updated",
+        minWidth: 170,
+        renderCell: (params) => formatDateTime(params.row.updated_at),
+      },
+    ],
+    [],
+  );
 
-      {error && <div className="alert error">{error}</div>}
-      {notice && <div className="alert success">{notice}</div>}
-      {loading && <section className="panel"><div className="empty">Loading admin data</div></section>}
+  const userColumns = useMemo<GridColDef<AdminUser>[]>(
+    () => [
+      {
+        field: "username",
+        headerName: "User",
+        flex: 1,
+        minWidth: 260,
+        renderCell: (params) => (
+          <Box sx={{ py: 1, whiteSpace: "normal", overflowWrap: "anywhere" }}>
+            <Typography sx={{ fontWeight: 800 }}>{params.row.username}</Typography>
+            <Typography color="text.secondary" variant="caption">{params.row.email}</Typography>
+          </Box>
+        ),
+      },
+      {
+        field: "role",
+        headerName: "Role",
+        minWidth: 170,
+        sortable: false,
+        renderCell: (params) => (
+          <Select
+            disabled={savingUserId === params.row.id}
+            size="small"
+            value={params.row.role}
+            onChange={(event) => void updateRole(params.row, event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <MenuItem value="engineer">engineer</MenuItem>
+            <MenuItem value="admin">admin</MenuItem>
+          </Select>
+        ),
+      },
+      {
+        field: "is_active",
+        headerName: "Active",
+        minWidth: 140,
+        sortable: false,
+        renderCell: (params) => (
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+            <Checkbox
+              checked={params.row.is_active}
+              disabled={savingUserId === params.row.id}
+              onChange={(event) => void updateActive(params.row, event.target.checked)}
+              onClick={(event) => event.stopPropagation()}
+            />
+            <Typography variant="body2">{params.row.is_active ? "active" : "inactive"}</Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: "created_at",
+        headerName: "Created",
+        minWidth: 170,
+        renderCell: (params) => formatDateTime(params.row.created_at),
+      },
+    ],
+    [savingUserId],
+  );
+
+  const auditColumns = useMemo<GridColDef<AdminAuditLog>[]>(
+    () => [
+      {
+        field: "created_at",
+        headerName: "Time",
+        minWidth: 170,
+        renderCell: (params) => formatDateTime(params.row.created_at),
+      },
+      { field: "action", headerName: "Action", minWidth: 180 },
+      {
+        field: "user_id",
+        headerName: "User",
+        minWidth: 180,
+        renderCell: (params) => valueLabel(params.row.user_id),
+      },
+      {
+        field: "case_id",
+        headerName: "Case",
+        minWidth: 180,
+        renderCell: (params) => valueLabel(params.row.case_id),
+      },
+      {
+        field: "target",
+        headerName: "Target",
+        minWidth: 220,
+        renderCell: (params) => `${valueLabel(params.row.target_type)} ${valueLabel(params.row.target_id)}`,
+      },
+      {
+        field: "metadata",
+        headerName: "Metadata",
+        flex: 1,
+        minWidth: 300,
+        renderCell: (params) => (
+          <Box component="code" sx={{ overflowWrap: "anywhere", whiteSpace: "normal" }}>
+            {metadataPreview(params.row)}
+          </Box>
+        ),
+      },
+    ],
+    [],
+  );
+
+  return (
+    <Stack spacing={2.5}>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ alignItems: { xs: "flex-start", sm: "center" }, justifyContent: "space-between" }}>
+        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+          Admin
+        </Typography>
+        <Button disabled={loading} type="button" variant="secondary" onClick={() => void load()}>
+          Refresh
+        </Button>
+      </Stack>
+
+      {error && <Alert severity="error">{error}</Alert>}
+      {notice && <Alert severity="success">{notice}</Alert>}
+      {loading && <Card><EmptyState title="Loading admin data" /></Card>}
 
       {!loading && settings && (
         <>
-          <section className="grid three">
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" } }}>
             <Metric label="Environment" value={settings.env} />
             <Metric label="Store" value={settings.store_backend} />
             <Metric label="Object backend" value={settings.object_backend} />
-          </section>
+          </Box>
 
-          <section className="panel" style={{marginTop: 14}}>
-            <h2>Settings</h2>
-            <div className="table-wrap">
-              <table>
-                <tbody>
-                  <tr><td>Configured store</td><td>{settings.configured_store_backend}</td></tr>
-                  <tr><td>Orchestrator</td><td>{settings.orchestrator}</td></tr>
-                  <tr><td>Rate limit</td><td>{settings.rate_limit.enabled ? `${settings.rate_limit.requests_per_minute}/min` : "disabled"}</td></tr>
-                  <tr><td>Analytics</td><td>{JSON.stringify(settings.analytics)}</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <Card>
+            <Typography component="h2" gutterBottom sx={{ fontWeight: 800 }} variant="h6">
+              Settings
+            </Typography>
+            <Table size="small">
+              <TableBody>
+                <TableRow><TableCell>Configured store</TableCell><TableCell>{settings.configured_store_backend}</TableCell></TableRow>
+                <TableRow><TableCell>Orchestrator</TableCell><TableCell>{settings.orchestrator}</TableCell></TableRow>
+                <TableRow><TableCell>Rate limit</TableCell><TableCell>{settings.rate_limit.enabled ? `${settings.rate_limit.requests_per_minute}/min` : "disabled"}</TableCell></TableRow>
+                <TableRow><TableCell>Analytics</TableCell><TableCell>{JSON.stringify(settings.analytics)}</TableCell></TableRow>
+              </TableBody>
+            </Table>
+          </Card>
 
-          <section className="panel" style={{marginTop: 14}}>
-            <div className="toolbar">
-              <h2>Retention</h2>
-              <button
-                className="button"
-                disabled={runningRetention}
-                type="button"
-                onClick={() => void runRetention()}
-              >
-                {runningRetention ? "Running" : "Run retention"}
-              </button>
-            </div>
-            <section className="grid two">
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Policy</th>
-                      <th>Days</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr><td>Audit</td><td>{settings.retention_days.audit}</td></tr>
-                    <tr><td>Raw logs</td><td>{settings.retention_days.raw_log}</td></tr>
-                    <tr><td>Reports</td><td>{settings.retention_days.report}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <section className="grid three">
-                <Metric label="Audits deleted" value={retentionValue(retention, "audit_logs_deleted")} />
-                <Metric label="Raw lines scrubbed" value={retentionValue(retention, "raw_log_lines_scrubbed")} />
-                <Metric label="Exports deleted" value={retentionValue(retention, "exports_deleted")} />
-                <Metric label="Results cleared" value={retentionValue(retention, "analysis_results_cleared")} />
-                <Metric label="Step artifacts deleted" value={retentionValue(retention, "step_artifacts_deleted")} />
-              </section>
-            </section>
-          </section>
+          <Card>
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={2} sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+                  Retention
+                </Typography>
+                <Button disabled={runningRetention} type="button" onClick={() => void runRetention()}>
+                  {runningRetention ? "Running" : "Run retention"}
+                </Button>
+              </Stack>
+              <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "minmax(280px, 0.6fr) minmax(0, 1fr)" } }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Policy</TableCell>
+                      <TableCell>Days</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    <TableRow><TableCell>Audit</TableCell><TableCell>{settings.retention_days.audit}</TableCell></TableRow>
+                    <TableRow><TableCell>Raw logs</TableCell><TableCell>{settings.retention_days.raw_log}</TableCell></TableRow>
+                    <TableRow><TableCell>Reports</TableCell><TableCell>{settings.retention_days.report}</TableCell></TableRow>
+                  </TableBody>
+                </Table>
+                <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" } }}>
+                  <Metric label="Audits deleted" value={retentionValue(retention, "audit_logs_deleted")} />
+                  <Metric label="Raw lines scrubbed" value={retentionValue(retention, "raw_log_lines_scrubbed")} />
+                  <Metric label="Exports deleted" value={retentionValue(retention, "exports_deleted")} />
+                  <Metric label="Results cleared" value={retentionValue(retention, "analysis_results_cleared")} />
+                  <Metric label="Step artifacts deleted" value={retentionValue(retention, "step_artifacts_deleted")} />
+                </Box>
+              </Box>
+            </Stack>
+          </Card>
 
-          <section className="panel" style={{marginTop: 14}}>
-            <div className="toolbar">
-              <h2>Policy Groups</h2>
-              <input
-                aria-label="Policy group name"
-                disabled={creatingGroup}
-                placeholder="Group name"
-                value={newGroupName}
-                onChange={(event) => setNewGroupName(event.target.value)}
-              />
-              <button
-                className="button"
-                disabled={creatingGroup || !newGroupName.trim()}
-                type="button"
-                onClick={() => void createPolicyGroup()}
-              >
-                {creatingGroup ? "Creating" : "Create group"}
-              </button>
-            </div>
-            {policyGroups.length === 0 && <div className="empty">No policy groups</div>}
-            {policyGroups.length > 0 && (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Slug</th>
-                      <th>Members</th>
-                      <th>Updated</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {policyGroups.map((group) => (
-                      <tr key={group.id}>
-                        <td>
-                          <strong>{group.name}</strong><br />
-                          <span className="muted">{group.id}</span>
-                        </td>
-                        <td>{group.slug}</td>
-                        <td>{group.member_count}</td>
-                        <td>{formatDateTime(group.updated_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+          <Card>
+            <Stack spacing={2}>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { xs: "flex-start", md: "center" }, justifyContent: "space-between" }}>
+                <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+                  Policy Groups
+                </Typography>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ width: { xs: "100%", md: "auto" } }}>
+                  <TextField
+                    aria-label="Policy group name"
+                    disabled={creatingGroup}
+                    placeholder="Group name"
+                    value={newGroupName}
+                    onChange={(event) => setNewGroupName(event.target.value)}
+                  />
+                  <Button disabled={creatingGroup || !newGroupName.trim()} type="button" onClick={() => void createPolicyGroup()}>
+                    {creatingGroup ? "Creating" : "Create group"}
+                  </Button>
+                </Stack>
+              </Stack>
+              {policyGroups.length === 0 ? (
+                <EmptyState title="No policy groups" />
+              ) : (
+                <Box sx={{ minHeight: 360 }}>
+                  <DataGrid
+                    columns={policyColumns}
+                    density="compact"
+                    disableRowSelectionOnClick
+                    getRowHeight={() => "auto"}
+                    getRowId={(row) => row.id}
+                    initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+                    pageSizeOptions={[25, 50, 100]}
+                    rows={policyGroups}
+                    sx={{ "& .MuiDataGrid-cell": { alignItems: "flex-start", py: 1 } }}
+                  />
+                </Box>
+              )}
+            </Stack>
+          </Card>
 
-          <section className="panel" style={{marginTop: 14}}>
-            <h2>Users</h2>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>Role</th>
-                    <th>Active</th>
-                    <th>Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id}>
-                      <td>
-                        <strong>{user.username}</strong><br />
-                        <span className="muted">{user.email}</span>
-                      </td>
-                      <td>
-                        <select
-                          disabled={savingUserId === user.id}
-                          value={user.role}
-                          onChange={(event) => void updateRole(user, event.target.value)}
-                        >
-                          <option value="engineer">engineer</option>
-                          <option value="admin">admin</option>
-                        </select>
-                      </td>
-                      <td>
-                        <label className="inline-field">
-                          <input
-                            checked={user.is_active}
-                            disabled={savingUserId === user.id}
-                            type="checkbox"
-                            onChange={(event) => void updateActive(user, event.target.checked)}
-                          />
-                          {user.is_active ? "active" : "inactive"}
-                        </label>
-                      </td>
-                      <td>{formatDateTime(user.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <Card>
+            <Stack spacing={2}>
+              <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+                Users
+              </Typography>
+              <Box sx={{ minHeight: 420 }}>
+                <DataGrid
+                  columns={userColumns}
+                  density="compact"
+                  disableRowSelectionOnClick
+                  getRowHeight={() => "auto"}
+                  getRowId={(row) => row.id}
+                  initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+                  pageSizeOptions={[25, 50, 100]}
+                  rows={users}
+                  sx={{ "& .MuiDataGrid-cell": { alignItems: "flex-start", py: 1 } }}
+                />
+              </Box>
+            </Stack>
+          </Card>
 
-          <section className="panel" style={{marginTop: 14}}>
-            <div className="toolbar">
-              <h2>Audit Logs</h2>
-              <select
-                aria-label="Audit export format"
-                disabled={exportingAudit}
-                value={auditExportFormat}
-                onChange={(event) => setAuditExportFormat(event.target.value as "json" | "ndjson" | "csv")}
-              >
-                <option value="json">json</option>
-                <option value="ndjson">ndjson</option>
-                <option value="csv">csv</option>
-              </select>
-              <button
-                className="button secondary"
-                disabled={exportingAudit}
-                type="button"
-                onClick={() => void exportAuditLogs()}
-              >
-                {exportingAudit ? "Exporting" : "Export"}
-              </button>
-            </div>
-            {auditLogs.length === 0 && <div className="empty">No audit logs</div>}
-            {auditLogs.length > 0 && (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th>Action</th>
-                      <th>User</th>
-                      <th>Case</th>
-                      <th>Target</th>
-                      <th>Metadata</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditLogs.map((log) => (
-                      <tr key={log.id}>
-                        <td>{formatDateTime(log.created_at)}</td>
-                        <td>{log.action}</td>
-                        <td>{valueLabel(log.user_id)}</td>
-                        <td>{valueLabel(log.case_id)}</td>
-                        <td>{valueLabel(log.target_type)} {valueLabel(log.target_id)}</td>
-                        <td><code>{metadataPreview(log)}</code></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+          <Card>
+            <Stack spacing={2}>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { xs: "flex-start", md: "center" }, justifyContent: "space-between" }}>
+                <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+                  Audit Logs
+                </Typography>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                  <FormControl sx={{ minWidth: 160 }}>
+                    <InputLabel id="audit-export-format-label">Audit export format</InputLabel>
+                    <Select
+                      disabled={exportingAudit}
+                      label="Audit export format"
+                      labelId="audit-export-format-label"
+                      value={auditExportFormat}
+                      onChange={(event) => setAuditExportFormat(event.target.value as "json" | "ndjson" | "csv")}
+                    >
+                      <MenuItem value="json">json</MenuItem>
+                      <MenuItem value="ndjson">ndjson</MenuItem>
+                      <MenuItem value="csv">csv</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <Button disabled={exportingAudit} type="button" variant="secondary" onClick={() => void exportAuditLogs()}>
+                    {exportingAudit ? "Exporting" : "Export"}
+                  </Button>
+                </Stack>
+              </Stack>
+              {auditLogs.length === 0 ? (
+                <EmptyState title="No audit logs" />
+              ) : (
+                <Box sx={{ minHeight: 520 }}>
+                  <DataGrid
+                    columns={auditColumns}
+                    density="compact"
+                    disableRowSelectionOnClick
+                    getRowHeight={() => "auto"}
+                    getRowId={(row) => row.id}
+                    initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+                    pageSizeOptions={[25, 50, 100]}
+                    rows={auditLogs}
+                    sx={{ "& .MuiDataGrid-cell": { alignItems: "flex-start", py: 1 } }}
+                  />
+                </Box>
+              )}
+            </Stack>
+          </Card>
         </>
       )}
-    </>
+    </Stack>
   );
 }

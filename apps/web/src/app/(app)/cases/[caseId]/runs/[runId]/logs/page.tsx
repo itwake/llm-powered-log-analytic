@@ -1,22 +1,33 @@
 "use client";
 
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { LogsResponse, reportsApi } from "@/lib/api";
+import { LogItem, LogsResponse, reportsApi } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
+import { Badge, Button, Card, EmptyState } from "@/components/ui";
 
-function signalClass(signal: string): string {
+function signalTone(signal: string) {
   if (signal === "error") {
-    return "red";
+    return "danger";
   }
   if (signal === "availability" || signal === "saturation") {
-    return "amber";
+    return "warning";
   }
-  return "blue";
+  return "info";
 }
 
 export default function LogsPage() {
-  const {caseId, runId} = useParams<{caseId: string; runId: string}>();
+  const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
   const [data, setData] = useState<LogsResponse | null>(null);
   const [keyword, setKeyword] = useState("");
   const [service, setService] = useState("");
@@ -88,87 +99,143 @@ export default function LogsPage() {
     return Array.from(values).sort();
   }, [data, service]);
 
+  const columns = useMemo<GridColDef<LogItem>[]>(
+    () => [
+      {
+        field: "timestamp",
+        headerName: "Time",
+        minWidth: 170,
+        renderCell: (params) => formatDateTime(params.row.timestamp),
+      },
+      {
+        field: "level",
+        headerName: "Level",
+        minWidth: 100,
+        renderCell: (params) => valueLabel(params.row.level),
+      },
+      {
+        field: "service",
+        headerName: "Service",
+        minWidth: 150,
+        renderCell: (params) => valueLabel(params.row.service),
+      },
+      {
+        field: "evidence",
+        headerName: "Evidence",
+        minWidth: 220,
+        sortable: false,
+        renderCell: (params) => {
+          const ref = `${params.row.file_path}:${params.row.line_number}`;
+          return (
+            <Stack spacing={0.75} sx={{ alignItems: "flex-start", py: 1 }}>
+              <Box component="code" sx={{ overflowWrap: "anywhere", whiteSpace: "normal" }}>
+                {ref}
+              </Box>
+              <Button size="sm" variant="ghost" onClick={() => void copyEvidenceRef(ref)}>
+                Copy ref
+              </Button>
+            </Stack>
+          );
+        },
+      },
+      {
+        field: "message",
+        headerName: "Message",
+        flex: 1.5,
+        minWidth: 360,
+        renderCell: (params) => (
+          <Stack spacing={0.75} sx={{ alignItems: "flex-start", py: 1, whiteSpace: "normal", overflowWrap: "anywhere" }}>
+            <Typography variant="body2">{params.row.message}</Typography>
+            <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
+              <Badge tone={signalTone(params.row.golden_signal)}>{params.row.golden_signal}</Badge>
+              {params.row.fault_categories.map((category) => (
+                <Badge key={category} tone="neutral">{category}</Badge>
+              ))}
+            </Stack>
+          </Stack>
+        ),
+      },
+    ],
+    [],
+  );
+
   return (
-    <>
-      <form className="toolbar" onSubmit={submit}>
-        <h1>Tabular Logs</h1>
-        <label className="inline-field">
-          Keyword
-          <input
+    <Stack spacing={2.5}>
+      <Stack
+        component="form"
+        direction={{ xs: "column", lg: "row" }}
+        spacing={2}
+        sx={{ alignItems: { xs: "flex-start", lg: "center" }, justifyContent: "space-between" }}
+        onSubmit={submit}
+      >
+        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+          Tabular Logs
+        </Typography>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ width: { xs: "100%", lg: "auto" } }}>
+          <TextField
+            label="Keyword"
             placeholder="Search redacted logs"
+            sx={{ minWidth: { sm: 260 } }}
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
           />
-        </label>
-        <label className="inline-field">
-          Service
-          <select value={service} onChange={(event) => setService(event.target.value)}>
-            <option value="">Any</option>
-            {serviceOptions.map((value) => (
-              <option key={value} value={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-        <button className="button secondary" disabled={loading} type="submit">Apply</button>
-      </form>
+          <FormControl sx={{ minWidth: 180 }}>
+            <InputLabel id="logs-service-label">Service</InputLabel>
+            <Select
+              label="Service"
+              labelId="logs-service-label"
+              value={service}
+              onChange={(event) => setService(event.target.value)}
+            >
+              <MenuItem value="">Any</MenuItem>
+              {serviceOptions.map((value) => (
+                <MenuItem key={value} value={value}>{value}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button disabled={loading} type="submit" variant="secondary">
+            Apply
+          </Button>
+        </Stack>
+      </Stack>
 
-      {error && <div className="alert error">{error}</div>}
+      {error && <Alert severity="error">{error}</Alert>}
       {(windowStart || windowEnd) && (
-        <div className="filter-summary" data-testid="logs-window-filter">
-          <span>
+        <Stack
+          data-testid="logs-window-filter"
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1.5}
+          sx={{ alignItems: { xs: "flex-start", sm: "center" }, bgcolor: "background.paper", border: 1, borderColor: "divider", borderRadius: 2, justifyContent: "space-between", p: 2 }}
+        >
+          <Typography>
             Window filter: {windowStart ? formatDateTime(windowStart) : "start"} to{" "}
             {windowEnd ? formatDateTime(windowEnd) : "end"}
-          </span>
-          <button className="button secondary" onClick={clearWindowFilter} type="button">
+          </Typography>
+          <Button variant="secondary" onClick={clearWindowFilter}>
             Clear window
-          </button>
-        </div>
+          </Button>
+        </Stack>
       )}
-      <section className="panel">
-        {loading && <div className="empty">Loading logs</div>}
-        {!loading && data && data.items.length === 0 && <div className="empty">No logs found</div>}
-        {!loading && data && data.items.length > 0 && (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Level</th>
-                  <th>Service</th>
-                  <th>Evidence</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((item) => (
-                  <tr key={item.log_id}>
-                    <td>{formatDateTime(item.timestamp)}</td>
-                    <td>{valueLabel(item.level)}</td>
-                    <td>{valueLabel(item.service)}</td>
-                    <td>
-                      <code>{item.file_path}:{item.line_number}</code>
-                      <br />
-                      <button
-                        className="button ghost"
-                        type="button"
-                        onClick={() => void copyEvidenceRef(`${item.file_path}:${item.line_number}`)}
-                      >
-                        Copy ref
-                      </button>
-                    </td>
-                    <td>
-                      {item.message}
-                      <br />
-                      <span className={`pill ${signalClass(item.golden_signal)}`}>{item.golden_signal}</span>
-                      <span className="muted"> {item.fault_categories.join(", ")}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <Card>
+        {!loading && data && data.items.length === 0 ? (
+          <EmptyState title="No logs found" />
+        ) : (
+          <Box sx={{ minHeight: 640 }}>
+            <DataGrid
+              columns={columns}
+              density="compact"
+              disableRowSelectionOnClick
+              getRowHeight={() => "auto"}
+              getRowId={(row) => row.log_id}
+              initialState={{ pagination: { paginationModel: { pageSize: 50 } } }}
+              loading={loading}
+              pageSizeOptions={[50, 100, 200]}
+              rows={data?.items || []}
+              sx={{ "& .MuiDataGrid-cell": { alignItems: "flex-start", py: 1 } }}
+            />
+          </Box>
         )}
-      </section>
-    </>
+      </Card>
+    </Stack>
   );
 }

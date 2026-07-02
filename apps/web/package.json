@@ -10,6 +10,13 @@
     "test": "tsc --noEmit"
   },
   "dependencies": {
+    "@emotion/cache": "^11.14.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.1.1",
+    "@mui/material": "^9.1.2",
+    "@mui/material-nextjs": "^9.1.1",
+    "@mui/x-data-grid": "^9.7.0",
     "cytoscape": "^3.34.0",
     "echarts": "^6.1.0",
     "next": "16.2.7",

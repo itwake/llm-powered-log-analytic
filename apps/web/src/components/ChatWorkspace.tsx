@@ -1,11 +1,16 @@
 "use client";
 
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { AnalysisRunResponse, EvidenceRef } from "@/lib/api";
 import { chatApi } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
 import { EvidenceChip } from "@/components/Evidence";
-import { Button, EmptyState } from "@/components/ui";
+import { Button, Card, EmptyState } from "@/components/ui";
 
 interface ChatWorkspaceProps {
   caseId: string;
@@ -43,7 +48,7 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
-export function ChatWorkspace({caseId, onEvidenceSelect, run}: ChatWorkspaceProps) {
+export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -119,7 +124,7 @@ export function ChatWorkspace({caseId, onEvidenceSelect, run}: ChatWorkspaceProp
             }));
           },
           evidence: (evidenceRefs) => {
-            updateMessage(assistantId, (message) => ({...message, evidenceRefs}));
+            updateMessage(assistantId, (message) => ({ ...message, evidenceRefs }));
           },
           done: (doneMessage) => {
             updateMessage(assistantId, (message) => ({
@@ -169,7 +174,7 @@ export function ChatWorkspace({caseId, onEvidenceSelect, run}: ChatWorkspaceProp
     setStreamingMessageId(null);
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendMessage();
@@ -179,102 +184,138 @@ export function ChatWorkspace({caseId, onEvidenceSelect, run}: ChatWorkspaceProp
   const composerDisabled = !run || Boolean(streamingMessageId);
 
   return (
-    <section className="chat-panel chat-workspace">
-      <div className="section-header">
-        <div>
-          <span className="eyebrow">Incident Copilot</span>
-          <h2>Analysis Chat</h2>
-        </div>
-      </div>
+    <Card>
+      <Stack spacing={2}>
+        <Box>
+          <Typography color="text.secondary" sx={{ fontWeight: 800, textTransform: "uppercase" }} variant="caption">
+            Incident Copilot
+          </Typography>
+          <Typography component="h2" sx={{ fontWeight: 850 }} variant="h6">
+            Analysis Chat
+          </Typography>
+        </Box>
 
-      {messages.length === 0 && (
-        <div className="chat-empty">
-          <EmptyState title="Ask about this incident">
-            Use the latest run context to investigate symptoms, timeline, evidence, and likely root cause.
-          </EmptyState>
-          <div className="quick-prompts">
-            {QUICK_PROMPTS.map((prompt) => (
-              <Button
-                disabled={!run || Boolean(streamingMessageId)}
-                key={prompt}
-                size="sm"
-                variant="ghost"
-                onClick={() => void sendMessage(prompt)}
-              >
-                {prompt}
+        {messages.length === 0 && (
+          <Stack spacing={1.5}>
+            <EmptyState title="Ask about this incident">
+              Use the latest run context to investigate symptoms, timeline, evidence, and likely root cause.
+            </EmptyState>
+            <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+              {QUICK_PROMPTS.map((prompt) => (
+                <Button
+                  disabled={!run || Boolean(streamingMessageId)}
+                  key={prompt}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void sendMessage(prompt)}
+                >
+                  {prompt}
+                </Button>
+              ))}
+            </Stack>
+          </Stack>
+        )}
+
+        {messages.length > 0 && (
+          <Stack
+            ref={scrollRef}
+            spacing={2}
+            sx={{
+              border: 1,
+              borderColor: "divider",
+              borderRadius: 2,
+              maxHeight: 520,
+              minHeight: 320,
+              overflowY: "auto",
+              p: 2,
+            }}
+          >
+            {messages.map((message) => {
+              const isUser = message.role === "user";
+              return (
+                <Stack
+                  component="article"
+                  key={message.id}
+                  spacing={0.75}
+                  sx={{ alignItems: isUser ? "flex-end" : "flex-start" }}
+                >
+                  <Box
+                    sx={{
+                      bgcolor: isUser ? "primary.main" : "grey.100",
+                      borderRadius: 2,
+                      color: isUser ? "primary.contrastText" : "text.primary",
+                      maxWidth: "min(760px, 92%)",
+                      p: 1.5,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {message.content || (
+                      <Typography color={isUser ? "primary.contrastText" : "text.secondary"} variant="body2">
+                        {message.status === "streaming" ? "Analyzing run context..." : "No response"}
+                      </Typography>
+                    )}
+                  </Box>
+                  {message.status !== "complete" && (
+                    <Typography color="text.secondary" variant="caption">
+                      {message.status}
+                    </Typography>
+                  )}
+                  {message.role === "assistant" && message.evidenceRefs.length > 0 && (
+                    <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+                      {message.evidenceRefs.map((refItem) => (
+                        <EvidenceChip
+                          key={`${refItem.log_id}-${refItem.line_number}`}
+                          refItem={refItem}
+                          onClick={onEvidenceSelect}
+                        />
+                      ))}
+                    </Stack>
+                  )}
+                </Stack>
+              );
+            })}
+          </Stack>
+        )}
+
+        {error && <Alert severity="error">{error}</Alert>}
+        {!run && (
+          <Typography color="text.secondary" variant="caption">
+            Start an analysis run before asking the copilot.
+          </Typography>
+        )}
+
+        <Box
+          component="form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void sendMessage();
+          }}
+        >
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: "flex-end" }}>
+            <TextField
+              aria-label="Ask the incident copilot"
+              disabled={composerDisabled}
+              fullWidth
+              minRows={3}
+              multiline
+              placeholder="Ask about this incident, logs, timeline, or likely root cause..."
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+            {streamingMessageId ? (
+              <Button variant="secondary" onClick={cancel}>
+                Cancel
               </Button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {messages.length > 0 && (
-        <div className="message-list chat-scroll" ref={scrollRef}>
-          {messages.map((message) => (
-            <article className={`message-row chat-message ${message.role}`} key={message.id}>
-              <div className="message-bubble chat-bubble">
-                {message.content || (
-                  <span className="muted">
-                    {message.status === "streaming" ? "Analyzing run context…" : "No response"}
-                  </span>
-                )}
-              </div>
-              <div className="message-meta">
-                {message.status !== "complete" && (
-                  <span className={`message-status ${message.status}`}>
-                    {message.status}
-                  </span>
-                )}
-              </div>
-              {message.role === "assistant" && message.evidenceRefs.length > 0 && (
-                <div className="chat-evidence evidence-list">
-                  {message.evidenceRefs.map((refItem) => (
-                    <EvidenceChip
-                      key={`${refItem.log_id}-${refItem.line_number}`}
-                      refItem={refItem}
-                      onClick={onEvidenceSelect}
-                    />
-                  ))}
-                </div>
-              )}
-            </article>
-          ))}
-        </div>
-      )}
-
-      {error && <div className="alert error compact">{error}</div>}
-      {!run && (
-        <p className="field-hint">Start an analysis run before asking the copilot.</p>
-      )}
-
-      <form
-        className="composer chat-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void sendMessage();
-        }}
-      >
-        <textarea
-          aria-label="Ask the incident copilot"
-          className="composer-input"
-          disabled={composerDisabled}
-          placeholder="Ask about this incident, logs, timeline, or likely root cause…"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <div className="composer-actions chat-composer-actions">
-          {streamingMessageId ? (
-            <Button variant="secondary" onClick={cancel}>
-              Cancel
-            </Button>
-          ) : (
-            <Button disabled={!input.trim() || !run} type="submit">
-              Ask
-            </Button>
-          )}
-        </div>
-      </form>
-    </section>
+            ) : (
+              <Button disabled={!input.trim() || !run} type="submit">
+                Ask
+              </Button>
+            )}
+          </Stack>
+        </Box>
+      </Stack>
+    </Card>
   );
 }
