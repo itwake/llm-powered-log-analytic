@@ -24,6 +24,7 @@ from app.services.model_gateway import (
 AI_PLATFORM_PROVIDER = "ai_platform"
 AI_PLATFORM_DEFAULT_TRUST_TOKEN_HEADER = "X-XXXX-E2E-Trust-Token"
 AI_PLATFORM_DEFAULT_TRACKING_PREFIX = "EFP"
+JSON_OBJECT_FORMAT_INSTRUCTION = "Return valid JSON only."
 
 
 @dataclass(frozen=True)
@@ -261,6 +262,8 @@ class AIPlatformModelGateway:
         for item in input:
             role = str(item.get("role") or "user")
             messages.append({"role": role, "content": _chat_content(item.get("content"))})
+        if _requires_json_keyword(response_format) and not _messages_contain_json_keyword(messages):
+            messages.append({"role": "developer", "content": JSON_OBJECT_FORMAT_INSTRUCTION})
 
         payload: dict[str, Any] = {
             "model": model,
@@ -359,6 +362,24 @@ def _chat_content(value: Any) -> list[dict[str, Any]]:
         elif part_type == "image_url" and part.get("image_url"):
             content.append({"type": "image_url", "image_url": part["image_url"]})
     return content
+
+
+def _requires_json_keyword(response_format: dict[str, Any] | None) -> bool:
+    return bool(response_format and response_format.get("type") == "json_object")
+
+
+def _messages_contain_json_keyword(messages: list[dict[str, Any]]) -> bool:
+    return any(_content_contains_json_keyword(message.get("content")) for message in messages)
+
+
+def _content_contains_json_keyword(content: Any) -> bool:
+    if isinstance(content, str):
+        return "json" in content.lower()
+    if isinstance(content, list):
+        return any(_content_contains_json_keyword(item) for item in content)
+    if isinstance(content, dict):
+        return any(_content_contains_json_keyword(value) for value in content.values())
+    return False
 
 
 def _join_url(host: str | None, uri: str | None) -> str:
