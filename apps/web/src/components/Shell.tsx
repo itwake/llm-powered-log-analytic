@@ -34,6 +34,7 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
   const router = useRouter();
   const [user, setUser] = useState<UserOut | null>(null);
   const [sidebarCases, setSidebarCases] = useState<CaseResponse[]>([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [casesLoading, setCasesLoading] = useState(false);
   const [authState, setAuthState] = useState<"loading" | "signed-in" | "signed-out">("loading");
 
@@ -47,6 +48,14 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
 
   const activeCaseId = caseId ?? routeContext.caseId;
   const activeRunId = runId ?? routeContext.runId;
+
+  useEffect(() => {
+    try {
+      setSidebarCollapsed(window.localStorage.getItem("logan:sidebar-collapsed") === "true");
+    } catch {
+      setSidebarCollapsed(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,14 +151,14 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
   }, []);
 
   const reportLinks = useMemo(() => {
-    const links: [string, string][] = [];
+    const links: [string, string, string][] = [];
     if (activeCaseId && activeRunId) {
       links.push(
-        ["Data Summary", `/cases/${activeCaseId}/runs/${activeRunId}/summary`],
-        ["Temporal View", `/cases/${activeCaseId}/runs/${activeRunId}/temporal`],
-        ["Tabular Logs", `/cases/${activeCaseId}/runs/${activeRunId}/logs`],
-        ["Causal Graph", `/cases/${activeCaseId}/runs/${activeRunId}/causal-graph`],
-        ["Causal Summary", `/cases/${activeCaseId}/runs/${activeRunId}/causal-summary`],
+        ["Data Summary", `/cases/${activeCaseId}/runs/${activeRunId}/summary`, "DS"],
+        ["Temporal View", `/cases/${activeCaseId}/runs/${activeRunId}/temporal`, "TV"],
+        ["Tabular Logs", `/cases/${activeCaseId}/runs/${activeRunId}/logs`, "LG"],
+        ["Causal Graph", `/cases/${activeCaseId}/runs/${activeRunId}/causal-graph`, "CG"],
+        ["Causal Summary", `/cases/${activeCaseId}/runs/${activeRunId}/causal-summary`, "RC"],
       );
     }
     return links;
@@ -174,6 +183,18 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
     return pathname === href;
   }
 
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem("logan:sidebar-collapsed", String(next));
+      } catch {
+        // Some browser modes block localStorage; the in-memory state is enough for the session.
+      }
+      return next;
+    });
+  }
+
   function caseTone(status: string): string {
     if (status === "ready" || status === "completed") {
       return "success";
@@ -188,22 +209,39 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="app-sidebar sidebar">
         <div className="app-sidebar-scroll">
           <div className="app-sidebar-header">
             <Link href="/cases" className="brand app-brand">LogAn</Link>
-            <span className="app-sidebar-toggle" aria-hidden="true">[]</span>
+            <button
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-pressed={sidebarCollapsed}
+              className="app-sidebar-toggle"
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              type="button"
+              onClick={toggleSidebar}
+            >
+              <span className="sidebar-toggle-icon" aria-hidden="true" />
+            </button>
           </div>
 
           <nav className="app-primary-actions" aria-label="Primary">
-            <Link className="app-action-link new-case" href="/cases/new">
-              <span className="app-action-icon" aria-hidden="true">+</span>
-              <span>New Case</span>
+            <Link
+              className="app-action-link new-case"
+              href="/cases/new"
+              title="New Case"
+            >
+              <span className="app-action-glyph compose" aria-hidden="true" />
+              <span className="app-action-label">New Case</span>
             </Link>
-            <Link className={`app-action-link ${isActive("/cases") ? "active" : ""}`} href="/cases">
-              <span className="app-action-icon" aria-hidden="true">#</span>
-              <span>All Cases</span>
+            <Link
+              className={`app-action-link ${isActive("/cases") ? "active" : ""}`}
+              href="/cases"
+              title="All Cases"
+            >
+              <span className="app-action-glyph cases" aria-hidden="true" />
+              <span className="app-action-label">All Cases</span>
             </Link>
           </nav>
 
@@ -225,6 +263,7 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
                     className={`case-thread-link ${active ? "active" : ""}`}
                     href={href}
                     key={item.case_id}
+                    title={item.title || item.case_key}
                   >
                     <span className={`case-status-dot ${caseTone(item.status)}`} aria-hidden="true" />
                     <span className="case-thread-title">{item.title || item.case_key}</span>
@@ -241,17 +280,21 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
                 <Link
                   className={`app-nav-link ${activeCaseId && isActive(`/cases/${activeCaseId}`) ? "active" : ""}`}
                   href={`/cases/${activeCaseId}`}
+                  title="Case Workspace"
                 >
-                  Case Workspace
+                  <span className="app-nav-abbr" aria-hidden="true">W</span>
+                  <span className="app-nav-text">Case Workspace</span>
                 </Link>
-                {reportLinks.map(([label, href]) => (
+                {reportLinks.map(([label, href, abbr]) => (
                   <Link
                     aria-current={isActive(href) ? "page" : undefined}
                     className={`app-nav-link ${isActive(href) ? "active" : ""}`}
                     key={`${label}-${href}`}
                     href={href}
+                    title={label}
                   >
-                    {label}
+                    <span className="app-nav-abbr" aria-hidden="true">{abbr}</span>
+                    <span className="app-nav-text">{label}</span>
                   </Link>
                 ))}
               </nav>
@@ -264,12 +307,19 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
               <Link
                 className={`app-nav-link ${isActive("/settings/ai-platform") ? "active" : ""}`}
                 href="/settings/ai-platform"
+                title="AI Platform"
               >
-                AI Platform
+                <span className="app-nav-abbr" aria-hidden="true">AI</span>
+                <span className="app-nav-text">AI Platform</span>
               </Link>
               {user?.role === "admin" && (
-                <Link className={`app-nav-link ${isActive("/admin") ? "active" : ""}`} href="/admin">
-                  Admin
+                <Link
+                  className={`app-nav-link ${isActive("/admin") ? "active" : ""}`}
+                  href="/admin"
+                  title="Admin"
+                >
+                  <span className="app-nav-abbr" aria-hidden="true">A</span>
+                  <span className="app-nav-text">Admin</span>
                 </Link>
               )}
             </nav>
