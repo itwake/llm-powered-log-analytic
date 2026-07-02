@@ -167,6 +167,13 @@ export const loganTheme = createTheme({
         }),
       },
     },
+    MuiInputBase: {
+      styleOverrides: {
+        input: {
+          boxSizing: "content-box",
+        },
+      },
+    },
     MuiFormControl: {
       defaultProps: {
         size: "small",

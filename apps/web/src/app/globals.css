@@ -3,9 +3,8 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
-* {
-  box-sizing: border-box;
-}
+/* MUI CssBaseline owns box sizing. An unlayered universal selector here overrides
+   layered MUI input slot styles and compresses TextField heights. */
 
 html,
 body {
