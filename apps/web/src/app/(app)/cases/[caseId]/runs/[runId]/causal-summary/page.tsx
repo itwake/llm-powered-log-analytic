@@ -294,7 +294,7 @@ export default function CausalSummaryPage() {
                 </Typography>
                 {data.next_actions.length === 0 && <EmptyState title="No next actions" />}
                 {data.next_actions.map((action, index) => (
-                  <Box key={`${textField(action, "title")}-${index}`} sx={{ border: 1, borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                  <Box key={`${textField(action, "title")}-${index}`} sx={{ border: 1, borderColor: "divider", borderRadius: "10px", p: 1.5 }}>
                     <Typography sx={{ fontWeight: 800 }}>{textField(action, "title")}</Typography>
                     <Typography>{textField(action, "description")}</Typography>
                     <Typography color="text.secondary" variant="caption">

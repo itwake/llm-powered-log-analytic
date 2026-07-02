@@ -69,7 +69,7 @@ function displayNameFromEmail(email: string | null | undefined): string | null {
 
 function navSx(collapsed: boolean) {
   return {
-    borderRadius: 2,
+    borderRadius: "10px",
     color: "#d9e3f5",
     minHeight: 40,
     justifyContent: collapsed ? "center" : "flex-start",
@@ -355,7 +355,7 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
                 sx={{
                   alignItems: "center",
                   background: "linear-gradient(135deg, #5b5cf6, #06b6d4)",
-                  borderRadius: 2,
+                  borderRadius: "10px",
                   boxShadow: "0 10px 24px rgba(6,182,212,0.25)",
                   display: "flex",
                   fontSize: 12,
@@ -382,7 +382,7 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
               sx={{
                 alignItems: "center",
                 background: "linear-gradient(135deg, #5b5cf6, #06b6d4)",
-                borderRadius: 2,
+                borderRadius: "10px",
                 color: "#ffffff",
                 display: "flex",
                 fontSize: 12,
@@ -610,7 +610,7 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
 
 export function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <Card sx={{ border: "1px solid rgba(91,92,246,0.1)", borderRadius: 4, overflow: "hidden" }}>
+    <Card sx={{ border: "1px solid rgba(91,92,246,0.1)", borderRadius: "14px", overflow: "hidden" }}>
       <CardContent sx={{ p: 2.5, position: "relative", "&:last-child": { pb: 2.5 } }}>
         <Box
           sx={{

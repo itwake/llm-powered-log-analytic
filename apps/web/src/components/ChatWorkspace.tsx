@@ -249,7 +249,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
             sx={{
               border: 1,
               borderColor: "rgba(91,92,246,0.12)",
-              borderRadius: 4,
+              borderRadius: "14px",
               bgcolor: "rgba(255,255,255,0.72)",
               maxHeight: 520,
               minHeight: 320,
@@ -272,7 +272,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
                         ? "linear-gradient(135deg, #5b5cf6, #8b5cf6)"
                         : "linear-gradient(180deg, #ffffff, #f7f5ff)",
                       border: isUser ? 0 : "1px solid rgba(91,92,246,0.12)",
-                      borderRadius: 4,
+                      borderRadius: "14px",
                       boxShadow: isUser ? "0 12px 24px rgba(91,92,246,0.22)" : "0 10px 22px rgba(36,59,122,0.06)",
                       color: isUser ? "primary.contrastText" : "text.primary",
                       maxWidth: "min(760px, 92%)",
@@ -333,7 +333,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
               placeholder="Ask about this incident, logs, timeline, or likely root cause..."
               sx={{
                 "& .MuiOutlinedInput-root": {
-                  borderRadius: 4,
+                  borderRadius: "12px",
                   p: 0.5,
                 },
               }}

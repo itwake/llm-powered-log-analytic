@@ -420,7 +420,7 @@ export default function CaseWorkspacePage() {
                   direction="row"
                   sx={{
                     bgcolor: "rgba(91,92,246,0.08)",
-                    borderRadius: 4,
+                    borderRadius: "12px",
                     flexWrap: "wrap",
                     gap: 0.75,
                     p: 0.75,
@@ -493,7 +493,7 @@ export default function CaseWorkspacePage() {
                     bgcolor: "rgba(91,92,246,0.05)",
                     border: "1px dashed",
                     borderColor: "rgba(91,92,246,0.24)",
-                    borderRadius: 4,
+                    borderRadius: "14px",
                     cursor: "pointer",
                     display: "grid",
                     gap: 1,
@@ -520,12 +520,12 @@ export default function CaseWorkspacePage() {
                     {uploadItems.map((item) => {
                       const percent = uploadPercent(item);
                       return (
-                        <Box key={item.key} sx={{ bgcolor: "background.paper", border: 1, borderColor: "rgba(91,92,246,0.12)", borderRadius: 3, p: 1.5 }}>
+                        <Box key={item.key} sx={{ bgcolor: "background.paper", border: 1, borderColor: "rgba(91,92,246,0.12)", borderRadius: "10px", p: 1.5 }}>
                           <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between" }}>
                             <Typography sx={{ fontWeight: 800, overflowWrap: "anywhere" }}>{item.name}</Typography>
                             <Badge tone={statusTone(item.status)}>{item.status}</Badge>
                           </Stack>
-                          <LinearProgress aria-label={`${item.name} upload progress`} sx={{ borderRadius: 999, my: 1, height: 8 }} value={percent} variant="determinate" />
+                          <LinearProgress aria-label={`${item.name} upload progress`} sx={{ borderRadius: "999px", my: 1, height: 8 }} value={percent} variant="determinate" />
                           <Stack direction="row" sx={{ color: "text.secondary", flexWrap: "wrap", gap: 1.5 }}>
                             <Typography variant="caption">{percent}%</Typography>
                             <Typography variant="caption">{formatBytes(item.bytesSent)} / {formatBytes(item.size)}</Typography>
@@ -581,7 +581,7 @@ export default function CaseWorkspacePage() {
                               bgcolor: active ? "rgba(91,92,246,0.08)" : "background.paper",
                               border: 1,
                               borderColor: active ? "primary.main" : "rgba(91,92,246,0.12)",
-                              borderRadius: 3,
+                              borderRadius: "10px",
                               overflow: "hidden",
                             }}
                           >

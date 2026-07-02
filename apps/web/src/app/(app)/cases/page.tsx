@@ -222,7 +222,7 @@ export default function CasesPage() {
               key={item.case_id}
               sx={{
                 borderColor: "rgba(91,92,246,0.1)",
-                borderRadius: 5,
+                borderRadius: "14px",
                 transition: "transform 160ms ease, box-shadow 160ms ease",
                 "&:hover": {
                   boxShadow: "0 22px 55px rgba(36,59,122,0.14)",

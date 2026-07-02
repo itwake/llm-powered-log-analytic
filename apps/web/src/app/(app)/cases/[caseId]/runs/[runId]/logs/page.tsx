@@ -206,7 +206,7 @@ export default function LogsPage() {
           data-testid="logs-window-filter"
           direction={{ xs: "column", sm: "row" }}
           spacing={1.5}
-          sx={{ alignItems: { xs: "flex-start", sm: "center" }, bgcolor: "background.paper", border: 1, borderColor: "divider", borderRadius: 2, justifyContent: "space-between", p: 2 }}
+          sx={{ alignItems: { xs: "flex-start", sm: "center" }, bgcolor: "background.paper", border: 1, borderColor: "divider", borderRadius: "12px", justifyContent: "space-between", p: 2 }}
         >
           <Typography>
             Window filter: {windowStart ? formatDateTime(windowStart) : "start"} to{" "}

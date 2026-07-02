@@ -133,7 +133,7 @@ export function Card({ children, sx, tone = "default", ...props }: CardProps) {
     <MuiCard
       sx={{
         bgcolor: tone === "subtle" ? "rgba(217,236,255,0.55)" : "background.paper",
-        borderRadius: 4,
+        borderRadius: "14px",
         ...sx,
       }}
       {...props}
@@ -161,7 +161,7 @@ export function EmptyState({ title, children, icon, ...props }: EmptyStateProps)
           "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(244,247,255,0.72))",
         border: "1px solid",
         borderColor: "rgba(91,92,246,0.12)",
-        borderRadius: 4,
+        borderRadius: "14px",
         color: "text.secondary",
         display: "flex",
         flexDirection: "column",
@@ -234,7 +234,7 @@ export function InfoGrid({ minColumnWidth = 220, rows }: { minColumnWidth?: numb
             bgcolor: "rgba(91,92,246,0.055)",
             border: "1px solid",
             borderColor: "rgba(91,92,246,0.1)",
-            borderRadius: 3,
+            borderRadius: "10px",
             p: 1.75,
           }}
         >

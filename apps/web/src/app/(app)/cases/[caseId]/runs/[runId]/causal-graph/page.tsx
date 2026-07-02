@@ -473,7 +473,7 @@ export default function CausalGraphPage() {
               </Typography>
               {!data?.root_cause_candidates.length && <EmptyState title="No candidates" />}
               {data?.root_cause_candidates.map((candidate) => (
-                <Box key={candidate.template_id} sx={{ border: 1, borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                <Box key={candidate.template_id} sx={{ border: 1, borderColor: "divider", borderRadius: "10px", p: 1.5 }}>
                   <Typography sx={{ fontWeight: 800 }}>#{candidate.rank} {candidate.reason}</Typography>
                   <Typography color="text.secondary" variant="caption">score {formatPercent(candidate.score)}</Typography>
                 </Box>

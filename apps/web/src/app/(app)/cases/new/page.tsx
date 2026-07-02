@@ -172,7 +172,7 @@ export default function NewCasePage() {
                   background: "linear-gradient(135deg, rgba(217,236,255,0.5), rgba(230,225,255,0.45))",
                   border: "1px dashed",
                   borderColor: "rgba(91,92,246,0.28)",
-                  borderRadius: 4,
+                  borderRadius: "14px",
                   cursor: "pointer",
                   display: "grid",
                   gap: 1,

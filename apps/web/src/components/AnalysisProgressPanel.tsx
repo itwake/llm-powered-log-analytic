@@ -180,7 +180,7 @@ export function AnalysisProgressPanel({
         <LinearProgress
           aria-label="Analysis progress"
           color={failed ? "error" : cancelled ? "info" : "primary"}
-          sx={{ borderRadius: 999, height: 10 }}
+          sx={{ borderRadius: "999px", height: 10 }}
           value={completionPercent}
           variant="determinate"
         />
@@ -189,7 +189,7 @@ export function AnalysisProgressPanel({
           {PROGRESS_METRICS.map(([key, label]) => {
             const value = progressNumber(run, key);
             return (
-              <Box key={key} sx={{ border: 1, borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+              <Box key={key} sx={{ border: 1, borderColor: "divider", borderRadius: "10px", p: 1.5 }}>
                 <Typography color="text.secondary" variant="caption">
                   {label}
                 </Typography>
@@ -205,7 +205,7 @@ export function AnalysisProgressPanel({
               direction="row"
               key={step.name}
               spacing={1.25}
-              sx={{ border: 1, borderColor: "divider", borderRadius: 2, minWidth: 0, p: 1.25 }}
+              sx={{ border: 1, borderColor: "divider", borderRadius: "10px", minWidth: 0, p: 1.25 }}
             >
               <Box sx={{ bgcolor: stepColor(step.status), borderRadius: "50%", height: 10, mt: 0.7, width: 10 }} />
               <Box sx={{ minWidth: 0 }}>
@@ -259,7 +259,7 @@ export function AnalysisProgressPanel({
               sx={{
                 border: 1,
                 borderColor: "divider",
-                borderRadius: 2,
+                borderRadius: "10px",
                 maxHeight: 320,
                 overflowY: "auto",
                 p: 1,

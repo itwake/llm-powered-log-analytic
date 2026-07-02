@@ -417,7 +417,7 @@ export default function TemporalPage() {
                   : "rgba(91,92,246,0.05)",
                 border: 1,
                 borderColor: "rgba(91,92,246,0.16)",
-                borderRadius: 4,
+                borderRadius: "14px",
                 justifyContent: "space-between",
                 p: 2.5,
               }}

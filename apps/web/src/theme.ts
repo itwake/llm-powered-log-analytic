@@ -44,7 +44,7 @@ export const loganTheme = createTheme({
     divider: palette.divider,
   },
   shape: {
-    borderRadius: 16,
+    borderRadius: 10,
   },
   typography: {
     fontFamily:
@@ -83,7 +83,7 @@ export const loganTheme = createTheme({
       },
       styleOverrides: {
         root: ({ theme }) => ({
-          borderRadius: 12,
+          borderRadius: "10px",
           fontWeight: 780,
           minHeight: 38,
           whiteSpace: "nowrap",
@@ -111,7 +111,7 @@ export const loganTheme = createTheme({
       styleOverrides: {
         root: ({ theme }) => ({
           borderColor: alpha(theme.palette.primary.main, 0.1),
-          borderRadius: 18,
+          borderRadius: "14px",
           boxShadow: `0 18px 45px ${alpha("#243b7a", 0.09)}`,
         }),
       },
@@ -124,7 +124,7 @@ export const loganTheme = createTheme({
       styleOverrides: {
         root: ({ theme }) => ({
           border: 0,
-          borderRadius: 999,
+          borderRadius: "999px",
           fontWeight: 780,
           minHeight: 24,
           "&.MuiChip-colorDefault": {
@@ -162,7 +162,7 @@ export const loganTheme = createTheme({
         root: ({ theme }) => ({
           "& .MuiOutlinedInput-root": {
             backgroundColor: theme.palette.background.paper,
-            borderRadius: 12,
+            borderRadius: "10px",
           },
         }),
       },
@@ -182,7 +182,7 @@ export const loganTheme = createTheme({
     MuiSelect: {
       styleOverrides: {
         root: {
-          borderRadius: 12,
+          borderRadius: "10px",
         },
       },
     },
@@ -193,7 +193,7 @@ export const loganTheme = createTheme({
       styleOverrides: {
         root: ({ theme }) => ({
           borderColor: alpha(theme.palette.primary.main, 0.12),
-          borderRadius: 16,
+          borderRadius: "12px",
           backgroundColor: theme.palette.background.paper,
           boxShadow: `0 14px 32px ${alpha("#243b7a", 0.06)}`,
           "--DataGrid-rowBorderColor": alpha(theme.palette.primary.main, 0.1),
