@@ -23,11 +23,7 @@ const PROGRESS_METRICS = [
   ["files_processed", "Files"],
   ["raw_lines", "Raw lines"],
   ["templates", "Templates"],
-  ["representative_samples", "Samples"],
-  ["annotated_templates", "Annotations"],
   ["windows", "Windows"],
-  ["nodes", "Nodes"],
-  ["edges", "Edges"],
 ] as const;
 
 type StepStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
@@ -148,6 +144,7 @@ export function AnalysisProgressPanel({
       ? 100
       : Math.max(8, Math.round((completedSteps / PIPELINE_STEPS.length) * 100));
   const canCancel = !terminalRunStatus(run.status) && Boolean(onCancel);
+  const visibleEvents = events.slice(-6);
 
   return (
     <section className="panel progress-panel">
@@ -228,7 +225,7 @@ export function AnalysisProgressPanel({
         <div className="event-log">
           <h3>Event Log</h3>
           <div className="event-log-scroll" ref={eventLogRef}>
-            {events.map((event) => (
+            {visibleEvents.map((event) => (
               <div className="event-row" key={event.id}>
                 <span className={`pill ${statusClass(event.status)}`}>{event.event_type}</span>
                 <span>

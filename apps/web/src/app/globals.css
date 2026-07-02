@@ -451,11 +451,12 @@ p {
 
 .case-hero {
   align-items: stretch;
+  padding: 20px 24px;
 }
 
 .case-hero-copy {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1064,7 +1065,7 @@ p {
   box-shadow: var(--shadow);
   display: grid;
   gap: 12px;
-  min-height: 640px;
+  min-height: 440px;
   padding: 16px;
 }
 
@@ -1082,8 +1083,19 @@ p {
 }
 
 .chat-empty {
+  align-content: center;
   display: grid;
-  gap: 10px;
+  gap: 16px;
+  min-height: 190px;
+  padding: 18px 0 8px;
+}
+
+.chat-empty .empty-state {
+  padding: 0;
+}
+
+.chat-empty .empty-state strong {
+  font-size: 22px;
 }
 
 .quick-prompts {
@@ -1106,7 +1118,7 @@ p {
   display: grid;
   gap: 12px;
   max-height: 520px;
-  min-height: 360px;
+  min-height: 280px;
   overflow-y: auto;
   padding: 14px;
   scroll-behavior: smooth;
@@ -1460,8 +1472,8 @@ th {
 
 .progress-metrics {
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .progress-metric {
@@ -1486,8 +1498,8 @@ th {
 
 .step-timeline {
   display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  grid-template-columns: 1fr;
 }
 
 .step-item {
@@ -1498,8 +1510,8 @@ th {
   display: grid;
   gap: 8px;
   grid-template-columns: 12px minmax(0, 1fr);
-  min-height: 82px;
-  padding: 10px;
+  min-height: 0;
+  padding: 8px 10px;
 }
 
 .step-dot {
@@ -1527,8 +1539,10 @@ th {
 }
 
 .step-item div {
-  display: grid;
-  gap: 3px;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   min-width: 0;
 }
 
@@ -1537,6 +1551,10 @@ th {
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.step-item strong {
+  min-width: 76px;
 }
 
 .event-log {
@@ -1555,18 +1573,18 @@ th {
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
-  gap: 8px;
-  max-height: 300px;
+  gap: 6px;
+  max-height: 220px;
   overflow-y: auto;
-  padding: 10px;
+  padding: 8px;
   scroll-behavior: smooth;
 }
 
 .event-row {
-  align-items: center;
+  align-items: start;
   display: grid;
-  gap: 8px;
-  grid-template-columns: 92px minmax(0, 1fr) 168px;
+  gap: 6px;
+  grid-template-columns: 78px minmax(0, 1fr);
 }
 
 .event-row span {
@@ -1576,6 +1594,11 @@ th {
 .event-row span:nth-child(2) {
   display: grid;
   gap: 2px;
+}
+
+.event-row > .muted {
+  grid-column: 2;
+  font-size: 11px;
 }
 
 .event-row small {

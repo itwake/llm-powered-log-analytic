@@ -68,8 +68,8 @@ export function ChatWorkspace({caseId, onEvidenceSelect, run}: ChatWorkspaceProp
     );
   }
 
-  async function sendMessage() {
-    const question = input.trim();
+  async function sendMessage(prompt?: string) {
+    const question = (prompt ?? input).trim();
     if (!run) {
       setError("Start an analysis run before asking the copilot.");
       return;
@@ -195,10 +195,11 @@ export function ChatWorkspace({caseId, onEvidenceSelect, run}: ChatWorkspaceProp
           <div className="quick-prompts">
             {QUICK_PROMPTS.map((prompt) => (
               <Button
+                disabled={!run || Boolean(streamingMessageId)}
                 key={prompt}
                 size="sm"
                 variant="ghost"
-                onClick={() => setInput(prompt)}
+                onClick={() => void sendMessage(prompt)}
               >
                 {prompt}
               </Button>
@@ -207,37 +208,39 @@ export function ChatWorkspace({caseId, onEvidenceSelect, run}: ChatWorkspaceProp
         </div>
       )}
 
-      <div className="message-list chat-scroll" ref={scrollRef}>
-        {messages.map((message) => (
-          <article className={`message-row chat-message ${message.role}`} key={message.id}>
-            <div className="message-bubble chat-bubble">
-              {message.content || (
-                <span className="muted">
-                  {message.status === "streaming" ? "Thinking…" : "No response"}
-                </span>
-              )}
-            </div>
-            <div className="message-meta">
-              {message.status !== "complete" && (
-                <span className={`message-status ${message.status}`}>
-                  {message.status}
-                </span>
-              )}
-            </div>
-            {message.role === "assistant" && message.evidenceRefs.length > 0 && (
-              <div className="chat-evidence evidence-list">
-                {message.evidenceRefs.map((refItem) => (
-                  <EvidenceChip
-                    key={`${refItem.log_id}-${refItem.line_number}`}
-                    refItem={refItem}
-                    onClick={onEvidenceSelect}
-                  />
-                ))}
+      {messages.length > 0 && (
+        <div className="message-list chat-scroll" ref={scrollRef}>
+          {messages.map((message) => (
+            <article className={`message-row chat-message ${message.role}`} key={message.id}>
+              <div className="message-bubble chat-bubble">
+                {message.content || (
+                  <span className="muted">
+                    {message.status === "streaming" ? "Analyzing run context…" : "No response"}
+                  </span>
+                )}
               </div>
-            )}
-          </article>
-        ))}
-      </div>
+              <div className="message-meta">
+                {message.status !== "complete" && (
+                  <span className={`message-status ${message.status}`}>
+                    {message.status}
+                  </span>
+                )}
+              </div>
+              {message.role === "assistant" && message.evidenceRefs.length > 0 && (
+                <div className="chat-evidence evidence-list">
+                  {message.evidenceRefs.map((refItem) => (
+                    <EvidenceChip
+                      key={`${refItem.log_id}-${refItem.line_number}`}
+                      refItem={refItem}
+                      onClick={onEvidenceSelect}
+                    />
+                  ))}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
 
       {error && <div className="alert error compact">{error}</div>}
       {!run && (

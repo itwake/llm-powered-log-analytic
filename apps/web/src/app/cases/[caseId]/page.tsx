@@ -15,7 +15,7 @@ import {
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
 import { CaseRunInspector } from "@/components/CaseRunInspector";
 import { ChatWorkspace } from "@/components/ChatWorkspace";
-import { Metric, Shell } from "@/components/Shell";
+import { Shell } from "@/components/Shell";
 import { Badge, Button, Card, EmptyState, SectionHeader, statusTone } from "@/components/ui";
 
 type UploadItemStatus = "queued" | "preparing" | "hashing" | "uploading" | "verifying" | "completed" | "failed";
@@ -30,11 +30,6 @@ interface UploadItem {
   partNumber?: number;
   partCount?: number;
   message?: string;
-}
-
-function progressValue(run: AnalysisRunResponse | null, key: string): string {
-  const value = run?.progress[key];
-  return typeof value === "number" ? String(value) : "n/a";
 }
 
 function uploadKey(file: File, index: number): string {
@@ -371,10 +366,13 @@ export default function CaseWorkspacePage() {
                   <h1>{valueLabel(caseRecord.title)}</h1>
                   <p>{valueLabel(caseRecord.issue_description)}</p>
                   <div className="case-hero-facts">
-                    <span>{valueLabel(caseRecord.product)}</span>
-                    <span>{valueLabel(caseRecord.service)}</span>
-                    <span>{valueLabel(caseRecord.environment)}</span>
-                    <span>{formatDateTime(caseRecord.incident_start)}</span>
+                    {caseRecord.product && <span>{caseRecord.product}</span>}
+                    {caseRecord.service && <span>{caseRecord.service}</span>}
+                    {caseRecord.environment && <span>{caseRecord.environment}</span>}
+                    {caseRecord.incident_start && <span>{formatDateTime(caseRecord.incident_start)}</span>}
+                    {!caseRecord.product && !caseRecord.service && !caseRecord.environment && !caseRecord.incident_start && (
+                      <span>Metadata not set</span>
+                    )}
                   </div>
                 </div>
                 <div className="case-hero-actions">
@@ -412,12 +410,6 @@ export default function CaseWorkspacePage() {
                   <Link className="tool-link" href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-summary`}>RCA</Link>
                 </nav>
               )}
-
-              <section className="grid three">
-                <Metric label="Case status" value={caseRecord.status} />
-                <Metric label="Runs" value={String(runs.length)} />
-                <Metric label="Latest templates" value={progressValue(latestRun, "templates")} />
-              </section>
 
               {editingCase && (
                 <Card className="edit-case-panel">
@@ -484,7 +476,13 @@ export default function CaseWorkspacePage() {
                 </Card>
               )}
 
-                <Card className="upload-card">
+              <ChatWorkspace
+                caseId={caseId}
+                run={latestRun}
+                onEvidenceSelect={setSelectedEvidence}
+              />
+
+              <Card className="upload-card">
                   <SectionHeader eyebrow="Run" title="Analyze evidence" />
                   <label className="field dropzone">
                     Log/archive files
@@ -541,12 +539,6 @@ export default function CaseWorkspacePage() {
                     deterministic fixture set.
                   </p>
                 </Card>
-
-                <ChatWorkspace
-                  caseId={caseId}
-                  run={latestRun}
-                  onEvidenceSelect={setSelectedEvidence}
-                />
             </section>
 
             <aside className="case-inspector workspace-inspector">
