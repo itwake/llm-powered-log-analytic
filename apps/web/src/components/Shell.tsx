@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { authApi, casesApi } from "@/lib/api";
 import type { CaseResponse, UserOut } from "@/lib/api";
 
@@ -37,6 +37,17 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
   const [casesLoading, setCasesLoading] = useState(false);
   const [authState, setAuthState] = useState<"loading" | "signed-in" | "signed-out">("loading");
 
+  const routeContext = useMemo(() => {
+    const [section, routeCaseId, runsSegment, routeRunId] = pathname.split("/").filter(Boolean);
+    return {
+      caseId: section === "cases" && routeCaseId && routeCaseId !== "new" ? routeCaseId : undefined,
+      runId: section === "cases" && runsSegment === "runs" ? routeRunId : undefined,
+    };
+  }, [pathname]);
+
+  const activeCaseId = caseId ?? routeContext.caseId;
+  const activeRunId = runId ?? routeContext.runId;
+
   useEffect(() => {
     let cancelled = false;
     authApi
@@ -60,10 +71,7 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
     };
   }, [router]);
 
-  useEffect(() => {
-    if (authState !== "signed-in") {
-      return;
-    }
+  const loadSidebarCases = useCallback(() => {
     let cancelled = false;
     setCasesLoading(true);
     casesApi
@@ -86,23 +94,81 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
     return () => {
       cancelled = true;
     };
-  }, [authState, pathname]);
+  }, []);
+
+  useEffect(() => {
+    if (authState !== "signed-in") {
+      return undefined;
+    }
+    return loadSidebarCases();
+  }, [activeCaseId, authState, loadSidebarCases]);
+
+  const selectedCase = useMemo(
+    () => sidebarCases.find((item) => item.case_id === activeCaseId) || null,
+    [activeCaseId, sidebarCases],
+  );
+
+  useEffect(() => {
+    function handleCaseSaved(event: Event) {
+      const detail = (event as CustomEvent<CaseResponse>).detail;
+      if (!detail?.case_id) {
+        return;
+      }
+      setSidebarCases((current) => {
+        const existing = current.findIndex((item) => item.case_id === detail.case_id);
+        if (existing < 0) {
+          return [detail, ...current];
+        }
+        const next = [...current];
+        next[existing] = detail;
+        return next;
+      });
+    }
+
+    function handleCaseDeleted(event: Event) {
+      const deletedCaseId = (event as CustomEvent<{caseId?: string}>).detail?.caseId;
+      if (!deletedCaseId) {
+        return;
+      }
+      setSidebarCases((current) => current.filter((item) => item.case_id !== deletedCaseId));
+    }
+
+    window.addEventListener("logan:case-saved", handleCaseSaved);
+    window.addEventListener("logan:case-deleted", handleCaseDeleted);
+    return () => {
+      window.removeEventListener("logan:case-saved", handleCaseSaved);
+      window.removeEventListener("logan:case-deleted", handleCaseDeleted);
+    };
+  }, []);
 
   const reportLinks = useMemo(() => {
     const links: [string, string][] = [];
-    if (caseId && runId) {
+    if (activeCaseId && activeRunId) {
       links.push(
-        ["Data Summary", `/cases/${caseId}/runs/${runId}/summary`],
-        ["Temporal View", `/cases/${caseId}/runs/${runId}/temporal`],
-        ["Tabular Logs", `/cases/${caseId}/runs/${runId}/logs`],
-        ["Causal Graph", `/cases/${caseId}/runs/${runId}/causal-graph`],
-        ["Causal Summary", `/cases/${caseId}/runs/${runId}/causal-summary`],
+        ["Data Summary", `/cases/${activeCaseId}/runs/${activeRunId}/summary`],
+        ["Temporal View", `/cases/${activeCaseId}/runs/${activeRunId}/temporal`],
+        ["Tabular Logs", `/cases/${activeCaseId}/runs/${activeRunId}/logs`],
+        ["Causal Graph", `/cases/${activeCaseId}/runs/${activeRunId}/causal-graph`],
+        ["Causal Summary", `/cases/${activeCaseId}/runs/${activeRunId}/causal-summary`],
       );
     }
     return links;
-  }, [caseId, runId]);
+  }, [activeCaseId, activeRunId]);
 
   const signedInDisplayName = displayNameFromEmail(user?.email) || user?.username || "Signed in";
+  const headerTitle =
+    caseTitle ||
+    selectedCase?.title ||
+    selectedCase?.case_key ||
+    (pathname === "/cases/new"
+      ? "New Case"
+      : pathname.startsWith("/settings/ai-platform")
+        ? "AI Platform"
+        : pathname.startsWith("/admin")
+          ? "Admin"
+          : pathname.startsWith("/cases")
+            ? "Cases"
+            : "Incident workbench");
 
   function isActive(href: string): boolean {
     return pathname === href;
@@ -115,7 +181,7 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
     if (status === "processing" || status === "uploading" || status === "queued") {
       return "warning";
     }
-    if (status === "failed") {
+    if (status === "failed" || status === "cancelled") {
       return "danger";
     }
     return "info";
@@ -127,16 +193,16 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
         <div className="app-sidebar-scroll">
           <div className="app-sidebar-header">
             <Link href="/cases" className="brand app-brand">LogAn</Link>
-            <span className="app-sidebar-toggle" aria-hidden="true">▣</span>
+            <span className="app-sidebar-toggle" aria-hidden="true">[]</span>
           </div>
 
           <nav className="app-primary-actions" aria-label="Primary">
             <Link className="app-action-link new-case" href="/cases/new">
-              <span className="app-action-icon" aria-hidden="true">✎</span>
+              <span className="app-action-icon" aria-hidden="true">+</span>
               <span>New Case</span>
             </Link>
             <Link className={`app-action-link ${isActive("/cases") ? "active" : ""}`} href="/cases">
-              <span className="app-action-icon" aria-hidden="true">⌕</span>
+              <span className="app-action-icon" aria-hidden="true">#</span>
               <span>All Cases</span>
             </Link>
           </nav>
@@ -152,7 +218,7 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
               )}
               {sidebarCases.map((item) => {
                 const href = `/cases/${item.case_id}`;
-                const active = caseId === item.case_id || pathname === href;
+                const active = activeCaseId === item.case_id || pathname === href;
                 return (
                   <Link
                     aria-current={active ? "page" : undefined}
@@ -173,8 +239,8 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
               <div className="app-section-title">Current analysis</div>
               <nav className="app-nav" aria-label="Analysis views">
                 <Link
-                  className={`app-nav-link ${caseId && isActive(`/cases/${caseId}`) ? "active" : ""}`}
-                  href={`/cases/${caseId}`}
+                  className={`app-nav-link ${activeCaseId && isActive(`/cases/${activeCaseId}`) ? "active" : ""}`}
+                  href={`/cases/${activeCaseId}`}
                 >
                   Case Workspace
                 </Link>
@@ -220,10 +286,10 @@ export function Shell({children, caseId, runId, caseTitle}: ShellProps) {
       </aside>
       <div className="app-frame layout">
         <header className="app-header topbar">
-          <div className="app-header-title topbar-title">{caseTitle || "Incident workbench"}</div>
+          <div className="app-header-title topbar-title">{headerTitle}</div>
           <div className="app-header-status status">
             {authState === "loading" && "Checking session"}
-            {authState === "signed-in" && `${signedInDisplayName} · AI Platform`}
+            {authState === "signed-in" && `${signedInDisplayName} - AI Platform`}
             {authState === "signed-out" && <Link href="/login">Continue with SSO</Link>}
           </div>
         </header>

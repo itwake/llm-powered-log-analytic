@@ -10,7 +10,6 @@ import {
   reportsApi,
 } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, formatPercent } from "@/lib/format";
-import { Shell } from "@/components/Shell";
 
 function nodeLabel(nodes: CausalNode[], nodeId: string): string {
   return nodes.find((node) => node.id === nodeId)?.label || nodeId;
@@ -317,7 +316,7 @@ export default function CausalGraphPage() {
   }, []);
 
   return (
-    <Shell caseId={caseId} runId={runId}>
+    <>
       <form className="toolbar" onSubmit={submit}>
         <h1>Causal Graph</h1>
         <label className="inline-field">
@@ -450,6 +449,6 @@ export default function CausalGraphPage() {
           </div>
         )}
       </section>
-    </Shell>
+    </>
   );
 }

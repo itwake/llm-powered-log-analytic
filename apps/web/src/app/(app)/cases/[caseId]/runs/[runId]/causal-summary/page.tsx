@@ -6,7 +6,6 @@ import { reportsApi } from "@/lib/api";
 import type { CausalSummaryResponse, EvidenceRef, ExportRequest } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, formatPercent } from "@/lib/format";
 import { EvidenceChip, EvidenceDetail } from "@/components/Evidence";
-import { Shell } from "@/components/Shell";
 
 function textField(item: Record<string, unknown>, key: string): string {
   const value = item[key];
@@ -134,7 +133,7 @@ export default function CausalSummaryPage() {
   }
 
   return (
-    <Shell caseId={caseId} runId={runId}>
+    <>
       <div className="toolbar">
         <h1>Causal Summary</h1>
         {!editing && data && (
@@ -317,6 +316,6 @@ export default function CausalSummaryPage() {
           </section>
         </>
       )}
-    </Shell>
+    </>
   );
 }

@@ -6,7 +6,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { reportsApi, SummaryResponse } from "@/lib/api";
 import type { SummaryItem } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, formatPercent, valueLabel } from "@/lib/format";
-import { Metric, Shell } from "@/components/Shell";
+import { Metric } from "@/components/Shell";
 
 function signalClass(signal: string): string {
   if (signal === "error") {
@@ -69,7 +69,7 @@ export default function SummaryPage() {
   }
 
   return (
-    <Shell caseId={caseId} runId={runId}>
+    <>
       <form className="toolbar" onSubmit={submit}>
         <h1>Data Summary</h1>
         <label className="inline-field">
@@ -138,6 +138,6 @@ export default function SummaryPage() {
           </div>
         )}
       </section>
-    </Shell>
+    </>
   );
 }

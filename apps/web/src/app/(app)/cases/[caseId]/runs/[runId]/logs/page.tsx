@@ -4,7 +4,6 @@ import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { LogsResponse, reportsApi } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
-import { Shell } from "@/components/Shell";
 
 function signalClass(signal: string): string {
   if (signal === "error") {
@@ -90,7 +89,7 @@ export default function LogsPage() {
   }, [data, service]);
 
   return (
-    <Shell caseId={caseId} runId={runId}>
+    <>
       <form className="toolbar" onSubmit={submit}>
         <h1>Tabular Logs</h1>
         <label className="inline-field">
@@ -170,6 +169,6 @@ export default function LogsPage() {
           </div>
         )}
       </section>
-    </Shell>
+    </>
   );
 }

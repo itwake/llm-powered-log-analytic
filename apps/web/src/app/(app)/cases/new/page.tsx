@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { casesApi, runsApi } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
-import { Shell } from "@/components/Shell";
 import { Card, FieldHint, SectionHeader } from "@/components/ui";
 
 function emptyToNull(value: string): string | null {
@@ -62,6 +61,7 @@ export default function NewCasePage() {
         incident_end: localDateTimeToIso(incidentEnd),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
+      window.dispatchEvent(new CustomEvent("logan:case-saved", {detail: created}));
       if (mode === "start") {
         const uploaded = selectedFiles.length
           ? await casesApi.uploadFiles(created.case_id, selectedFiles)
@@ -87,8 +87,7 @@ export default function NewCasePage() {
     : "Create and start sample/local analysis";
 
   return (
-    <Shell>
-      <div className="page-stack">
+    <div className="page-stack">
         <section className="page-hero compact">
           <div>
             <span className="eyebrow">Case intake</span>
@@ -208,7 +207,6 @@ export default function NewCasePage() {
             </div>
           </form>
         </section>
-      </div>
-    </Shell>
+    </div>
   );
 }

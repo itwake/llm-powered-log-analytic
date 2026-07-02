@@ -4,7 +4,6 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { CaseListResponse, casesApi } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
-import { Shell } from "@/components/Shell";
 import { Badge, Card, EmptyState, SkeletonBlock, statusTone } from "@/components/ui";
 
 export default function CasesPage() {
@@ -41,8 +40,7 @@ export default function CasesPage() {
   }
 
   return (
-    <Shell>
-      <div className="page-stack">
+    <div className="page-stack">
         <section className="page-hero compact">
           <div>
             <span className="eyebrow">Incident queue</span>
@@ -112,7 +110,6 @@ export default function CasesPage() {
             ))}
           </section>
         )}
-      </div>
-    </Shell>
+    </div>
   );
 }

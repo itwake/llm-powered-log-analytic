@@ -15,7 +15,6 @@ import {
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
 import { CaseRunInspector } from "@/components/CaseRunInspector";
 import { ChatWorkspace } from "@/components/ChatWorkspace";
-import { Shell } from "@/components/Shell";
 import { Badge, Button, Card, EmptyState, SectionHeader, statusTone } from "@/components/ui";
 
 type UploadItemStatus = "queued" | "preparing" | "hashing" | "uploading" | "verifying" | "completed" | "failed";
@@ -304,6 +303,7 @@ export default function CaseWorkspacePage() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
       setCaseRecord(updated);
+      window.dispatchEvent(new CustomEvent("logan:case-saved", {detail: updated}));
       setEditingCase(false);
     } catch (caught) {
       setError(apiErrorMessage(caught));
@@ -320,6 +320,7 @@ export default function CaseWorkspacePage() {
     setError(null);
     try {
       await casesApi.remove(caseId);
+      window.dispatchEvent(new CustomEvent("logan:case-deleted", {detail: {caseId}}));
       router.push("/cases");
     } catch (caught) {
       setError(apiErrorMessage(caught));
@@ -344,12 +345,7 @@ export default function CaseWorkspacePage() {
   const trackedEvents = trackedRun ? runEvents[trackedRun.analysis_run_id] || [] : [];
 
   return (
-    <Shell
-      caseId={caseId}
-      runId={latestRun?.analysis_run_id}
-      caseTitle={caseRecord?.title || caseRecord?.case_key}
-    >
-      <div className="page-stack">
+    <div className="page-stack">
         {error && <div className="alert error">{error}</div>}
         {loading && <Card><EmptyState title="Loading case" /></Card>}
 
@@ -593,7 +589,6 @@ export default function CaseWorkspacePage() {
             </aside>
           </section>
         )}
-      </div>
-    </Shell>
+    </div>
   );
 }
