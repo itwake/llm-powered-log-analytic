@@ -23,6 +23,7 @@ import {
   runsApi,
 } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
+import { CaseAnalysisNav } from "@/components/CaseAnalysisNav";
 import { CaseRunInspector } from "@/components/CaseRunInspector";
 import { ChatWorkspace } from "@/components/ChatWorkspace";
 import { Badge, Button, Card, EmptyState, SectionHeader, statusTone } from "@/components/ui";
@@ -414,25 +415,12 @@ export default function CaseWorkspacePage() {
             </Card>
 
             {latestRun && (
-              <Card sx={{ bgcolor: "rgba(255,255,255,0.78)" }}>
-                <Stack
-                  aria-label="Analysis views"
-                  direction="row"
-                  sx={{
-                    bgcolor: "rgba(91,92,246,0.08)",
-                    borderRadius: "12px",
-                    flexWrap: "wrap",
-                    gap: 0.75,
-                    p: 0.75,
-                  }}
-                >
-                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`} size="sm" variant="ghost">Summary</Button>
-                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/temporal`} size="sm" variant="ghost">Timeline</Button>
-                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/logs`} size="sm" variant="ghost">Logs</Button>
-                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-graph`} size="sm" variant="ghost">Graph</Button>
-                  <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/causal-summary`} size="sm" variant="ghost">RCA</Button>
-                </Stack>
-              </Card>
+              <CaseAnalysisNav
+                caseId={caseId}
+                runId={latestRun.analysis_run_id}
+                title="Current analysis"
+                subtitle="Open the latest run workspace, evidence, timeline, logs, graph, and RCA views."
+              />
             )}
 
             {editingCase && (

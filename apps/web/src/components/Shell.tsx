@@ -1,18 +1,12 @@
 "use client";
 
-import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import AddCircleIcon from "@mui/icons-material/AddCircle";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
-import ArticleIcon from "@mui/icons-material/Article";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import FactCheckIcon from "@mui/icons-material/FactCheck";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import InsightsIcon from "@mui/icons-material/Insights";
 import SettingsIcon from "@mui/icons-material/Settings";
-import SpaceDashboardIcon from "@mui/icons-material/SpaceDashboard";
-import SummarizeIcon from "@mui/icons-material/Summarize";
-import TimelineIcon from "@mui/icons-material/Timeline";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -125,7 +119,7 @@ function NavItem({ href, icon, label, active, collapsed, abbr }: NavItemProps) {
   );
 }
 
-export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
+export function Shell({ children, caseId, caseTitle }: ShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<UserOut | null>(null);
@@ -135,15 +129,13 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
   const [authState, setAuthState] = useState<"loading" | "signed-in" | "signed-out">("loading");
 
   const routeContext = useMemo(() => {
-    const [section, routeCaseId, runsSegment, routeRunId] = pathname.split("/").filter(Boolean);
+    const [section, routeCaseId] = pathname.split("/").filter(Boolean);
     return {
       caseId: section === "cases" && routeCaseId && routeCaseId !== "new" ? routeCaseId : undefined,
-      runId: section === "cases" && runsSegment === "runs" ? routeRunId : undefined,
     };
   }, [pathname]);
 
   const activeCaseId = caseId ?? routeContext.caseId;
-  const activeRunId = runId ?? routeContext.runId;
 
   useEffect(() => {
     try {
@@ -245,20 +237,6 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
       window.removeEventListener("logan:case-deleted", handleCaseDeleted);
     };
   }, []);
-
-  const reportLinks = useMemo(() => {
-    const links: [string, string, string, ReactNode][] = [];
-    if (activeCaseId && activeRunId) {
-      links.push(
-        ["Data Summary", `/cases/${activeCaseId}/runs/${activeRunId}/summary`, "DS", <SummarizeIcon key="summary" fontSize="small" />],
-        ["Temporal View", `/cases/${activeCaseId}/runs/${activeRunId}/temporal`, "TV", <TimelineIcon key="timeline" fontSize="small" />],
-        ["Tabular Logs", `/cases/${activeCaseId}/runs/${activeRunId}/logs`, "LG", <ArticleIcon key="logs" fontSize="small" />],
-        ["Causal Graph", `/cases/${activeCaseId}/runs/${activeRunId}/causal-graph`, "CG", <AccountTreeIcon key="graph" fontSize="small" />],
-        ["Causal Summary", `/cases/${activeCaseId}/runs/${activeRunId}/causal-summary`, "RC", <FactCheckIcon key="rca" fontSize="small" />],
-      );
-    }
-    return links;
-  }, [activeCaseId, activeRunId]);
 
   const signedInDisplayName = user?.username || displayNameFromEmail(user?.email) || "Signed in";
   const headerTitle =
@@ -484,38 +462,6 @@ export function Shell({ children, caseId, runId, caseTitle }: ShellProps) {
               );
             })}
           </List>
-
-          {reportLinks.length > 0 && (
-            <>
-              <Divider sx={{ borderColor: loganTokens.sidebarBorder, my: 1.5 }} />
-              {!sidebarCollapsed && (
-                <Typography sx={{ color: loganTokens.sidebarMuted, fontWeight: 850, letterSpacing: 0.8, px: 1.5, py: 0.75, textTransform: "uppercase" }} variant="caption">
-                  Current analysis
-                </Typography>
-              )}
-              <List aria-label="Analysis views" dense disablePadding sx={{ display: "grid", gap: 0.5 }}>
-                <NavItem
-                  active={Boolean(activeCaseId && isActive(`/cases/${activeCaseId}`))}
-                  collapsed={sidebarCollapsed}
-                  href={`/cases/${activeCaseId}`}
-                  icon={<SpaceDashboardIcon fontSize="small" />}
-                  label="Case Workspace"
-                  abbr="W"
-                />
-                {reportLinks.map(([label, href, abbr, icon]) => (
-                  <NavItem
-                    active={isActive(href)}
-                    collapsed={sidebarCollapsed}
-                    href={href}
-                    icon={icon}
-                    key={`${label}-${href}`}
-                    label={label}
-                    abbr={abbr}
-                  />
-                ))}
-              </List>
-            </>
-          )}
 
           <Divider sx={{ borderColor: loganTokens.sidebarBorder, my: 1.5 }} />
           {!sidebarCollapsed && (
