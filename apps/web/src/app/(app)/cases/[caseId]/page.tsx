@@ -362,15 +362,16 @@ export default function CaseWorkspacePage() {
       {loading && <Card><EmptyState title="Loading case" /></Card>}
 
       {!loading && caseRecord && (
-        <Box sx={{ display: "grid", gap: 2.5, gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.45fr) minmax(380px, 0.75fr)" } }}>
-          <Stack spacing={2.5}>
-            {latestRun && (
-              <CaseAnalysisNav
-                caseId={caseId}
-                runId={latestRun.analysis_run_id}
-              />
-            )}
+        <>
+          {latestRun && (
+            <CaseAnalysisNav
+              caseId={caseId}
+              runId={latestRun.analysis_run_id}
+            />
+          )}
 
+          <Box sx={{ display: "grid", gap: 2.5, gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.45fr) minmax(380px, 0.75fr)" } }}>
+            <Stack spacing={2.5}>
             <Card
               sx={{
                 background:
@@ -589,7 +590,8 @@ export default function CaseWorkspacePage() {
               </Card>
             </Stack>
           </Box>
-        </Box>
+          </Box>
+        </>
       )}
     </Stack>
   );
