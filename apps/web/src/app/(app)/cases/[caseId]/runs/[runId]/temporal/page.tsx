@@ -22,7 +22,6 @@ import type { EChartsCoreOption, EChartsType } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { reportsApi, TemporalResponse, TemporalSeries } from "@/lib/api";
 import { apiErrorMessage, formatShortTime } from "@/lib/format";
-import { Shell } from "@/components/Shell";
 
 const palette = ["#2d5f87", "#2f6f62", "#a6423c", "#8b6728", "#654f9f", "#4d7770"];
 
@@ -242,7 +241,7 @@ export default function TemporalPage() {
   }, []);
 
   return (
-    <Shell caseId={caseId} runId={runId}>
+    <>
       <form className="toolbar" onSubmit={submit}>
         <h1>Temporal View</h1>
         <label className="inline-field">
@@ -316,6 +315,6 @@ export default function TemporalPage() {
           </>
         )}
       </section>
-    </Shell>
+    </>
   );
 }

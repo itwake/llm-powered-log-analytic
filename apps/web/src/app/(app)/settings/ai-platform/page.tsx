@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { capabilitiesApi, CapabilitiesResponse } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
-import { Shell } from "@/components/Shell";
 
 function providerLabel(provider: string): string {
   return provider === "ai_platform" ? "AI Platform" : provider;
@@ -41,7 +40,7 @@ export default function AIPlatformSettingsPage() {
   }, []);
 
   return (
-    <Shell>
+    <>
       <div className="toolbar">
         <h1>AI Platform</h1>
       </div>
@@ -99,6 +98,6 @@ export default function AIPlatformSettingsPage() {
           )}
         </div>
       </section>
-    </Shell>
+    </>
   );
 }

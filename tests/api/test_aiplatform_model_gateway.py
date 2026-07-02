@@ -43,7 +43,6 @@ async def test_ai_platform_token_chat_payload_and_output_parsing() -> None:
             "user": "logan-usercase",
             "response_format": {"type": "json_object"},
             "temperature": 0.2,
-            "metadata": {"case_id": "case-1"},
         }
         return httpx.Response(
             200,
@@ -90,6 +89,47 @@ async def test_ai_platform_token_chat_payload_and_output_parsing() -> None:
     assert response["token_source"] == "env_ai_platform_token"
     assert response["output_text"] == json.dumps(output_json)
     assert response["output_json"] == output_json
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_ai_platform_metadata_is_sent_only_when_store_is_enabled() -> None:
+    seen_payloads: list[dict[str, object]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen_payloads.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = AIPlatformModelGateway(
+        app_settings=Settings(
+            llm_provider="ai_platform",
+            ai_platform_token="ai-platform-token",
+            ai_platform_chat_host="https://chat.example",
+            ai_platform_chat_uri="/chat",
+            ai_platform_store_completions=True,
+        ),
+        http_client=http_client,
+    )
+
+    await gateway.responses(
+        user_id="user-id",
+        model="gpt-5.4",
+        instructions=None,
+        input=[],
+        metadata={"case_id": "case-1", "purpose": "case_chat"},
+    )
+
+    assert seen_payloads == [
+        {
+            "model": "gpt-5.4",
+            "messages": [],
+            "reasoning_effort": "high",
+            "max_completion_tokens": 4096,
+            "store": True,
+            "metadata": {"case_id": "case-1", "purpose": "case_chat"},
+        }
+    ]
     await http_client.aclose()
 
 

@@ -10,7 +10,7 @@ import {
   adminApi,
 } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
-import { Metric, Shell } from "@/components/Shell";
+import { Metric } from "@/components/Shell";
 
 function retentionValue(result: RetentionRunResponse | null, key: keyof RetentionRunResponse): string {
   return result ? String(result[key]) : "n/a";
@@ -161,7 +161,7 @@ export default function AdminPage() {
   }
 
   return (
-    <Shell caseTitle="Admin">
+    <>
       <div className="toolbar">
         <h1>Admin</h1>
         <button className="button secondary" disabled={loading} type="button" onClick={() => void load()}>
@@ -384,6 +384,6 @@ export default function AdminPage() {
           </section>
         </>
       )}
-    </Shell>
+    </>
   );
 }

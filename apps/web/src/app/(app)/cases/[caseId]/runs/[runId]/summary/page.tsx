@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { reportsApi, SummaryResponse } from "@/lib/api";
+import type { SummaryItem } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, formatPercent, valueLabel } from "@/lib/format";
-import { Metric, Shell } from "@/components/Shell";
+import { Metric } from "@/components/Shell";
 
 function signalClass(signal: string): string {
   if (signal === "error") {
@@ -14,6 +16,24 @@ function signalClass(signal: string): string {
     return "amber";
   }
   return "blue";
+}
+
+function summaryLogsHref(caseId: string, runId: string, item: SummaryItem): string {
+  const basePath = `/cases/${caseId}/runs/${runId}/logs`;
+  const firstSeen = item.first_seen ? new Date(item.first_seen) : null;
+  const lastSeen = item.last_seen ? new Date(item.last_seen) : null;
+  if (firstSeen && lastSeen && !Number.isNaN(firstSeen.getTime()) && !Number.isNaN(lastSeen.getTime())) {
+    const params = new URLSearchParams({
+      window_start: new Date(firstSeen.getTime() - 60_000).toISOString(),
+      window_end: new Date(lastSeen.getTime() + 60_000).toISOString(),
+    });
+    return `${basePath}?${params.toString()}`;
+  }
+  if (item.template_id) {
+    const params = new URLSearchParams({q: item.template_id});
+    return `${basePath}?${params.toString()}`;
+  }
+  return basePath;
 }
 
 export default function SummaryPage() {
@@ -49,7 +69,7 @@ export default function SummaryPage() {
   }
 
   return (
-    <Shell caseId={caseId} runId={runId}>
+    <>
       <form className="toolbar" onSubmit={submit}>
         <h1>Data Summary</h1>
         <label className="inline-field">
@@ -90,6 +110,7 @@ export default function SummaryPage() {
                   <th>Service</th>
                   <th>First seen</th>
                   <th>Confidence</th>
+                  <th>Evidence</th>
                 </tr>
               </thead>
               <tbody>
@@ -105,6 +126,11 @@ export default function SummaryPage() {
                     <td>{item.services.map(valueLabel).join(", ")}</td>
                     <td>{formatDateTime(item.first_seen)}</td>
                     <td>{formatPercent(item.confidence)}</td>
+                    <td>
+                      <Link className="button secondary" href={summaryLogsHref(caseId, runId, item)}>
+                        Open logs
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -112,6 +138,6 @@ export default function SummaryPage() {
           </div>
         )}
       </section>
-    </Shell>
+    </>
   );
 }

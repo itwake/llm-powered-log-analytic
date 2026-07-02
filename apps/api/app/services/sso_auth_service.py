@@ -73,13 +73,14 @@ class SsoAuthService:
 
     def build_authorize_url(self, *, redirect_uri: str, state: str) -> str:
         self.ensure_enabled()
-        return f"{self.settings.sso_authorize_url}?{urlencode({
+        params = {
             'response_type': 'code',
             'client_id': self.settings.sso_client_id,
             'scope': self.settings.sso_authorize_scope,
             'redirect_uri': redirect_uri,
             'state': state,
-        })}"
+        }
+        return f"{self.settings.sso_authorize_url}?{urlencode(params)}"
 
     async def exchange_code(self, *, redirect_uri: str, code: str) -> SsoUserProfile:
         self.ensure_enabled()

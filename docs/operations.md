@@ -339,6 +339,10 @@ memory for `LOGAN_AI_PLATFORM_TOKEN_TTL_SECONDS` seconds, defaulting to 30 secon
 Case workspace chat uses `POST /api/chat/stream` to stream normalized AI Platform answers over
 SSE when a completed analysis result is available.
 
+AI Platform completion storage is disabled by default. Leave
+`LOGAN_AI_PLATFORM_STORE_COMPLETIONS=false` unless the provider is expected to store chat
+completions; LogAn only sends request `metadata` when this setting is `true`.
+
 If AI Platform model calls fail with
 `[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate`, the API process is
 usually behind an enterprise TLS inspection proxy or missing the corporate root CA. Export the

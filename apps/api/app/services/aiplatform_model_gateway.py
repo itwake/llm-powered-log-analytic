@@ -277,7 +277,9 @@ class AIPlatformModelGateway:
             payload["temperature"] = temperature
         if tools:
             payload["tools"] = tools
-        if metadata:
+        if self.settings.ai_platform_store_completions:
+            payload["store"] = True
+        if metadata and self.settings.ai_platform_store_completions:
             payload["metadata"] = metadata
         return payload
 

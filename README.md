@@ -273,6 +273,9 @@ See `.env.example` for the full list. Key defaults:
 - `LOGAN_AI_PLATFORM_TRUST_TOKEN_HEADER=X-XXXX-E2E-Trust-Token`,
   `LOGAN_AI_PLATFORM_TRACKING_PREFIX=EFP`, and
   `LOGAN_AI_PLATFORM_MAX_COMPLETION_TOKENS=4096` mirror the AI Platform client defaults.
+- `LOGAN_AI_PLATFORM_STORE_COMPLETIONS=false` keeps chat completions from being provider-stored.
+  Set it to `true` only when provider-side storage is intended; request metadata is sent only in
+  that mode.
 - `LOGAN_CREDENTIAL_ENCRYPTION_KEY=change-me-local-key`
 - `LOGAN_RAW_LOG_RETENTION_DAYS=30`
 - `LOGAN_REPORT_RETENTION_DAYS=365`
