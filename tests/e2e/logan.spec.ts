@@ -51,8 +51,14 @@ test("sample case analysis can be explored through report views", async ({page})
   await page.getByLabel("Environment").fill("staging");
 
   await Promise.all([
-    page.waitForURL(/\/cases\/[^/]+\/runs\/[^/]+\/summary$/, {timeout: 120_000}),
+    page.waitForURL(/\/cases\/[^/]+$/, {timeout: 30_000}),
     page.getByRole("button", {name: "Create and start sample/local analysis"}).click(),
+  ]);
+  await expect(page.getByRole("navigation", {name: "Case analysis navigation"})).toBeVisible({timeout: 30_000});
+  await expect(page.getByRole("link", {name: "Open report"})).toBeVisible({timeout: 120_000});
+  await Promise.all([
+    page.waitForURL(/\/cases\/[^/]+\/runs\/[^/]+\/summary$/, {timeout: 120_000}),
+    page.getByRole("link", {name: "Open report"}).click(),
   ]);
 
   await expect(page.getByRole("heading", {name: "Data Summary"})).toBeVisible();

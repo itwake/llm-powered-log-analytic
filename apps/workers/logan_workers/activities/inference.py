@@ -15,6 +15,29 @@ from logan_workers.models import (
     TemplateAnnotationResult,
 )
 
+TRUNCATION_SUFFIX = "...(truncated)"
+
+
+def _truncate_text(value: str, *, max_chars: int | None) -> str:
+    if max_chars is None or max_chars <= 0 or len(value) <= max_chars:
+        return value
+    if max_chars <= len(TRUNCATION_SUFFIX):
+        return value[:max_chars]
+    return f"{value[: max_chars - len(TRUNCATION_SUFFIX)]}{TRUNCATION_SUFFIX}"
+
+
+def _prioritized_templates(
+    templates: list[LogTemplate],
+    *,
+    max_templates: int | None,
+) -> list[LogTemplate]:
+    if max_templates is None or max_templates <= 0 or len(templates) <= max_templates:
+        return templates
+    return sorted(
+        templates,
+        key=lambda template: (-template.occurrence_count, template.template_id),
+    )[:max_templates]
+
 
 class MockAIPlatformAnnotationGateway:
     provider = "ai_platform"
@@ -277,12 +300,20 @@ def build_annotation_payload(
     case_context: dict[str, Any],
     template: LogTemplate,
     samples: list[RepresentativeSample],
+    max_sample_message_chars: int | None = None,
+    max_samples_per_template: int | None = None,
 ) -> dict[str, Any]:
+    selected_samples = samples
+    if max_samples_per_template is not None and max_samples_per_template > 0:
+        selected_samples = samples[:max_samples_per_template]
     return {
         "case_context": case_context,
         "template_context": {
             "template_id": template.template_id,
-            "template_text": template.template_text,
+            "template_text": _truncate_text(
+                template.template_text,
+                max_chars=max_sample_message_chars,
+            ),
             "occurrence_count": template.occurrence_count,
             "first_seen": template.first_seen.isoformat() if template.first_seen else None,
             "last_seen": template.last_seen.isoformat() if template.last_seen else None,
@@ -295,10 +326,10 @@ def build_annotation_payload(
                 "timestamp": sample.timestamp.isoformat() if sample.timestamp else None,
                 "level": sample.level,
                 "service": sample.service,
-                "message": sample.message,
+                "message": _truncate_text(sample.message, max_chars=max_sample_message_chars),
                 "evidence_ref": sample.evidence_ref.model_dump(mode="json"),
             }
-            for sample in samples
+            for sample in selected_samples
         ],
     }
 
@@ -310,6 +341,9 @@ async def annotate_templates(
     samples: list[RepresentativeSample],
     case_context: dict[str, Any],
     gateway: MockAIPlatformAnnotationGateway | None = None,
+    max_templates: int | None = None,
+    max_sample_message_chars: int | None = None,
+    max_samples_per_template: int | None = None,
 ) -> tuple[list[TemplateAnnotation], list[dict[str, Any]]]:
     gateway = gateway or MockAIPlatformAnnotationGateway()
     samples_by_template: dict[str, list[RepresentativeSample]] = {}
@@ -318,11 +352,13 @@ async def annotate_templates(
 
     annotations: list[TemplateAnnotation] = []
     model_inputs: list[dict[str, Any]] = []
-    for template in templates:
+    for template in _prioritized_templates(templates, max_templates=max_templates):
         payload = build_annotation_payload(
             case_context=case_context,
             template=template,
             samples=samples_by_template.get(template.template_id, []),
+            max_sample_message_chars=max_sample_message_chars,
+            max_samples_per_template=max_samples_per_template,
         )
         model_inputs.append(payload)
         response = await gateway.responses(

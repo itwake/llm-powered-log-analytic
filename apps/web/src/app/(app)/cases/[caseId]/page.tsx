@@ -13,6 +13,7 @@ import Typography from "@mui/material/Typography";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "@/components/Link";
+import { BACKGROUND_ANALYSIS_CONFIG } from "@/lib/analysisConfig";
 import {
   AnalysisRunResponse,
   CaseResponse,
@@ -267,7 +268,7 @@ export default function CaseWorkspacePage() {
       });
       const run = await runsApi.start(caseId, {
         input_file_ids: uploaded.map((file) => file.file_id),
-        config: { default_window_size_seconds: 60 },
+        config: BACKGROUND_ANALYSIS_CONFIG,
       }, { background: true });
       setActiveRunId(run.analysis_run_id);
       await refreshRunProgress(run.analysis_run_id);
@@ -289,7 +290,7 @@ export default function CaseWorkspacePage() {
     try {
       const run = await runsApi.start(caseId, {
         input_paths: [],
-        config: { default_window_size_seconds: 60 },
+        config: BACKGROUND_ANALYSIS_CONFIG,
       }, { background: true });
       setActiveRunId(run.analysis_run_id);
       await refreshRunProgress(run.analysis_run_id);

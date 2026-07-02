@@ -96,7 +96,7 @@ class Settings:
     )
     ai_platform_store_completions: bool = _env_bool("LOGAN_AI_PLATFORM_STORE_COMPLETIONS", False)
     ai_platform_token_ttl_seconds: int = int(os.getenv("LOGAN_AI_PLATFORM_TOKEN_TTL_SECONDS", "30"))
-    ai_platform_timeout_seconds: float = float(os.getenv("LOGAN_AI_PLATFORM_TIMEOUT_SECONDS", "30"))
+    ai_platform_timeout_seconds: float = float(os.getenv("LOGAN_AI_PLATFORM_TIMEOUT_SECONDS", "120"))
     ai_platform_ca_bundle: str | None = _env_first(
         "LOGAN_AI_PLATFORM_CA_BUNDLE", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"
     )

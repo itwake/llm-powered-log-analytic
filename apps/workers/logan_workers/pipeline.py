@@ -66,6 +66,16 @@ def _merge_progress(progress: dict[str, Any], event: dict[str, Any]) -> None:
     )
 
 
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 class AnalyzeCasePipeline:
     async def run(
         self,
@@ -114,6 +124,10 @@ class AnalyzeCasePipeline:
         }
         gateway = gateway or MockAIPlatformAnnotationGateway()
         progress: dict[str, Any] = {"current_step": "queued", "steps": {}}
+        inference_config = config.get("inference") if isinstance(config.get("inference"), dict) else {}
+        max_annotation_templates = _positive_int(inference_config.get("max_annotation_templates"))
+        max_sample_message_chars = _positive_int(inference_config.get("max_sample_message_chars"))
+        max_samples_per_template = _positive_int(inference_config.get("max_samples_per_template"))
 
         async def emit(
             *,
@@ -214,7 +228,11 @@ class AnalyzeCasePipeline:
         )
         samples = await run_step(
             "representative_sampling",
-            lambda: select_samples(normalized, templates),
+            lambda: select_samples(
+                normalized,
+                templates,
+                max_samples_per_template=max_samples_per_template or 5,
+            ),
             lambda value: {"samples": len(value)},
         )
         annotations, model_inputs = await run_step(
@@ -225,8 +243,20 @@ class AnalyzeCasePipeline:
                 samples=samples,
                 case_context=case_context,
                 gateway=gateway,
+                max_sample_message_chars=max_sample_message_chars,
+                max_samples_per_template=max_samples_per_template,
+                max_templates=max_annotation_templates,
             ),
-            lambda value: {"annotations": len(value[0])},
+            lambda value: {
+                "annotations": len(value[0]),
+                "annotation_templates_total": len(templates),
+                "annotation_templates_selected": len(value[0]),
+                **(
+                    {"annotation_budget": max_annotation_templates}
+                    if max_annotation_templates is not None
+                    else {}
+                ),
+            },
         )
         enriched = await run_step(
             "broadcast_annotations",

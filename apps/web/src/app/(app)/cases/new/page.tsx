@@ -3,12 +3,14 @@
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
+import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { casesApi, runsApi } from "@/lib/api";
+import { casesApi, runsApi, type UploadProgressEvent } from "@/lib/api";
+import { BACKGROUND_ANALYSIS_CONFIG } from "@/lib/analysisConfig";
 import { apiErrorMessage } from "@/lib/format";
 import { FileUploadDropzone } from "@/components/FileUploadDropzone";
 import { Button, Card, SectionHeader } from "@/components/ui";
@@ -35,6 +37,24 @@ function formatBytes(value: number): string {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function uploadProgressLabel(event: UploadProgressEvent): string {
+  const filePosition = `${event.fileIndex + 1}/${event.totalFiles}`;
+  if (event.phase === "uploading" && event.totalBytes > 0) {
+    const percent = Math.round((event.bytesSent / event.totalBytes) * 100);
+    return `Uploading ${filePosition}: ${event.file.name} (${percent}%)`;
+  }
+  if (event.phase === "hashing") {
+    return `Hashing ${filePosition}: ${event.file.name}`;
+  }
+  if (event.phase === "verifying") {
+    return `Verifying ${filePosition}: ${event.file.name}`;
+  }
+  if (event.phase === "completed") {
+    return `Uploaded ${filePosition}: ${event.file.name}`;
+  }
+  return event.message || `Preparing ${filePosition}: ${event.file.name}`;
+}
+
 export default function NewCasePage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -48,6 +68,13 @@ export default function NewCasePage() {
   const [submitMode, setSubmitMode] = useState<"create" | "start">("create");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+
+  function handleUploadProgress(event: UploadProgressEvent) {
+    setSubmitStatus(uploadProgressLabel(event));
+    setUploadProgress(event.totalBytes > 0 ? Math.min(100, (event.bytesSent / event.totalBytes) * 100) : null);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,6 +84,8 @@ export default function NewCasePage() {
     setSubmitMode(mode);
     setError(null);
     setSubmitting(true);
+    setSubmitStatus("Creating case workspace");
+    setUploadProgress(null);
     try {
       const created = await casesApi.create({
         title,
@@ -70,15 +99,17 @@ export default function NewCasePage() {
       });
       window.dispatchEvent(new CustomEvent("logan:case-saved", { detail: created }));
       if (mode === "start") {
+        setSubmitStatus(selectedFiles.length ? "Preparing file upload" : "Starting background analysis");
         const uploaded = selectedFiles.length
-          ? await casesApi.uploadFiles(created.case_id, selectedFiles)
+          ? await casesApi.uploadFiles(created.case_id, selectedFiles, { onProgress: handleUploadProgress })
           : [];
-        const run = await runsApi.start(created.case_id, {
+        setSubmitStatus("Starting background analysis");
+        await runsApi.start(created.case_id, {
           input_file_ids: uploaded.map((file) => file.file_id),
           input_paths: [],
-          config: { default_window_size_seconds: 60 },
-        });
-        router.push(`/cases/${created.case_id}/runs/${run.analysis_run_id}/summary`);
+          config: BACKGROUND_ANALYSIS_CONFIG,
+        }, { background: true });
+        router.push(`/cases/${created.case_id}`);
         return;
       }
       router.push(`/cases/${created.case_id}`);
@@ -86,6 +117,8 @@ export default function NewCasePage() {
       setError(apiErrorMessage(caught));
     } finally {
       setSubmitting(false);
+      setSubmitStatus(null);
+      setUploadProgress(null);
     }
   }
 
@@ -190,9 +223,30 @@ export default function NewCasePage() {
                   {submitting && submitMode === "create" ? "Creating" : "Create case"}
                 </Button>
                 <Button disabled={submitting} name="mode" type="submit" value="start" variant="secondary">
-                  {submitting && submitMode === "start" ? "Starting" : startButtonLabel}
+                  {submitting && submitMode === "start" ? "Starting background analysis" : startButtonLabel}
                 </Button>
               </Stack>
+              {submitting && submitStatus && (
+                <Box
+                  sx={{
+                    bgcolor: "rgba(91,92,246,0.06)",
+                    border: "1px solid rgba(91,92,246,0.12)",
+                    borderRadius: "12px",
+                    p: 1.5,
+                  }}
+                >
+                  <Typography color="text.secondary" sx={{ fontWeight: 750 }} variant="body2">
+                    {submitStatus}
+                  </Typography>
+                  {uploadProgress !== null && (
+                    <LinearProgress
+                      sx={{ borderRadius: "999px", height: 6, mt: 1 }}
+                      value={uploadProgress}
+                      variant="determinate"
+                    />
+                  )}
+                </Box>
+              )}
             </Stack>
           </Box>
         </Card>
