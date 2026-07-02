@@ -364,6 +364,13 @@ export default function CaseWorkspacePage() {
       {!loading && caseRecord && (
         <Box sx={{ display: "grid", gap: 2.5, gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.45fr) minmax(380px, 0.75fr)" } }}>
           <Stack spacing={2.5}>
+            {latestRun && (
+              <CaseAnalysisNav
+                caseId={caseId}
+                runId={latestRun.analysis_run_id}
+              />
+            )}
+
             <Card
               sx={{
                 background:
@@ -414,15 +421,6 @@ export default function CaseWorkspacePage() {
                 </Stack>
               </Stack>
             </Card>
-
-            {latestRun && (
-              <CaseAnalysisNav
-                caseId={caseId}
-                runId={latestRun.analysis_run_id}
-                title="Current analysis"
-                subtitle="Open the latest run workspace, evidence, timeline, logs, graph, and RCA views."
-              />
-            )}
 
             {editingCase && (
               <Card>
