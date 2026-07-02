@@ -3,91 +3,96 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
-/* MUI CssBaseline owns box sizing. An unlayered universal selector here overrides
-   layered MUI input slot styles and compresses TextField heights. */
+/* Keep app globals in a lower-priority layer so MUI component slots can win. */
+@layer app {
+  html,
+  body {
+    min-height: 100%;
+  }
 
-html,
-body {
-  min-height: 100%;
-}
+  body {
+    margin: 0;
+  }
 
-body {
-  margin: 0;
-}
+  a {
+    color: var(--mui-palette-primary-main);
+    text-decoration-color: color-mix(in srgb, currentColor 42%, transparent);
+    text-underline-offset: 0.18em;
+  }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+  a:hover {
+    color: var(--mui-palette-primary-dark);
+    text-decoration-color: currentColor;
+  }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
 
-h1,
-h2,
-h3,
-p {
-  overflow-wrap: anywhere;
-}
+  h1,
+  h2,
+  h3,
+  p {
+    overflow-wrap: anywhere;
+  }
 
-code,
-pre {
-  font-family: var(--font-mono);
-}
+  code,
+  pre {
+    font-family: var(--font-mono);
+  }
 
-.temporal-chart {
-  height: min(64vh, 680px);
-  min-height: 520px;
-  width: 100%;
-}
-
-.cytoscape-container {
-  height: min(72vh, 760px);
-  min-height: 680px;
-  width: 100%;
-}
-
-.code-block {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  color: #111827;
-  font-size: 12px;
-  line-height: 1.55;
-  margin: 0;
-  overflow: auto;
-  padding: 12px;
-  white-space: pre-wrap;
-}
-
-.code-block.compact {
-  max-height: 220px;
-}
-
-.markdown-view,
-.customer-update-view {
-  color: #111827;
-  font-size: 14px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-
-.evidence-ref {
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 720px) {
   .temporal-chart {
-    height: 460px;
-    min-height: 460px;
+    height: min(64vh, 680px);
+    min-height: 520px;
+    width: 100%;
   }
 
   .cytoscape-container {
-    height: 560px;
-    min-height: 560px;
+    height: min(72vh, 760px);
+    min-height: 680px;
+    width: 100%;
+  }
+
+  .code-block {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    color: #111827;
+    font-size: 12px;
+    line-height: 1.55;
+    margin: 0;
+    overflow: auto;
+    padding: 12px;
+    white-space: pre-wrap;
+  }
+
+  .code-block.compact {
+    max-height: 220px;
+  }
+
+  .markdown-view,
+  .customer-update-view {
+    color: #111827;
+    font-size: 14px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+
+  .evidence-ref {
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 720px) {
+    .temporal-chart {
+      height: 460px;
+      min-height: 460px;
+    }
+
+    .cytoscape-container {
+      height: 560px;
+      min-height: 560px;
+    }
   }
 }
