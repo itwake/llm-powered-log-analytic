@@ -21,6 +21,7 @@ import remarkGfm from "remark-gfm";
 
 interface MarkdownMessageProps {
   content: string;
+  headingMode?: "semantic" | "presentation";
 }
 
 interface CodeBlockProps {
@@ -148,31 +149,37 @@ function CodeBlock({ children }: CodeBlockProps) {
   );
 }
 
-const markdownComponents: Components = {
+function createMarkdownComponents(headingMode: MarkdownMessageProps["headingMode"]): Components {
+  const h1Component = headingMode === "presentation" ? "div" : "h3";
+  const h2Component = headingMode === "presentation" ? "div" : "h4";
+  const h3Component = headingMode === "presentation" ? "div" : "h5";
+  const h4Component = headingMode === "presentation" ? "div" : "h6";
+
+  return {
   h1({ children }) {
     return (
-      <Typography component="h3" sx={{ fontWeight: 850, mb: 1, mt: 1.5 }} variant="h6">
+      <Typography component={h1Component} sx={{ fontWeight: 850, mb: 1, mt: 1.5 }} variant="h6">
         {children}
       </Typography>
     );
   },
   h2({ children }) {
     return (
-      <Typography component="h4" sx={{ fontWeight: 820, mb: 0.75, mt: 1.5 }} variant="subtitle1">
+      <Typography component={h2Component} sx={{ fontWeight: 820, mb: 0.75, mt: 1.5 }} variant="subtitle1">
         {children}
       </Typography>
     );
   },
   h3({ children }) {
     return (
-      <Typography component="h5" sx={{ fontWeight: 800, mb: 0.75, mt: 1.25 }} variant="subtitle2">
+      <Typography component={h3Component} sx={{ fontWeight: 800, mb: 0.75, mt: 1.25 }} variant="subtitle2">
         {children}
       </Typography>
     );
   },
   h4({ children }) {
     return (
-      <Typography component="h6" sx={{ fontWeight: 780, mb: 0.5, mt: 1 }} variant="body2">
+      <Typography component={h4Component} sx={{ fontWeight: 780, mb: 0.5, mt: 1 }} variant="body2">
         {children}
       </Typography>
     );
@@ -338,9 +345,12 @@ const markdownComponents: Components = {
   img() {
     return null;
   },
-};
+  };
+}
 
-export function MarkdownMessage({ content }: MarkdownMessageProps) {
+export function MarkdownMessage({ content, headingMode = "semantic" }: MarkdownMessageProps) {
+  const markdownComponents = useMemo(() => createMarkdownComponents(headingMode), [headingMode]);
+
   return (
     <Box
       className="markdown-message"

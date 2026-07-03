@@ -16,6 +16,7 @@ import type { CausalSummaryResponse, EvidenceRef, ExportRequest } from "@/lib/ap
 import { apiErrorMessage, formatDateTime, formatPercent } from "@/lib/format";
 import { Metric } from "@/components/Shell";
 import { EvidenceChip, EvidenceDetail } from "@/components/Evidence";
+import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { Badge, Button, Card, EmptyState } from "@/components/ui";
 
 function textField(item: Record<string, unknown>, key: string): string {
@@ -227,23 +228,19 @@ export default function CausalSummaryPage() {
             ) : (
               <Stack spacing={2}>
                 <Card>
-                  <Box
-                    className="markdown-view"
-                    sx={{ overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}
-                  >
-                    {data.summary_markdown}
-                  </Box>
+                  <MarkdownMessage content={data.summary_markdown} headingMode="presentation" />
                 </Card>
                 <Card>
                   <Typography component="h2" gutterBottom sx={{ fontWeight: 800 }} variant="h6">
                     Customer Update
                   </Typography>
-                  <Box
-                    className="customer-update-view"
-                    sx={{ overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}
-                  >
-                    {data.customer_update_markdown || "No customer update"}
-                  </Box>
+                  {data.customer_update_markdown ? (
+                    <MarkdownMessage content={data.customer_update_markdown} headingMode="presentation" />
+                  ) : (
+                    <Typography color="text.secondary" variant="body2">
+                      No customer update
+                    </Typography>
+                  )}
                 </Card>
               </Stack>
             )}
