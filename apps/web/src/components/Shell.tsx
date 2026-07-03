@@ -55,10 +55,21 @@ function displayNameFromEmail(email: string | null | undefined): string | null {
     .replace(/[_-]/g, ".")
     .split(".")
     .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1).toLowerCase()}`);
+    .filter(Boolean);
 
-  return parts.length ? parts.join(" ") : null;
+  if (parts.length === 0) {
+    return null;
+  }
+
+  return parts
+    .map((part, index) => {
+      const normalized = part.toLowerCase();
+      if (index > 0 && index < parts.length - 1) {
+        return normalized;
+      }
+      return `${normalized.slice(0, 1).toUpperCase()}${normalized.slice(1)}`;
+    })
+    .join(" ");
 }
 
 function navSx(collapsed: boolean) {
@@ -238,7 +249,8 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
     };
   }, []);
 
-  const signedInDisplayName = user?.username || displayNameFromEmail(user?.email) || "Signed in";
+  const signedInDisplayName =
+    displayNameFromEmail(user?.email) || user?.full_name || user?.username || "Signed in";
   const headerTitle =
     caseTitle ||
     selectedCase?.title ||

@@ -233,6 +233,7 @@ def to_user_out(store: MetadataStore, user: UserRecord) -> UserOut:
         organization_id=user.organization_id,
         email=user.email,
         username=user.username,
+        full_name=user.full_name,
         role=user.role,
         is_active=user.is_active,
     )

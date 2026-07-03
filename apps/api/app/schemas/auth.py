@@ -8,6 +8,7 @@ class UserOut(BaseModel):
     organization_id: str
     email: str
     username: str
+    full_name: str | None = None
     role: str
     is_active: bool = True
 

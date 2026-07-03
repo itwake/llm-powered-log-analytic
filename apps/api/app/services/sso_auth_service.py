@@ -51,7 +51,14 @@ def _display_name_from_email(email: str) -> str | None:
     parts = [part for part in local_part.replace("_", ".").replace("-", ".").split(".") if part]
     if not parts:
         return None
-    return " ".join(part[:1].upper() + part[1:] for part in parts)
+    rendered_parts = []
+    for index, part in enumerate(parts):
+        normalized = part.lower()
+        if 0 < index < len(parts) - 1:
+            rendered_parts.append(normalized)
+        else:
+            rendered_parts.append(normalized[:1].upper() + normalized[1:])
+    return " ".join(rendered_parts)
 
 
 class SsoAuthService:

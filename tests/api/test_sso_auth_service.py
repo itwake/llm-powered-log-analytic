@@ -175,10 +175,43 @@ async def test_sso_callback_sets_logan_session_and_redirects_to_web() -> None:
             assert me.status_code == 200, me.text
             assert me.json()["user"]["email"] == "logan.sso@example.com"
             assert me.json()["user"]["username"] == "logan-sso"
+            assert me.json()["user"]["full_name"] == "Logan Sso"
 
     stored_user = store.get_user_by_email("logan.sso@example.com")
     assert stored_user is not None
     assert stored_user.external_id == "sso-user-42"
+
+
+@pytest.mark.asyncio
+async def test_sso_profile_derives_readable_name_from_email_when_claim_missing() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "access_token": _unsigned_jwt(
+                    {
+                        "sub": "sso-user-email-name",
+                        "preferred_username": "jack.a.b.he",
+                        "email": "jack.a.b.he@example.com",
+                    }
+                )
+            },
+        )
+
+    settings = Settings(
+        sso_enabled=True,
+        sso_token_url="https://sso.example.test/token",
+        sso_client_id="webapp",
+    )
+    store = InMemoryStore(settings)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as sso_http_client:
+        service = SsoAuthService(app_settings=settings, http_client=sso_http_client)
+        profile = await service.exchange_code(
+            redirect_uri="http://testserver/api/auth/sso/callback",
+            code="demo-code",
+        )
+
+    assert profile.full_name == "Jack a b He"
 
 
 @pytest.mark.asyncio
@@ -227,5 +260,6 @@ async def test_mock_sso_provider_can_complete_the_full_login_redirect_flow() -> 
             assert me.status_code == 200, me.text
             assert me.json()["user"]["email"] == "playwright-sso@example.com"
             assert me.json()["user"]["username"] == "playwright-sso"
+            assert me.json()["user"]["full_name"] == "Playwright SSO"
 
 

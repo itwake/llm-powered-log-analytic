@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const SSO_USERNAME = "playwright-sso";
+const SSO_USERNAME = "Playwright Sso";
 
 async function signInThroughUi(page: Page) {
   await page.goto("/login");
