@@ -4,16 +4,20 @@ import Box from "@mui/material/Box";
 import Container from "@mui/material/Container";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useEffect, useState } from "react";
-import Link from "@/components/Link";
+import { useEffect, useRef, useState } from "react";
 import { Button, Card } from "@/components/ui";
 import { buildSsoLoginUrl } from "@/lib/auth";
 import { safeNextPath } from "@/lib/navigation";
 
 export default function LoginPage() {
   const [ssoUrl, setSsoUrl] = useState(() => buildSsoLoginUrl("/cases"));
+  const redirectStartedRef = useRef(false);
 
   useEffect(() => {
+    if (redirectStartedRef.current) {
+      return;
+    }
+    redirectStartedRef.current = true;
     const url = buildSsoLoginUrl(safeNextPath(window.location.search));
     setSsoUrl(url);
     window.location.replace(url);
@@ -33,7 +37,7 @@ export default function LoginPage() {
               the first time you complete SSO.
             </Typography>
             <Box>
-              <Button component={Link} href={ssoUrl} variant="primary">
+              <Button component="a" href={ssoUrl} variant="primary">
                 Continue with SSO
               </Button>
             </Box>
