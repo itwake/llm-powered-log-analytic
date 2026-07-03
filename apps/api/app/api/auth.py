@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import secrets
 from urllib.parse import parse_qs, urlencode
 
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 SSO_STATE_COOKIE_NAME = "logan_sso_state"
 SSO_STATE_SALT = "logan-sso-state"
 SSO_MOCK_CODE_SALT = "logan-sso-mock-code"
+logger = logging.getLogger(__name__)
 
 
 def _safe_next_path(value: str | None, fallback: str = "/cases") -> str:
@@ -40,6 +42,12 @@ def _base64url_encode(data: bytes) -> str:
 def _base64url_decode(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
     return base64.urlsafe_b64decode((value + padding).encode("utf-8"))
+
+
+def _state_hint(value: str | None) -> str:
+    if not value:
+        return "missing"
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:10]
 
 
 def _unsigned_jwt(payload: dict[str, str]) -> str:
@@ -225,6 +233,7 @@ def to_user_out(store: MetadataStore, user: UserRecord) -> UserOut:
         organization_id=user.organization_id,
         email=user.email,
         username=user.username,
+        full_name=user.full_name,
         role=user.role,
         is_active=user.is_active,
     )
@@ -257,9 +266,21 @@ async def sso_login(
     next_path = _safe_next_path(request.query_params.get("next"))
     nonce = secrets.token_urlsafe(24)
     state = _sign_sso_state(next_path, nonce, store.settings.secret_key)
+    redirect_uri = str(request.url_for("sso_callback"))
+    logger.info(
+        "sso.login state_issued next=%s redirect_uri=%s request_host=%s scheme=%s "
+        "secure_cookie=%s state_hint=%s nonce_hint=%s",
+        next_path,
+        redirect_uri,
+        request.headers.get("host"),
+        request.url.scheme,
+        store.settings.secure_cookies,
+        _state_hint(state),
+        _state_hint(nonce),
+    )
     response = RedirectResponse(
         url=service.build_authorize_url(
-            redirect_uri=str(request.url_for("sso_callback")),
+            redirect_uri=redirect_uri,
             state=state,
         ),
         status_code=status.HTTP_302_FOUND,
@@ -330,12 +351,31 @@ async def sso_callback(
 ) -> RedirectResponse:
     service = _get_sso_auth_service(request, store)
     service.ensure_enabled()
-    state = _read_sso_state(
-        (request.query_params.get("state") or "").strip(),
-        store.settings.secret_key,
-    )
+    raw_state = (request.query_params.get("state") or "").strip()
+    try:
+        state = _read_sso_state(raw_state, store.settings.secret_key)
+    except HTTPException:
+        logger.warning(
+            "sso.callback invalid_state_token has_state=%s state_hint=%s request_host=%s scheme=%s",
+            bool(raw_state),
+            _state_hint(raw_state),
+            request.headers.get("host"),
+            request.url.scheme,
+        )
+        raise
     cookie_nonce = (request.cookies.get(SSO_STATE_COOKIE_NAME) or "").strip()
     if not cookie_nonce or cookie_nonce != state["nonce"]:
+        logger.warning(
+            "sso.callback state_cookie_mismatch has_cookie=%s cookie_nonce_hint=%s "
+            "state_nonce_hint=%s state_hint=%s request_host=%s scheme=%s secure_cookie=%s",
+            bool(cookie_nonce),
+            _state_hint(cookie_nonce),
+            _state_hint(state["nonce"]),
+            _state_hint(raw_state),
+            request.headers.get("host"),
+            request.url.scheme,
+            store.settings.secure_cookies,
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid SSO state")
 
     profile = await service.exchange_code(
@@ -344,6 +384,12 @@ async def sso_callback(
     )
     user = service.provision_user(store, profile)
     token, session = store.create_session(user.id)
+    logger.info(
+        "sso.callback completed user_id=%s next=%s state_hint=%s",
+        user.id,
+        state["next"],
+        _state_hint(raw_state),
+    )
 
     response = RedirectResponse(
         url=f"{_web_redirect_base(request, store)}{state['next']}",

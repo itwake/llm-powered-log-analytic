@@ -279,6 +279,7 @@ export interface UserOut {
   organization_id: string;
   email: string;
   username: string;
+  full_name: string | null;
   role: string;
   is_active: boolean;
 }
@@ -473,6 +474,9 @@ export interface SummaryResponse {
   reduction: {
     raw_log_lines: number;
     offending_templates: number;
+    visible_templates?: number;
+    annotated_templates?: number;
+    scope?: "attention" | "all" | string;
     estimated_review_reduction: number;
   };
 }
@@ -924,7 +928,11 @@ export const runsApi = {
 };
 
 export const reportsApi = {
-  summary: (caseId: string, runId: string, query?: {golden_signal?: string; limit?: number; offset?: number}) =>
+  summary: (
+    caseId: string,
+    runId: string,
+    query?: {golden_signal?: string; scope?: "attention" | "all"; limit?: number; offset?: number},
+  ) =>
     request<SummaryResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/summary`, {query}),
   temporal: (
     caseId: string,

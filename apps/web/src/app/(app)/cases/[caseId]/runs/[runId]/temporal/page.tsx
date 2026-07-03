@@ -1,6 +1,13 @@
 "use client";
 
-import Link from "next/link";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import { useTheme } from "@mui/material/styles";
 import { useParams } from "next/navigation";
 import {
   FormEvent,
@@ -20,10 +27,10 @@ import {
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption, EChartsType } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
+import Link from "@/components/Link";
 import { reportsApi, TemporalResponse, TemporalSeries } from "@/lib/api";
 import { apiErrorMessage, formatShortTime } from "@/lib/format";
-
-const palette = ["#2d5f87", "#2f6f62", "#a6423c", "#8b6728", "#654f9f", "#4d7770"];
+import { Button, Card, EmptyState } from "@/components/ui";
 
 echarts.use([
   BarChart,
@@ -46,6 +53,19 @@ function windowEnd(windowStart: string, windowSizeSeconds: number): string {
   return new Date(start.getTime() + windowSizeSeconds * 1000).toISOString();
 }
 
+function windowSizeLabel(seconds: number): string {
+  if (seconds === 60) {
+    return "1 minute";
+  }
+  if (seconds === 300) {
+    return "5 minutes";
+  }
+  if (seconds === 900) {
+    return "15 minutes";
+  }
+  return `${seconds}s`;
+}
+
 interface SelectedWindow {
   start: string;
   end: string;
@@ -53,7 +73,8 @@ interface SelectedWindow {
 }
 
 export default function TemporalPage() {
-  const {caseId, runId} = useParams<{caseId: string; runId: string}>();
+  const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
+  const theme = useTheme();
   const chartElement = useRef<HTMLDivElement | null>(null);
   const chart = useRef<EChartsType | null>(null);
   const [data, setData] = useState<TemporalResponse | null>(null);
@@ -123,8 +144,40 @@ export default function TemporalPage() {
     [activeWindowSize, totals],
   );
 
+  const chartPalette = useMemo(
+    () => [
+      theme.palette.primary.main,
+      theme.palette.info.main,
+      theme.palette.success.main,
+      theme.palette.warning.main,
+      theme.palette.error.main,
+      theme.palette.secondary.main,
+    ],
+    [theme],
+  );
+
+  const peakLogs = useMemo(() => {
+    let peak = 0;
+    totals.forEach((value) => {
+      peak = Math.max(peak, value);
+    });
+    return peak;
+  }, [totals]);
+  const groupLabel = {
+    golden_signal: "Golden signal",
+    service: "Service",
+    fault_category: "Fault category",
+    template: "Template",
+  }[groupBy] || groupBy;
+  const temporalKpis = [
+    { label: "Total windows", value: String(windows.length), tone: "primary" },
+    { label: "Peak logs", value: String(peakLogs), tone: "info" },
+    { label: "Group", value: groupLabel, tone: "success" },
+    { label: "Window size", value: windowSizeLabel(windowSizeSeconds), tone: "warning" },
+  ];
+
   const chartOption = useMemo<EChartsCoreOption>(() => ({
-    color: palette,
+    color: chartPalette,
     dataZoom: [
       {
         type: "inside",
@@ -179,7 +232,7 @@ export default function TemporalPage() {
       name: "Logs",
       type: "value",
     },
-  }), [data, windows]);
+  }), [chartPalette, data, windows]);
 
   useEffect(() => {
     if (loading || !data || data.series.length === 0) {
@@ -196,7 +249,7 @@ export default function TemporalPage() {
     chart.current = instance;
     instance.setOption(chartOption, true);
 
-    const onChartClick = (params: {dataIndex?: number}) => {
+    const onChartClick = (params: { dataIndex?: number }) => {
       if (typeof params.dataIndex !== "number") {
         return;
       }
@@ -206,15 +259,15 @@ export default function TemporalPage() {
       }
     };
 
-    const onCanvasClick = (event: {offsetX: number; offsetY: number; target?: unknown}) => {
+    const onCanvasClick = (event: { offsetX: number; offsetY: number; target?: unknown }) => {
       if (event.target) {
         return;
       }
       const point: [number, number] = [event.offsetX, event.offsetY];
-      if (!instance.containPixel({gridIndex: 0}, point)) {
+      if (!instance.containPixel({ gridIndex: 0 }, point)) {
         return;
       }
-      const converted = instance.convertFromPixel({gridIndex: 0}, point);
+      const converted = instance.convertFromPixel({ gridIndex: 0 }, point);
       const xValue = Array.isArray(converted) ? converted[0] : converted;
       const index = typeof xValue === "string" ? windows.indexOf(xValue) : Math.round(Number(xValue));
       const windowStart = windows[index];
@@ -240,81 +293,165 @@ export default function TemporalPage() {
     chart.current = null;
   }, []);
 
-  return (
-    <>
-      <form className="toolbar" onSubmit={submit}>
-        <h1>Temporal View</h1>
-        <label className="inline-field">
-          Window
-          <select
-            value={windowSizeSeconds}
-            onChange={(event) => setWindowSizeSeconds(Number(event.target.value))}
-          >
-            <option value={60}>1 minute</option>
-            <option value={300}>5 minutes</option>
-            <option value={900}>15 minutes</option>
-          </select>
-        </label>
-        <label className="inline-field">
-          Group
-          <select value={groupBy} onChange={(event) => setGroupBy(event.target.value)}>
-            <option value="golden_signal">Golden signal</option>
-            <option value="service">Service</option>
-            <option value="fault_category">Fault category</option>
-            <option value="template">Template</option>
-          </select>
-        </label>
-        <button className="button secondary" disabled={loading} type="submit">Apply</button>
-      </form>
+  const selectedLogsHref = selectedWindow
+    ? `/cases/${caseId}/runs/${runId}/logs?${new URLSearchParams({
+        window_start: selectedWindow.start,
+        window_end: selectedWindow.end,
+      }).toString()}`
+    : `/cases/${caseId}/runs/${runId}/logs`;
 
-      {error && <div className="alert error">{error}</div>}
-      <section className="panel chart-area">
-        {loading && <div className="empty chart-state">Loading temporal data</div>}
-        {!loading && data && data.series.length === 0 && <div className="empty chart-state">No temporal data</div>}
+  return (
+    <Stack spacing={2.5}>
+      <Stack
+        component="form"
+        direction={{ xs: "column", lg: "row" }}
+        spacing={2}
+        sx={{ alignItems: { xs: "flex-start", lg: "center" }, justifyContent: "space-between" }}
+        onSubmit={submit}
+      >
+        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+          Temporal View
+        </Typography>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ width: { xs: "100%", lg: "auto" } }}>
+          <FormControl sx={{ minWidth: 160 }}>
+            <InputLabel id="temporal-window-label">Window</InputLabel>
+            <Select
+              inputProps={{ "aria-label": "Window" }}
+              label="Window"
+              labelId="temporal-window-label"
+              native
+              value={String(windowSizeSeconds)}
+              onChange={(event) => setWindowSizeSeconds(Number(event.target.value))}
+            >
+              <option value="60">1 minute</option>
+              <option value="300">5 minutes</option>
+              <option value="900">15 minutes</option>
+            </Select>
+          </FormControl>
+          <FormControl sx={{ minWidth: 190 }}>
+            <InputLabel id="temporal-group-label">Group</InputLabel>
+            <Select
+              inputProps={{ "aria-label": "Group" }}
+              label="Group"
+              labelId="temporal-group-label"
+              native
+              value={groupBy}
+              onChange={(event) => setGroupBy(event.target.value)}
+            >
+              <option value="golden_signal">Golden signal</option>
+              <option value="service">Service</option>
+              <option value="fault_category">Fault category</option>
+              <option value="template">Template</option>
+            </Select>
+          </FormControl>
+          <Button disabled={loading} type="submit" variant="secondary">
+            Apply
+          </Button>
+        </Stack>
+      </Stack>
+
+      {error && <Alert severity="error">{error}</Alert>}
+      <Box
+        component="section"
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" },
+        }}
+      >
+        {temporalKpis.map((item) => (
+          <Card key={item.label}>
+            <Stack spacing={0.75}>
+              <Box
+                sx={{
+                  bgcolor:
+                    item.tone === "primary"
+                      ? "rgba(91,92,246,0.12)"
+                      : item.tone === "info"
+                        ? "rgba(6,182,212,0.14)"
+                        : item.tone === "success"
+                          ? "rgba(16,185,129,0.14)"
+                          : "rgba(249,115,22,0.13)",
+                  borderRadius: "50%",
+                  height: 12,
+                  width: 12,
+                }}
+              />
+              <Typography color="text.secondary" variant="body2">
+                {item.label}
+              </Typography>
+              <Typography sx={{ fontWeight: 900, overflowWrap: "anywhere" }} variant="h5">
+                {item.value}
+              </Typography>
+            </Stack>
+          </Card>
+        ))}
+      </Box>
+      <Card>
+        {loading && <EmptyState title="Loading temporal data" />}
+        {!loading && data && data.series.length === 0 && <EmptyState title="No temporal data" />}
         {!loading && data && data.series.length > 0 && (
-          <>
-            <div
+          <Stack spacing={2}>
+            <Box>
+              <Typography component="h2" sx={{ fontWeight: 850 }} variant="h6">
+                Temporal aggregation
+              </Typography>
+              <Typography color="text.secondary">
+                Click a bar to isolate the incident window and jump into the matching log slice.
+              </Typography>
+            </Box>
+            <Box
               aria-label="Temporal stacked bar chart"
               className="temporal-chart"
               data-testid="temporal-echarts"
               ref={chartElement}
             />
-            <div className="selection-summary" data-testid="temporal-selection-summary">
+            <Stack
+              data-testid="temporal-selection-summary"
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1.5}
+              sx={{
+                alignItems: { xs: "flex-start", sm: "center" },
+                background: selectedWindow
+                  ? "linear-gradient(135deg, rgba(91,92,246,0.12), rgba(6,182,212,0.12))"
+                  : "rgba(91,92,246,0.05)",
+                border: 1,
+                borderColor: "rgba(91,92,246,0.16)",
+                borderRadius: "14px",
+                justifyContent: "space-between",
+                p: 2.5,
+              }}
+            >
               {selectedWindow ? (
                 <>
-                  <div>
-                    <h2>Selected Window</h2>
-                    <p>
+                  <Box>
+                    <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+                      Selected Window
+                    </Typography>
+                    <Typography>
                       <strong>{formatShortTime(selectedWindow.start)}</strong>
                       {" to "}
                       <strong>{formatShortTime(selectedWindow.end)}</strong>
                       {" | "}
                       {selectedWindow.total} logs
-                    </p>
-                  </div>
-                  <Link
-                    className="button secondary"
-                    href={{
-                      pathname: `/cases/${caseId}/runs/${runId}/logs`,
-                      query: {
-                        window_start: selectedWindow.start,
-                        window_end: selectedWindow.end,
-                      },
-                    }}
-                  >
+                    </Typography>
+                  </Box>
+                  <Button component={Link} href={selectedLogsHref} variant="secondary">
                     Open in Tabular Logs
-                  </Link>
+                  </Button>
                 </>
               ) : (
-                <div>
-                  <h2>Selected Window</h2>
-                  <p className="muted">Select a bar to inspect that time window.</p>
-                </div>
+                <Box>
+                  <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+                    Selected Window
+                  </Typography>
+                  <Typography color="text.secondary">Select a bar to inspect that time window.</Typography>
+                </Box>
               )}
-            </div>
-          </>
+            </Stack>
+          </Stack>
         )}
-      </section>
-    </>
+      </Card>
+    </Stack>
   );
 }

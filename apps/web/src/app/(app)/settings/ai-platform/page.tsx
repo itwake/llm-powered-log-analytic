@@ -1,8 +1,14 @@
 "use client";
 
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Skeleton from "@mui/material/Skeleton";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import { useEffect, useState } from "react";
 import { capabilitiesApi, CapabilitiesResponse } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
+import { Badge, Card, InfoGrid } from "@/components/ui";
 
 function providerLabel(provider: string): string {
   return provider === "ai_platform" ? "AI Platform" : provider;
@@ -40,64 +46,56 @@ export default function AIPlatformSettingsPage() {
   }, []);
 
   return (
-    <>
-      <div className="toolbar">
-        <h1>AI Platform</h1>
-      </div>
+    <Stack spacing={2.5}>
+      <Box>
+        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+          AI Platform
+        </Typography>
+        <Typography color="text.secondary">Runtime capability and model surface configuration.</Typography>
+      </Box>
 
-      {error && <div className="alert error">{error}</div>}
+      {error && <Alert severity="error">{error}</Alert>}
 
-      <section className="grid two">
-        <div className="panel">
-          <h2>Runtime</h2>
-          {loading && <div className="empty">Checking model runtime</div>}
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" } }}>
+        <Card>
+          <Typography component="h2" gutterBottom sx={{ fontWeight: 800 }} variant="h6">
+            Runtime
+          </Typography>
+          {loading && <Skeleton height={150} variant="rounded" />}
           {!loading && capabilities && (
-            <table>
-              <tbody>
-                <tr>
-                  <td>Provider</td>
-                  <td>{providerLabel(capabilities.models.provider)}</td>
-                </tr>
-                <tr>
-                  <td>Default model</td>
-                  <td>{capabilities.models.default_model}</td>
-                </tr>
-                <tr>
-                  <td>Status</td>
-                  <td>
-                    <span className={`pill ${capabilities.models.provider === "ai_platform" ? "green" : "amber"}`}>
+            <InfoGrid
+              rows={[
+                { label: "Provider", value: providerLabel(capabilities.models.provider) },
+                { label: "Default model", value: capabilities.models.default_model },
+                {
+                  label: "Status",
+                  value: (
+                    <Badge tone={capabilities.models.provider === "ai_platform" ? "success" : "warning"}>
                       {capabilities.models.provider === "ai_platform" ? "configured" : "check configuration"}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                    </Badge>
+                  ),
+                },
+              ]}
+            />
           )}
-        </div>
+        </Card>
 
-        <div className="panel">
-          <h2>Model Surface</h2>
-          {loading && <div className="empty">Loading capabilities</div>}
+        <Card>
+          <Typography component="h2" gutterBottom sx={{ fontWeight: 800 }} variant="h6">
+            Model Surface
+          </Typography>
+          {loading && <Skeleton height={150} variant="rounded" />}
           {!loading && capabilities && (
-            <table>
-              <tbody>
-                <tr>
-                  <td>Supported models</td>
-                  <td>{capabilities.models.supported_models.join(", ")}</td>
-                </tr>
-                <tr>
-                  <td>Views</td>
-                  <td>{capabilities.views.join(", ")}</td>
-                </tr>
-                <tr>
-                  <td>Uploads</td>
-                  <td>{capabilities.upload.supported_extensions.join(", ")}</td>
-                </tr>
-              </tbody>
-            </table>
+            <InfoGrid
+              rows={[
+                { label: "Supported models", value: capabilities.models.supported_models.join(", ") },
+                { label: "Views", value: capabilities.views.join(", ") },
+                { label: "Uploads", value: capabilities.upload.supported_extensions.join(", ") },
+              ]}
+            />
           )}
-        </div>
-      </section>
-    </>
+        </Card>
+      </Box>
+    </Stack>
   );
 }

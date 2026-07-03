@@ -37,6 +37,7 @@ async def test_ai_platform_token_chat_payload_and_output_parsing() -> None:
                         },
                     ],
                 },
+                {"role": "developer", "content": "Return valid JSON only."},
             ],
             "reasoning_effort": "high",
             "max_completion_tokens": 1234,
@@ -89,6 +90,39 @@ async def test_ai_platform_token_chat_payload_and_output_parsing() -> None:
     assert response["token_source"] == "env_ai_platform_token"
     assert response["output_text"] == json.dumps(output_json)
     assert response["output_json"] == output_json
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_ai_platform_json_response_format_reuses_existing_json_instruction() -> None:
+    seen_payloads: list[dict[str, object]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen_payloads.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]})
+
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = AIPlatformModelGateway(
+        app_settings=Settings(
+            llm_provider="ai_platform",
+            ai_platform_token="ai-platform-token",
+            ai_platform_chat_host="https://chat.example",
+            ai_platform_chat_uri="/chat",
+        ),
+        http_client=http_client,
+    )
+
+    await gateway.responses(
+        user_id="user-id",
+        model="gpt-5.4",
+        instructions="Return valid JSON only.",
+        input=[],
+        response_format={"type": "json_object"},
+    )
+
+    assert seen_payloads[0]["messages"] == [
+        {"role": "developer", "content": "Return valid JSON only."}
+    ]
     await http_client.aclose()
 
 

@@ -1,9 +1,14 @@
 "use client";
 
-import Link from "next/link";
+import Box from "@mui/material/Box";
+import LinearProgress from "@mui/material/LinearProgress";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import { useEffect, useRef } from "react";
+import Link from "@/components/Link";
 import { AnalysisRunResponse, JobEventResponse } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { Badge, Button, Card, EmptyState, statusTone } from "@/components/ui";
 
 const PIPELINE_STEPS = [
   ["ingest_paths", "Ingest"],
@@ -27,22 +32,6 @@ const PROGRESS_METRICS = [
 ] as const;
 
 type StepStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
-
-function statusClass(status: string): string {
-  if (status === "completed") {
-    return "green";
-  }
-  if (status === "failed") {
-    return "red";
-  }
-  if (status === "cancelled") {
-    return "blue";
-  }
-  if (status === "processing" || status === "queued") {
-    return "amber";
-  }
-  return "blue";
-}
 
 function latestEventsByStep(events: JobEventResponse[]): Map<string, JobEventResponse> {
   const byStep = new Map<string, JobEventResponse>();
@@ -106,6 +95,22 @@ function terminalRunStatus(status: string): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
 }
 
+function stepColor(status: StepStatus): string {
+  if (status === "completed") {
+    return "success.main";
+  }
+  if (status === "failed") {
+    return "error.main";
+  }
+  if (status === "processing") {
+    return "warning.main";
+  }
+  if (status === "cancelled") {
+    return "info.main";
+  }
+  return "divider";
+}
+
 export function AnalysisProgressPanel({
   caseId,
   run,
@@ -123,17 +128,21 @@ export function AnalysisProgressPanel({
 
   if (!run) {
     return (
-      <section className="panel progress-panel">
-        <h2>Analysis Progress</h2>
-        <div className="empty">No active analysis run</div>
-      </section>
+      <Card>
+        <Stack spacing={2}>
+          <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+            Analysis Progress
+          </Typography>
+          <EmptyState title="No active analysis run" />
+        </Stack>
+      </Card>
     );
   }
 
   const byStep = latestEventsByStep(events);
   const stepRows = PIPELINE_STEPS.map(([name, label]) => {
     const event = byStep.get(name);
-    return {name, label, event, status: stepStatus(run, name, event)};
+    return { name, label, event, status: stepStatus(run, name, event) };
   });
   const completedSteps = stepRows.filter((step) => step.status === "completed").length;
   const failed = run.status === "failed" || stepRows.some((step) => step.status === "failed");
@@ -144,103 +153,145 @@ export function AnalysisProgressPanel({
       ? 100
       : Math.max(8, Math.round((completedSteps / PIPELINE_STEPS.length) * 100));
   const canCancel = !terminalRunStatus(run.status) && Boolean(onCancel);
-  const visibleEvents = events.slice(-6);
+  const visibleEvents = events.slice(-16);
 
   return (
-    <section className="panel progress-panel">
-      <div className="progress-header">
-        <div>
-          <h2>Analysis Progress</h2>
-          <p className="muted">
-            Run #{run.run_number} - {run.current_step}
-          </p>
-        </div>
-        <div className="form-actions">
-          {canCancel && (
-            <button
-              className="button danger"
-              disabled={cancelling}
-              type="button"
-              onClick={() => onCancel?.(run)}
-            >
-              {cancelling ? "Stopping" : "Terminate"}
-            </button>
-          )}
-          <span className={`pill ${statusClass(run.status)}`}>{run.status}</span>
-        </div>
-      </div>
+    <Card>
+      <Stack spacing={2}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: { xs: "flex-start", sm: "center" }, justifyContent: "space-between" }}>
+          <Box>
+            <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
+              Analysis Progress
+            </Typography>
+            <Typography color="text.secondary">
+              Run #{run.run_number} - {run.current_step}
+            </Typography>
+          </Box>
+          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
+            {canCancel && (
+              <Button disabled={cancelling} size="sm" variant="danger" onClick={() => onCancel?.(run)}>
+                {cancelling ? "Stopping" : "Terminate"}
+              </Button>
+            )}
+            <Badge tone={statusTone(run.status)}>{run.status}</Badge>
+          </Stack>
+        </Stack>
 
-      <div className="progress-track" aria-label="Analysis progress">
-        <div
-          className={`progress-fill ${failed ? "failed" : cancelled ? "cancelled" : ""}`}
-          style={{width: `${completionPercent}%`}}
+        <LinearProgress
+          aria-label="Analysis progress"
+          color={failed ? "error" : cancelled ? "info" : "primary"}
+          sx={{ borderRadius: "999px", height: 10 }}
+          value={completionPercent}
+          variant="determinate"
         />
-      </div>
 
-      <div className="progress-metrics">
-        {PROGRESS_METRICS.map(([key, label]) => {
-          const value = progressNumber(run, key);
-          return (
-            <div className="progress-metric" key={key}>
-              <span>{label}</span>
-              <strong>{value === null ? "n/a" : formatCount(value)}</strong>
-            </div>
-          );
-        })}
-      </div>
+        <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", sm: "repeat(4, minmax(0, 1fr))" } }}>
+          {PROGRESS_METRICS.map(([key, label]) => {
+            const value = progressNumber(run, key);
+            return (
+              <Box key={key} sx={{ border: 1, borderColor: "divider", borderRadius: "10px", p: 1.5 }}>
+                <Typography color="text.secondary" variant="caption">
+                  {label}
+                </Typography>
+                <Typography sx={{ fontWeight: 850 }}>{value === null ? "n/a" : formatCount(value)}</Typography>
+              </Box>
+            );
+          })}
+        </Box>
 
-      <div className="step-timeline">
-        {stepRows.map((step) => (
-          <div className={`step-item ${step.status}`} key={step.name}>
-            <span className="step-dot" />
-            <div>
-              <strong>{step.label}</strong>
-              <span>{step.status}</span>
-              {step.event?.metadata && Object.keys(step.event.metadata).length > 0 && (
-                <small>{metadataPreview(step.event.metadata)}</small>
-              )}
-              {step.event?.error_message && <small>{step.event.error_message}</small>}
-            </div>
-          </div>
-        ))}
-      </div>
+        <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" } }}>
+          {stepRows.map((step) => (
+            <Stack
+              direction="row"
+              key={step.name}
+              spacing={1.25}
+              sx={{ border: 1, borderColor: "divider", borderRadius: "10px", minWidth: 0, p: 1.25 }}
+            >
+              <Box sx={{ bgcolor: stepColor(step.status), borderRadius: "50%", height: 10, mt: 0.7, width: 10 }} />
+              <Box sx={{ minWidth: 0 }}>
+                <Typography noWrap sx={{ fontWeight: 800 }}>
+                  {step.label}
+                </Typography>
+                <Typography color="text.secondary" variant="caption">
+                  {step.status}
+                </Typography>
+                {step.event?.metadata && Object.keys(step.event.metadata).length > 0 && (
+                  <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }} variant="caption">
+                    {metadataPreview(step.event.metadata)}
+                  </Typography>
+                )}
+                {step.event?.error_message && (
+                  <Typography color="error" sx={{ overflowWrap: "anywhere" }} variant="caption">
+                    {step.event.error_message}
+                  </Typography>
+                )}
+              </Box>
+            </Stack>
+          ))}
+        </Box>
 
-      <div className="progress-footer">
-        <div>
-          <span className="muted">Started</span>
-          <strong>{formatDateTime(run.started_at)}</strong>
-        </div>
-        <div>
-          <span className="muted">Completed</span>
-          <strong>{formatDateTime(run.completed_at)}</strong>
-        </div>
-        {run.status === "completed" && (
-          <Link className="button secondary" href={`/cases/${caseId}/runs/${run.analysis_run_id}/summary`}>
-            Open report
-          </Link>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: { xs: "flex-start", sm: "center" }, justifyContent: "space-between" }}>
+          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 2 }}>
+            <Box>
+              <Typography color="text.secondary" variant="caption">Started</Typography>
+              <Typography sx={{ fontWeight: 750 }}>{formatDateTime(run.started_at)}</Typography>
+            </Box>
+            <Box>
+              <Typography color="text.secondary" variant="caption">Completed</Typography>
+              <Typography sx={{ fontWeight: 750 }}>{formatDateTime(run.completed_at)}</Typography>
+            </Box>
+          </Stack>
+          {run.status === "completed" && (
+            <Button component={Link} href={`/cases/${caseId}/runs/${run.analysis_run_id}/summary`} variant="secondary">
+              Open report
+            </Button>
+          )}
+        </Stack>
+
+        {events.length > 0 && (
+          <Box>
+            <Typography component="h3" gutterBottom sx={{ fontWeight: 800 }} variant="subtitle1">
+              Event Log
+            </Typography>
+            <Stack
+              ref={eventLogRef}
+              spacing={1}
+              sx={{
+                border: 1,
+                borderColor: "divider",
+                borderRadius: "10px",
+                maxHeight: 320,
+                overflowY: "auto",
+                p: 1,
+              }}
+            >
+              {visibleEvents.map((event) => (
+                <Stack direction="row" key={event.id} spacing={1} sx={{ alignItems: "flex-start", minWidth: 0 }}>
+                  <Badge tone={statusTone(event.status)}>{event.event_type}</Badge>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 750, overflowWrap: "anywhere" }} variant="body2">
+                      {event.step_name}
+                    </Typography>
+                    {event.metadata && Object.keys(event.metadata).length > 0 && (
+                      <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }} variant="caption">
+                        {metadataPreview(event.metadata)}
+                      </Typography>
+                    )}
+                    {event.error_message && (
+                      <Typography color="error" sx={{ overflowWrap: "anywhere" }} variant="caption">
+                        {event.error_message}
+                      </Typography>
+                    )}
+                  </Box>
+                  <Typography color="text.secondary" sx={{ flex: "0 0 auto" }} variant="caption">
+                    {formatDateTime(event.created_at)}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
         )}
-      </div>
-
-      {events.length > 0 && (
-        <div className="event-log">
-          <h3>Event Log</h3>
-          <div className="event-log-scroll" ref={eventLogRef}>
-            {visibleEvents.map((event) => (
-              <div className="event-row" key={event.id}>
-                <span className={`pill ${statusClass(event.status)}`}>{event.event_type}</span>
-                <span>
-                  {event.step_name}
-                  {event.metadata && Object.keys(event.metadata).length > 0 && (
-                    <small>{metadataPreview(event.metadata)}</small>
-                  )}
-                  {event.error_message && <small>{event.error_message}</small>}
-                </span>
-                <span className="muted">{formatDateTime(event.created_at)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
+      </Stack>
+    </Card>
   );
 }
