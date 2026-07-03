@@ -24,8 +24,13 @@ function signalTone(signal: string) {
   if (signal === "availability" || signal === "saturation") {
     return "warning";
   }
+  if (signal === "information") {
+    return "neutral";
+  }
   return "info";
 }
+
+type SummaryScope = "attention" | "all";
 
 function summaryLogsHref(caseId: string, runId: string, item: SummaryItem): string {
   const basePath = `/cases/${caseId}/runs/${runId}/logs`;
@@ -49,17 +54,39 @@ export default function SummaryPage() {
   const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
   const [data, setData] = useState<SummaryResponse | null>(null);
   const [goldenSignal, setGoldenSignal] = useState("");
+  const [summaryScope, setSummaryScope] = useState<SummaryScope>("attention");
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(signal = goldenSignal) {
+  async function load(signal = goldenSignal, scope = summaryScope, allowFallback = true) {
     setLoading(true);
     setError(null);
+    setFallbackNotice(null);
     try {
       const response = await reportsApi.summary(caseId, runId, {
         golden_signal: signal || undefined,
+        scope,
         limit: 100,
       });
+      if (
+        allowFallback &&
+        scope === "attention" &&
+        !signal &&
+        response.total === 0 &&
+        (response.reduction.annotated_templates || 0) > 0
+      ) {
+        const fallbackResponse = await reportsApi.summary(caseId, runId, {
+          scope: "all",
+          limit: 100,
+        });
+        setSummaryScope("all");
+        setFallbackNotice(
+          "No attention templates were detected for this run, so all templates are shown.",
+        );
+        setData(fallbackResponse);
+        return;
+      }
       setData(response);
     } catch (caught) {
       setError(apiErrorMessage(caught));
@@ -69,12 +96,14 @@ export default function SummaryPage() {
   }
 
   useEffect(() => {
-    void load("");
+    setGoldenSignal("");
+    setSummaryScope("attention");
+    void load("", "attention");
   }, [caseId, runId]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void load();
+    void load(goldenSignal, summaryScope);
   }
 
   const columns = useMemo<GridColDef<SummaryItem>[]>(
@@ -152,6 +181,20 @@ export default function SummaryPage() {
         </Typography>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ width: { xs: "100%", md: "auto" } }}>
           <FormControl sx={{ minWidth: 220 }}>
+            <InputLabel id="summary-scope-label">View</InputLabel>
+            <Select
+              inputProps={{ "aria-label": "View" }}
+              label="View"
+              labelId="summary-scope-label"
+              native
+              value={summaryScope}
+              onChange={(event) => setSummaryScope(event.target.value as SummaryScope)}
+            >
+              <option value="attention">Attention templates</option>
+              <option value="all">All templates</option>
+            </Select>
+          </FormControl>
+          <FormControl sx={{ minWidth: 220 }}>
             <InputLabel id="summary-signal-label">Signal</InputLabel>
             <Select
               inputProps={{ "aria-label": "Signal" }}
@@ -161,12 +204,14 @@ export default function SummaryPage() {
               value={goldenSignal}
               onChange={(event) => setGoldenSignal(event.target.value)}
             >
-              <option value="">All offending</option>
+              <option value="">All signals</option>
               <option value="error">Error</option>
               <option value="availability">Availability</option>
               <option value="latency">Latency</option>
               <option value="saturation">Saturation</option>
               <option value="traffic">Traffic</option>
+              <option value="information">Information</option>
+              <option value="unknown">Unknown</option>
             </Select>
           </FormControl>
           <Button disabled={loading} type="submit" variant="secondary">
@@ -176,9 +221,14 @@ export default function SummaryPage() {
       </Stack>
 
       {error && <Alert severity="error">{error}</Alert>}
-      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" } }}>
+      {fallbackNotice && <Alert severity="info">{fallbackNotice}</Alert>}
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" } }}>
         <Metric label="Raw lines" value={data ? String(data.reduction.raw_log_lines) : "n/a"} />
         <Metric label="Offending templates" value={data ? String(data.reduction.offending_templates) : "n/a"} />
+        <Metric
+          label="Visible templates"
+          value={data ? String(data.reduction.visible_templates ?? data.total) : "n/a"}
+        />
         <Metric
           label="Review reduction"
           value={data ? formatPercent(data.reduction.estimated_review_reduction) : "n/a"}
@@ -187,7 +237,13 @@ export default function SummaryPage() {
 
       <Card>
         {!loading && data && data.items.length === 0 ? (
-          <EmptyState title="No Data Found" />
+          <EmptyState title={summaryScope === "attention" && !goldenSignal ? "No attention templates found" : "No Data Found"}>
+            <Typography color="text.secondary" variant="body2">
+              {summaryScope === "attention" && !goldenSignal
+                ? "This run did not produce error, availability, latency, saturation, or traffic templates. Switch to All templates to inspect informational and unknown patterns."
+                : "No templates match the current view and signal filters."}
+            </Typography>
+          </EmptyState>
         ) : (
           <Box sx={{ minHeight: 520 }}>
             <DataGrid

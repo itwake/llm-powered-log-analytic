@@ -12,7 +12,7 @@ from typing import Any, Iterator
 from logan_workers.activities.export import export_analysis
 from logan_workers.models import AnalysisResult, OFFENDING_SIGNALS
 from logan_workers.pipeline import AnalyzeCasePipeline
-from sqlalchemy import create_engine, delete, func, or_, select, text
+from sqlalchemy import and_, create_engine, delete, func, or_, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -2287,20 +2287,23 @@ class SQLAlchemyStore:
         case_id: str,
         run_id: str,
         golden_signal: str | None = None,
+        scope: str = "attention",
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, object] | None:
         with self._session() as session:
             rows = session.execute(
                 select(tables.LogTemplate, tables.TemplateAnnotation)
-                .join(
+                .outerjoin(
                     tables.TemplateAnnotation,
-                    tables.TemplateAnnotation.template_id == tables.LogTemplate.id,
+                    and_(
+                        tables.TemplateAnnotation.template_id == tables.LogTemplate.id,
+                        tables.TemplateAnnotation.analysis_run_id == run_id,
+                    ),
                 )
                 .where(
                     tables.LogTemplate.case_id == case_id,
                     tables.LogTemplate.analysis_run_id == run_id,
-                    tables.TemplateAnnotation.analysis_run_id == run_id,
                 )
             ).all()
             if not rows:
@@ -2343,10 +2346,22 @@ class SQLAlchemyStore:
             )
 
             items: list[dict[str, object]] = []
+            summary_scope = "all" if scope == "all" else "attention"
+            annotated_total = sum(1 for _template, annotation in rows if annotation is not None)
+            offending_total = sum(
+                1
+                for _template, annotation in rows
+                if annotation is not None and annotation.golden_signal in OFFENDING_SIGNALS
+            )
             for template, annotation in rows:
-                if golden_signal and annotation.golden_signal != golden_signal:
+                signal = annotation.golden_signal if annotation is not None else "unknown"
+                if golden_signal and signal != golden_signal:
                     continue
-                if not golden_signal and annotation.golden_signal not in OFFENDING_SIGNALS:
+                if (
+                    not golden_signal
+                    and summary_scope == "attention"
+                    and signal not in OFFENDING_SIGNALS
+                ):
                     continue
 
                 sample_with_line = sample_lines.get(template.id)
@@ -2369,16 +2384,20 @@ class SQLAlchemyStore:
                         "representative_log_id": representative_log_id,
                         "template_text": template.template_text,
                         "representative_message": representative_message,
-                        "golden_signal": annotation.golden_signal,
-                        "fault_categories": _str_list(annotation.fault_categories),
-                        "entities": _entities(annotation.entities),
+                        "golden_signal": signal,
+                        "fault_categories": _str_list(annotation.fault_categories)
+                        if annotation is not None
+                        else [],
+                        "entities": _entities(annotation.entities) if annotation is not None else {},
                         "occurrence_count": template.occurrence_count,
                         "first_seen": _iso(template.first_seen),
                         "last_seen": _iso(template.last_seen),
                         "files": _str_list(template.files),
                         "services": _str_list(template.services),
-                        "severity_score": annotation.severity_score,
-                        "confidence": annotation.confidence,
+                        "severity_score": annotation.severity_score
+                        if annotation is not None
+                        else 0.0,
+                        "confidence": annotation.confidence if annotation is not None else 0.0,
                     }
                 )
 
@@ -2402,7 +2421,10 @@ class SQLAlchemyStore:
                 "total": total,
                 "reduction": {
                     "raw_log_lines": raw_count,
-                    "offending_templates": total,
+                    "offending_templates": offending_total,
+                    "visible_templates": total,
+                    "annotated_templates": annotated_total,
+                    "scope": summary_scope,
                     "estimated_review_reduction": 1 - (total / raw_count) if raw_count else 0,
                 },
             }

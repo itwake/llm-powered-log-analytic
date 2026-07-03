@@ -78,6 +78,22 @@ def _summary_gateway_payload(gateway: MockAIPlatformAnnotationGateway) -> tuple[
     return call, text
 
 
+def test_mock_annotation_classifies_linux_auth_and_access_logs() -> None:
+    gateway = MockAIPlatformAnnotationGateway()
+
+    auth_failure = gateway._classify(
+        "sshd(pam_unix)[1234]: authentication failure; logname= uid=0 "
+        "euid=0 tty=ssh ruser= rhost=<ip> user=root"
+    )
+    assert auth_failure["golden_signal"] == "error"
+    assert "authentication" in auth_failure["fault_categories"]
+    assert "security" in auth_failure["fault_categories"]
+
+    ftp_connection = gateway._classify("ftpd[5678]: connection from <ip>")
+    assert ftp_connection["golden_signal"] == "traffic"
+    assert "network" in ftp_connection["fault_categories"]
+
+
 @pytest.mark.asyncio
 async def test_pipeline_checkout_incident_end_to_end() -> None:
     gateway = MockAIPlatformAnnotationGateway()

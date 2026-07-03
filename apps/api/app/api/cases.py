@@ -1152,6 +1152,7 @@ def data_summary(
     case_id: str,
     run_id: str,
     golden_signal: str | None = None,
+    scope: str = "attention",
     limit: int = 100,
     offset: int = 0,
     user: UserRecord = Depends(current_user),
@@ -1170,6 +1171,7 @@ def data_summary(
         case_id=case_id,
         run_id=run_id,
         golden_signal=golden_signal,
+        scope=scope,
         limit=limit,
         offset=offset,
     )
@@ -1177,16 +1179,22 @@ def data_summary(
         return report
 
     result = _require_result(store, case_id, run_id)
+    summary_scope = "all" if scope == "all" else "attention"
     annotations = {annotation.template_id: annotation for annotation in result.annotations}
     samples = {sample.template_id: sample for sample in result.samples}
     items = []
     for template in result.templates:
         annotation = annotations.get(template.template_id)
-        if not annotation:
+        signal = annotation.golden_signal if annotation else "unknown"
+        if not annotation and summary_scope != "all":
             continue
-        if golden_signal and annotation.golden_signal != golden_signal:
+        if golden_signal and signal != golden_signal:
             continue
-        if not golden_signal and annotation.golden_signal not in OFFENDING_SIGNALS:
+        if (
+            not golden_signal
+            and summary_scope == "attention"
+            and signal not in OFFENDING_SIGNALS
+        ):
             continue
         sample = samples.get(template.template_id)
         items.append(
@@ -1195,27 +1203,35 @@ def data_summary(
                 "representative_log_id": sample.log_id if sample else template.representative_log_id,
                 "template_text": template.template_text,
                 "representative_message": sample.message if sample else template.template_text,
-                "golden_signal": annotation.golden_signal,
-                "fault_categories": annotation.fault_categories,
-                "entities": annotation.entities,
+                "golden_signal": signal,
+                "fault_categories": annotation.fault_categories if annotation else [],
+                "entities": annotation.entities if annotation else {},
                 "occurrence_count": template.occurrence_count,
                 "first_seen": template.first_seen.isoformat() if template.first_seen else None,
                 "last_seen": template.last_seen.isoformat() if template.last_seen else None,
                 "files": template.files,
                 "services": template.services,
-                "severity_score": annotation.severity_score,
-                "confidence": annotation.confidence,
+                "severity_score": annotation.severity_score if annotation else 0.0,
+                "confidence": annotation.confidence if annotation else 0.0,
             }
         )
     items.sort(key=lambda item: (-item["severity_score"], item["first_seen"] or ""))
     raw_count = sum(len(file.lines) for file in result.files)
     total = len(items)
+    offending_total = sum(
+        1
+        for annotation in annotations.values()
+        if annotation.golden_signal in OFFENDING_SIGNALS
+    )
     return {
         "items": items[offset : offset + limit],
         "total": total,
         "reduction": {
             "raw_log_lines": raw_count,
-            "offending_templates": total,
+            "offending_templates": offending_total,
+            "visible_templates": total,
+            "annotated_templates": len(annotations),
+            "scope": summary_scope,
             "estimated_review_reduction": 1 - (total / raw_count) if raw_count else 0,
         },
     }

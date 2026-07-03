@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 import statistics
 import uuid
+from bisect import bisect_left
+from collections import Counter
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
@@ -32,6 +34,8 @@ DEFAULT_CAUSAL_METHODS = {
     "pgem",
     "granger_linear",
 }
+MAX_GRANGER_NODES = 24
+MAX_GRANGER_SERIES_CELLS = 6000
 
 
 def _clamp(value: float) -> float:
@@ -82,17 +86,23 @@ def _service_relation(source_lines: list[NormalizedLogLine], target_lines: list[
 
 def _support(source_times: list[datetime], target_times: list[datetime], max_lag_seconds: int) -> tuple[int, int | None]:
     lags: list[int] = []
+    source_times = sorted(source_times)
     for target in target_times:
-        preceding = [
-            int((target - source).total_seconds())
-            for source in source_times
-            if 0 < (target - source).total_seconds() <= max_lag_seconds
-        ]
-        if preceding:
-            lags.append(min(preceding))
+        insertion_index = bisect_left(source_times, target)
+        if insertion_index == 0:
+            continue
+        nearest_source = source_times[insertion_index - 1]
+        lag_seconds = int((target - nearest_source).total_seconds())
+        if 0 < lag_seconds <= max_lag_seconds:
+            lags.append(lag_seconds)
     if not lags:
         return 0, None
     return len(lags), int(statistics.median(lags))
+
+
+def _peak_time(times: list[datetime]) -> datetime:
+    counts = Counter(times)
+    return max(counts.items(), key=lambda item: (item[1], item[0]))[0]
 
 
 def _disabled_method(reason: str = "method_disabled") -> dict[str, Any]:
@@ -171,18 +181,23 @@ def infer_causal_graph(
         default=None,
     )
     granger_by_pair: dict[tuple[str, str], dict[str, Any]] = {}
+    granger_skip_reason: str | None = None
     if "granger_linear" in enabled_methods and node_ids:
         count_series = build_count_series(
             times_by_template,
             template_ids=node_ids,
             time_bin_seconds=time_bin_seconds,
         )
-        granger_by_pair = score_granger_pairs(
-            count_series.series_by_template,
-            node_ids,
-            time_bin_seconds=time_bin_seconds,
-            max_lag_bins=granger_max_lag_bins,
-        )
+        series_cells = len(node_ids) * count_series.bin_count
+        if len(node_ids) > MAX_GRANGER_NODES or series_cells > MAX_GRANGER_SERIES_CELLS:
+            granger_skip_reason = "skipped_large_problem"
+        else:
+            granger_by_pair = score_granger_pairs(
+                count_series.series_by_template,
+                node_ids,
+                time_bin_seconds=time_bin_seconds,
+                max_lag_bins=granger_max_lag_bins,
+            )
 
     for source_id in node_ids:
         for target_id in node_ids:
@@ -213,7 +228,10 @@ def infer_causal_graph(
                 else _disabled_method()
             )
             granger_evidence = (
-                granger_by_pair.get((source_id, target_id), _disabled_method("not_tested"))
+                granger_by_pair.get(
+                    (source_id, target_id),
+                    _disabled_method(granger_skip_reason or "not_tested"),
+                )
                 if "granger_linear" in enabled_methods
                 else _disabled_method()
             )
@@ -251,8 +269,8 @@ def infer_causal_graph(
             if confidence < 0.35:
                 continue
 
-            source_peak = max(source_times, key=lambda t: source_times.count(t))
-            target_peak = max(target_times, key=lambda t: target_times.count(t))
+            source_peak = _peak_time(source_times)
+            target_peak = _peak_time(target_times)
             method_parts = []
             if "temporal_precedence" in enabled_methods:
                 method_parts.append("temporal_precedence")

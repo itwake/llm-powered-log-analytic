@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import math
 import statistics
+from bisect import bisect_left, bisect_right
 from datetime import datetime
+from datetime import timedelta
 from typing import Any
 
 from logan_workers.algorithms.causal_series import clamp_score
@@ -67,23 +69,22 @@ def score_pgem_transition(
 
     source_follow_lags: list[float] = []
     for source in source_times:
-        next_lags = [
-            (target - source).total_seconds()
-            for target in target_times
-            if 0 < (target - source).total_seconds() <= max_lag_seconds
-        ]
-        if next_lags:
-            source_follow_lags.append(min(next_lags))
+        window_end = source + timedelta(seconds=max_lag_seconds)
+        first_target = bisect_right(target_times, source)
+        last_target = bisect_right(target_times, window_end)
+        if first_target < last_target:
+            source_follow_lags.append(
+                (target_times[first_target] - source).total_seconds()
+            )
 
     target_preceded_lags: list[float] = []
     for target in target_times:
-        preceding_lags = [
-            (target - source).total_seconds()
-            for source in source_times
-            if 0 < (target - source).total_seconds() <= max_lag_seconds
-        ]
-        if preceding_lags:
-            target_preceded_lags.append(min(preceding_lags))
+        window_start = target - timedelta(seconds=max_lag_seconds)
+        first_source = bisect_left(source_times, window_start)
+        target_index = bisect_left(source_times, target)
+        if first_source < target_index:
+            nearest_source = source_times[target_index - 1]
+            target_preceded_lags.append((target - nearest_source).total_seconds())
 
     support = len(source_follow_lags)
     target_coverage = len(target_preceded_lags) / target_events if target_events else 0.0

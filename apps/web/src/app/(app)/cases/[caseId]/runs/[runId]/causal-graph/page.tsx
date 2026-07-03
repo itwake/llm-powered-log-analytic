@@ -454,7 +454,13 @@ export default function CausalGraphPage() {
       <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.5fr) minmax(360px, 0.8fr)" } }}>
         <Card>
           {loading && <EmptyState title="Loading graph" />}
-          {!loading && data && data.nodes.length === 0 && <EmptyState title="No graph nodes" />}
+          {!loading && data && data.nodes.length === 0 && (
+            <EmptyState title="No graph nodes">
+              <Typography color="text.secondary" variant="body2">
+                No attention templates were detected for this run, so LogAn did not build a causal graph.
+              </Typography>
+            </EmptyState>
+          )}
           {!loading && data && data.nodes.length > 0 && (
             <Box
               aria-label="Causal directed graph"
@@ -471,7 +477,13 @@ export default function CausalGraphPage() {
               <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
                 Root Cause Candidates
               </Typography>
-              {!data?.root_cause_candidates.length && <EmptyState title="No candidates" />}
+              {!data?.root_cause_candidates.length && (
+                <EmptyState title="No candidates">
+                  <Typography color="text.secondary" variant="body2">
+                    Candidate ranking starts after attention templates are available in the causal graph.
+                  </Typography>
+                </EmptyState>
+              )}
               {data?.root_cause_candidates.map((candidate) => (
                 <Box key={candidate.template_id} sx={{ border: 1, borderColor: "divider", borderRadius: "10px", p: 1.5 }}>
                   <Typography sx={{ fontWeight: 800 }}>#{candidate.rank} {candidate.reason}</Typography>
@@ -557,7 +569,11 @@ export default function CausalGraphPage() {
             Candidate Edges
           </Typography>
           {!loading && data && data.edges.length === 0 ? (
-            <EmptyState title="No Data Found" />
+            <EmptyState title="No causal edges">
+              <Typography color="text.secondary" variant="body2">
+                No temporal or entity-linked candidate edges were found for the current graph filters.
+              </Typography>
+            </EmptyState>
           ) : (
             <Box sx={{ minHeight: 420 }}>
               <DataGrid
