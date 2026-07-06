@@ -1,4 +1,5 @@
-# .env is copied from this template and sourced by POSIX shells
-# (`set -a; source .env`), which break on CRLF line endings. Keep it LF
+# .env is copied from these templates and sourced by POSIX shells
+# (`set -a; source .env`), which break on CRLF line endings. Keep them LF
 # on every platform; the Windows dev script tolerates either ending.
 .env.example text eol=lf
+.env.full.example text eol=lf

@@ -307,8 +307,9 @@ Tests assert that model inputs are redacted, representative samples are used, an
 
 ## Environment Variables
 
-`.env.example` keeps the small always-on local block active and groups every optional
-integration in commented sections. Key defaults:
+Two templates are provided: `.env.example` is the minimal quick-start configuration with only
+the values a local run needs, and `.env.full.example` documents every supported variable with
+its default, grouped by feature. Both work as a local `.env` when copied as-is. Key defaults:
 
 - `LOGAN_LLM_PROVIDER=ai_platform`
 - `LOGAN_LLM_PROVIDER=mock` is supported for deterministic local/CI E2E analysis only; production

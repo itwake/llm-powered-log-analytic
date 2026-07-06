@@ -73,7 +73,7 @@ start/complete/fail, raw-log search access, export creation, feedback submission
 role/active changes, and retention runs. Admin audit APIs omit IP/user-agent fields and sanitize
 metadata so raw log text, credential material, database URLs, tokens, and secrets are not returned.
 
-Retention defaults are declared in `.env.example`. Running retention deletes old audit logs,
+Retention defaults are declared in `.env.full.example`. Running retention deletes old audit logs,
 scrubs old raw log text to a retained marker while preserving normalized evidence/report rows,
 deletes old export rows, deletes old step artifact records, and conservatively clears SQLAlchemy
 `analysis_runs.result_json` only when fan-out report tables can still serve reports.
