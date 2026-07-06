@@ -6,7 +6,7 @@ install the optional Drain3 extra unless your package mirror can resolve
 Drain3's legacy `jsonpickle` pin.
 
 To simply run the app locally instead of verifying it, use the README Quick
-Start: on Windows, `.\scripts\dev.ps1` bootstraps dependencies, loads `.env`,
+Start: on Windows, `.\scripts\local.ps1` bootstraps dependencies, loads `.env`,
 and starts the API plus web workbench in one command.
 
 ## Common Requirements

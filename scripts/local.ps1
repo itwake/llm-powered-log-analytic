@@ -19,9 +19,9 @@ Start only the web workbench in the current window.
 Skip dependency checks and installs; just load .env and start processes.
 
 .EXAMPLE
-.\scripts\dev.ps1
+.\scripts\local.ps1
 .EXAMPLE
-.\scripts\dev.ps1 -ApiOnly
+.\scripts\local.ps1 -ApiOnly
 #>
 [CmdletBinding()]
 param(

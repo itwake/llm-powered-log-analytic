@@ -10,7 +10,7 @@ Prerequisites: [Python 3.11+](https://www.python.org/downloads/) and
 From the repository root:
 
 ```powershell
-.\scripts\dev.ps1
+.\scripts\local.ps1
 ```
 
 The first run takes a few minutes: the script creates `.venv`, installs the Python package and
@@ -18,11 +18,11 @@ the npm workspace, and copies `.env.example` to `.env`. It then loads `.env` and
 workbench (http://localhost:3000) in a second window and the API (http://localhost:8000) in the
 current window. Stop the API with `Ctrl+C`; close the second window to stop the workbench.
 
-From cmd.exe — or when PowerShell's execution policy blocks the script — use the batch wrapper
-instead. It accepts the same switches and also works by double-clicking in Explorer:
+From cmd.exe — or when PowerShell's execution policy blocks the script — use the standalone
+batch equivalent. It accepts the same switches and also works by double-clicking in Explorer:
 
 ```bat
-scripts\dev.bat
+scripts\local.bat
 ```
 
 Then:
@@ -30,19 +30,26 @@ Then:
 1. Open http://localhost:3000 and click **Continue with SSO**. The local mock SSO signs you in
    as `logan.local@example.com`; no credentials are needed.
 2. Create a case, upload the sample logs from `tests/fixtures/logs/checkout_incident/`, and
-   start an analysis.
+   start an analysis — or let the demo script do all of that in one command:
+
+   ```powershell
+   .venv\Scripts\python.exe scripts\seed_demo_case.py
+   ```
+
+   (`make demo` on macOS/Linux.) It signs in through mock SSO, creates a case, uploads the
+   sample incident logs, runs an analysis, and prints the workbench URLs to open.
 3. The default `.env` uses the deterministic mock LLM provider, SQLite metadata, and the local
    object store, so no Docker, external database, or AI Platform credentials are required.
 
 Useful variations:
 
 ```powershell
-.\scripts\dev.ps1 -ApiOnly    # API only, in the current window
-.\scripts\dev.ps1 -WebOnly    # web workbench only, in the current window
+.\scripts\local.ps1 -ApiOnly    # API only, in the current window
+.\scripts\local.ps1 -WebOnly    # web workbench only, in the current window
 ```
 
 Note: the API reads configuration from process environment variables and does not parse `.env`
-by itself; `scripts\dev.ps1` loads it for you.
+by itself; `scripts\local.ps1` loads it for you.
 
 ### Docker quick start (API + web)
 
@@ -66,6 +73,18 @@ docker compose -f docker-compose.quickstart.yml down -v     # remove case data
 
 `make quickstart-up` / `make quickstart-down` wrap the same commands.
 
+Prefer a single container? `infra/docker/standalone.Dockerfile` packages the API and the built
+web workbench into one minimal image:
+
+```powershell
+docker build -f infra/docker/standalone.Dockerfile -t logan-standalone .
+docker run --rm -p 8000:8000 -p 3000:3000 -v logan-data:/data logan-standalone
+```
+
+It ships the same self-contained defaults (SQLite and uploads on the `logan-data` volume, mock
+LLM, mock SSO) and exits if either process dies. Intended for demos and single-user
+evaluation; production deployments use the separate api/web/worker images.
+
 ### macOS/Linux quick start
 
 Load `.env` in each shell before starting a process:
@@ -85,9 +104,58 @@ set -a; source .env; set +a
 npm run dev --workspace @logan/web
 ```
 
+## Documentation
+
+New to the codebase? A reasonable reading order:
+
+1. Quick Start above — get it running and click through one analysis.
+2. [docs/life-of-a-log-line.md](docs/life-of-a-log-line.md) — follow one log line through every
+   pipeline step to the five report views.
+3. [docs/glossary.md](docs/glossary.md) — the domain vocabulary used across the code, API, and UI.
+4. [docs/architecture.md](docs/architecture.md) and [docs/data-model.md](docs/data-model.md) —
+   runtime surfaces and the metadata tables.
+5. [docs/operations.md](docs/operations.md) and [docs/security.md](docs/security.md) — benchmark
+   evaluation, deployment, and redaction guarantees.
+6. [CONTRIBUTING.md](CONTRIBUTING.md) — the conventions to know before changing code.
+
 ## Repository Status
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, step-level analysis manifest artifacts in local object storage or S3/MinIO, RBAC case access with per-case collaborators, admin user/audit/settings/retention APIs, optional API rate limiting, Prometheus `/metrics`, optional OpenTelemetry FastAPI tracing, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads with completed-upload analysis materialization, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, evidence-first LLM-backed causal summaries with cautious evidence-based fallback, synthetic checkout incident fixtures, tests, an authenticated AI Platform-backed chat stream, a Next.js workbench shell with ECharts Temporal View and Cytoscape Causal Graph visualizations, a minimal admin view, and deployment scaffolding.
+This repository is the staged foundation for the final product. Implemented today:
+
+**Core platform**
+
+- Runnable FastAPI backend with session auth, SSO-only sign-in (mock SSO for local development),
+  RBAC case access with per-case collaborators, and organization tenant isolation.
+- Durable SQLAlchemy metadata store on SQLite or PostgreSQL with normalized analysis fan-out
+  tables, plus an explicit in-memory store for tests.
+- Local disk object store by default; optional S3/MinIO presigned single and multipart raw
+  uploads with completed-upload analysis materialization.
+- Next.js workbench with ECharts Temporal View, Cytoscape.js Causal Graph, a case chat stream
+  backed by AI Platform, and a minimal admin view.
+
+**Analysis pipeline**
+
+- Synchronous local analysis by default; optional Temporal workflow/worker path for durable runs.
+- Ingestion with hash evidence, multi-line merge, timestamp parsing, redaction, Drain-style
+  templating, representative sampling, model annotation of redacted representatives only, and
+  label broadcasting back to every line.
+- Temporal aggregation plus candidate causal evidence: temporal precedence, lift, PGEM-style
+  transition scoring, Granger-style lagged-linear scoring, and PageRank centrality.
+- Evidence-first LLM-backed causal summaries with a cautious deterministic fallback, and
+  Markdown/HTML/JSON exports.
+- Step-level progress events (`job_events`) and one safe `step_manifest` artifact per completed
+  step.
+- Synthetic checkout incident fixtures, a deterministic offline benchmark, and a synthetic scale
+  benchmark.
+
+**Operations and deployment**
+
+- Admin user/audit/settings/retention APIs, optional API rate limiting, Prometheus `/metrics`,
+  and optional OpenTelemetry tracing.
+- Optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable
+  idempotent write records, plus opt-in external temporal/log report reads.
+- SCIM v2 user and group provisioning mapped to policy groups.
+- Docker quickstart and full-stack Compose stacks, Dockerfiles, and Kubernetes manifests.
 
 ## Architecture
 
@@ -258,7 +326,7 @@ smoke runs.
 
 ## Run API and Web Together
 
-On Windows, `scripts\dev.ps1` does all of this in one command; see Quick Start above. The manual
+On Windows, `scripts\local.ps1` does all of this in one command; see Quick Start above. The manual
 path follows.
 
 The API reads process environment variables only and does not parse `.env` itself, so load `.env`
