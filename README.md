@@ -30,7 +30,14 @@ Then:
 1. Open http://localhost:3000 and click **Continue with SSO**. The local mock SSO signs you in
    as `logan.local@example.com`; no credentials are needed.
 2. Create a case, upload the sample logs from `tests/fixtures/logs/checkout_incident/`, and
-   start an analysis.
+   start an analysis — or let the demo script do all of that in one command:
+
+   ```powershell
+   .venv\Scripts\python.exe scripts\seed_demo_case.py
+   ```
+
+   (`make demo` on macOS/Linux.) It signs in through mock SSO, creates a case, uploads the
+   sample incident logs, runs an analysis, and prints the workbench URLs to open.
 3. The default `.env` uses the deterministic mock LLM provider, SQLite metadata, and the local
    object store, so no Docker, external database, or AI Platform credentials are required.
 
@@ -85,9 +92,58 @@ set -a; source .env; set +a
 npm run dev --workspace @logan/web
 ```
 
+## Documentation
+
+New to the codebase? A reasonable reading order:
+
+1. Quick Start above — get it running and click through one analysis.
+2. [docs/life-of-a-log-line.md](docs/life-of-a-log-line.md) — follow one log line through every
+   pipeline step to the five report views.
+3. [docs/glossary.md](docs/glossary.md) — the domain vocabulary used across the code, API, and UI.
+4. [docs/architecture.md](docs/architecture.md) and [docs/data-model.md](docs/data-model.md) —
+   runtime surfaces and the metadata tables.
+5. [docs/operations.md](docs/operations.md) and [docs/security.md](docs/security.md) — benchmark
+   evaluation, deployment, and redaction guarantees.
+6. [CONTRIBUTING.md](CONTRIBUTING.md) — the conventions to know before changing code.
+
 ## Repository Status
 
-This repository is the staged foundation for the final product. The current implementation includes a runnable FastAPI backend, durable SQLAlchemy metadata store with normalized PostgreSQL/SQLite analysis fan-out, step-level analysis manifest artifacts in local object storage or S3/MinIO, RBAC case access with per-case collaborators, admin user/audit/settings/retention APIs, optional API rate limiting, Prometheus `/metrics`, optional OpenTelemetry FastAPI tracing, optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable write records, opt-in temporal/log report reads over external analytics stores, an in-memory test option, local object-byte uploads, optional S3/MinIO single and multipart raw uploads with completed-upload analysis materialization, synchronous local analysis, a Temporal workflow/worker activity path for durable SQLAlchemy-backed analysis, candidate causal evidence with temporal precedence, lift, PGEM-style transition scoring, and Granger-style lagged-linear scoring, evidence-first LLM-backed causal summaries with cautious evidence-based fallback, synthetic checkout incident fixtures, tests, an authenticated AI Platform-backed chat stream, a Next.js workbench shell with ECharts Temporal View and Cytoscape Causal Graph visualizations, a minimal admin view, and deployment scaffolding.
+This repository is the staged foundation for the final product. Implemented today:
+
+**Core platform**
+
+- Runnable FastAPI backend with session auth, SSO-only sign-in (mock SSO for local development),
+  RBAC case access with per-case collaborators, and organization tenant isolation.
+- Durable SQLAlchemy metadata store on SQLite or PostgreSQL with normalized analysis fan-out
+  tables, plus an explicit in-memory store for tests.
+- Local disk object store by default; optional S3/MinIO presigned single and multipart raw
+  uploads with completed-upload analysis materialization.
+- Next.js workbench with ECharts Temporal View, Cytoscape.js Causal Graph, a case chat stream
+  backed by AI Platform, and a minimal admin view.
+
+**Analysis pipeline**
+
+- Synchronous local analysis by default; optional Temporal workflow/worker path for durable runs.
+- Ingestion with hash evidence, multi-line merge, timestamp parsing, redaction, Drain-style
+  templating, representative sampling, model annotation of redacted representatives only, and
+  label broadcasting back to every line.
+- Temporal aggregation plus candidate causal evidence: temporal precedence, lift, PGEM-style
+  transition scoring, Granger-style lagged-linear scoring, and PageRank centrality.
+- Evidence-first LLM-backed causal summaries with a cautious deterministic fallback, and
+  Markdown/HTML/JSON exports.
+- Step-level progress events (`job_events`) and one safe `step_manifest` artifact per completed
+  step.
+- Synthetic checkout incident fixtures, a deterministic offline benchmark, and a synthetic scale
+  benchmark.
+
+**Operations and deployment**
+
+- Admin user/audit/settings/retention APIs, optional API rate limiting, Prometheus `/metrics`,
+  and optional OpenTelemetry tracing.
+- Optional ClickHouse/OpenSearch analytics sink publishing with managed lifecycle and durable
+  idempotent write records, plus opt-in external temporal/log report reads.
+- SCIM v2 user and group provisioning mapped to policy groups.
+- Docker quickstart and full-stack Compose stacks, Dockerfiles, and Kubernetes manifests.
 
 ## Architecture
 

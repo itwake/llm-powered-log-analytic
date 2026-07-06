@@ -4,7 +4,7 @@ NPM ?= npm
 SCALE_PROFILE ?= quick
 SCALE_TARGET_BYTES ?=
 
-.PHONY: setup up migrate test evaluate scale-benchmark e2e lint api worker web quickstart-up quickstart-down full-stack-up full-stack-smoke full-stack-down temporal-retry-smoke openapi-snapshot
+.PHONY: setup up migrate test evaluate scale-benchmark e2e lint api worker web demo quickstart-up quickstart-down full-stack-up full-stack-smoke full-stack-down temporal-retry-smoke openapi-snapshot
 
 setup:
 	$(NPM) install
@@ -48,6 +48,9 @@ worker:
 
 web:
 	$(NPM) run dev --workspace @logan/web
+
+demo:
+	$(PYTHON) scripts/seed_demo_case.py
 
 quickstart-up:
 	$(COMPOSE) -f docker-compose.quickstart.yml up -d --build
