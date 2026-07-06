@@ -272,14 +272,30 @@ def metrics_text() -> str:
 
 
 def _route_template_for_scope(app: FastAPI, scope: dict[str, Any]) -> str:
-    for route in app.routes:
+    path = _matched_route_path(getattr(app, "routes", []), scope)
+    if path is None:
+        return "unmatched"
+    return _safe_route_label(path)
+
+
+def _matched_route_path(routes: Any, scope: dict[str, Any]) -> str | None:
+    for route in routes or []:
         try:
             match, _ = route.matches(scope)
         except Exception:
             continue
-        if match == Match.FULL:
-            return _safe_route_label(getattr(route, "path", "unknown"))
-    return "unmatched"
+        if match != Match.FULL:
+            continue
+        path = getattr(route, "path", None)
+        if isinstance(path, str) and path:
+            return path
+        # Newer FastAPI keeps included routers as wrapper objects without a
+        # path template; descend into their concrete routes.
+        nested = getattr(route, "routes", None) or getattr(
+            getattr(route, "original_router", None), "routes", None
+        )
+        return _matched_route_path(nested, scope)
+    return None
 
 
 def _pipeline_step_label(step_name: str) -> str:

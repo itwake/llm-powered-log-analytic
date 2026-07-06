@@ -203,7 +203,6 @@ async def test_sso_profile_derives_readable_name_from_email_when_claim_missing()
         sso_token_url="https://sso.example.test/token",
         sso_client_id="webapp",
     )
-    store = InMemoryStore(settings)
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as sso_http_client:
         service = SsoAuthService(app_settings=settings, http_client=sso_http_client)
         profile = await service.exchange_code(

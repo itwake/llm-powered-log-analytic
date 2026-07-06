@@ -7,7 +7,6 @@ import os
 import re
 import sys
 import time
-import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -272,6 +271,40 @@ def _wait_for_api(client: httpx.Client) -> None:
     _retry("api", check, timeout_seconds=120, interval_seconds=2)
 
 
+def _login_via_sso(client: httpx.Client, *, api_base_url: str) -> None:
+    """Establish a session through the mock SSO redirect chain.
+
+    The API advertises browser-facing SSO URLs (for example
+    http://localhost:8000/...), but this script may reach the API on a
+    different origin such as http://api:8000 inside the compose network, so
+    every in-chain API redirect is rewritten to the smoke API origin.
+    """
+    api_origin = httpx.URL(api_base_url)
+    response = client.get("/api/auth/sso/login", params={"next": "/cases"})
+    redirects = 0
+    while response.status_code in {301, 302, 303, 307, 308}:
+        location = response.headers.get("location", "")
+        _assert(bool(location), "SSO redirect response is missing a Location header")
+        target = httpx.URL(location)
+        if not target.path.startswith("/api/"):
+            # Post-login redirect back to the web workbench ends the chain.
+            break
+        if target.host and target.host != api_origin.host:
+            target = target.copy_with(
+                scheme=api_origin.scheme,
+                host=api_origin.host,
+                port=api_origin.port,
+            )
+        redirects += 1
+        _assert(redirects <= 5, "SSO login redirect chain is too long")
+        response = client.get(str(target), follow_redirects=False)
+    me = client.get("/api/auth/me")
+    _assert(
+        me.status_code == 200,
+        f"SSO session was not established: /api/auth/me returned {me.status_code}",
+    )
+
+
 def _wait_for_run(client: httpx.Client, case_id: str, run_id: str) -> dict[str, Any]:
     timeout_seconds = float(_env("LOGAN_FULL_STACK_RUN_TIMEOUT_SECONDS", "420"))
     deadline = time.monotonic() + timeout_seconds
@@ -474,27 +507,8 @@ def main() -> int:
         _log("waiting for API")
         _wait_for_api(client)
 
-        suffix = uuid.uuid4().hex[:10]
-        username = f"smoke-{suffix}"
-        password = "password123"
-        _log("registering smoke user and case")
-        _request_json(
-            client,
-            "POST",
-            "/api/auth/register",
-            json={
-                "email": f"{username}@example.com",
-                "username": username,
-                "full_name": "Full Stack Smoke",
-                "password": password,
-            },
-        )
-        _request_json(
-            client,
-            "POST",
-            "/api/auth/login",
-            json={"email_or_username": username, "password": password},
-        )
+        _log("signing in through mock SSO")
+        _login_via_sso(client, api_base_url=api_base_url)
         case = _request_json(
             client,
             "POST",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from collections.abc import AsyncIterator
 import json
 from pathlib import Path
@@ -70,14 +71,39 @@ class MockAIPlatformAnnotationGateway:
             for part in item.get("content", [])
             if isinstance(part, dict)
         )
-        text = raw_text.lower()
         metadata = kwargs.get("metadata") if isinstance(kwargs.get("metadata"), dict) else {}
         if (
             metadata.get("purpose") == "causal_summary"
             or kwargs.get("instructions") == "causal_summary_v1"
         ):
             return {"output_json": self._summarize(raw_text)}
-        return {"output_json": self._classify(text)}
+        return {"output_json": self._classify(self._classification_text(raw_text))}
+
+    @staticmethod
+    def _classification_text(raw_text: str) -> str:
+        """Reduce an annotation payload to the log-derived text only.
+
+        The annotation payload includes case metadata such as the case title,
+        and keyword classification over that metadata would leak incident
+        wording (for example "checkout 500 errors") into every template.
+        """
+        try:
+            payload = ast.literal_eval(raw_text)
+        except (ValueError, SyntaxError):
+            return raw_text.lower()
+        if not isinstance(payload, dict) or "template_context" not in payload:
+            return raw_text.lower()
+        template_context = payload.get("template_context") or {}
+        pieces: list[str] = [str(template_context.get("template_text") or "")]
+        pieces.extend(str(service) for service in template_context.get("services") or [])
+        for line in payload.get("representative_lines") or []:
+            if not isinstance(line, dict):
+                continue
+            for field in ("level", "service", "message"):
+                value = line.get(field)
+                if value:
+                    pieces.append(str(value))
+        return " ".join(piece for piece in pieces if piece).lower()
 
     async def _stream_response(self) -> AsyncIterator[dict[str, Any]]:
         message = "Mock analysis context response."

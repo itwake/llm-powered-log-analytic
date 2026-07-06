@@ -1,0 +1,9 @@
+# .env is copied from these templates and sourced by POSIX shells
+# (`set -a; source .env`), which break on CRLF line endings. Keep them LF
+# on every platform; the Windows dev script tolerates either ending.
+.env.example text eol=lf
+.env.full.example text eol=lf
+
+# cmd.exe is only fully reliable with CRLF batch files (labels and multi-line
+# blocks can misparse under LF), so pin them regardless of checkout platform.
+*.bat text eol=crlf
