@@ -10,7 +10,7 @@ Prerequisites: [Python 3.11+](https://www.python.org/downloads/) and
 From the repository root:
 
 ```powershell
-.\scripts\dev.ps1
+.\scripts\local.ps1
 ```
 
 The first run takes a few minutes: the script creates `.venv`, installs the Python package and
@@ -18,11 +18,11 @@ the npm workspace, and copies `.env.example` to `.env`. It then loads `.env` and
 workbench (http://localhost:3000) in a second window and the API (http://localhost:8000) in the
 current window. Stop the API with `Ctrl+C`; close the second window to stop the workbench.
 
-From cmd.exe — or when PowerShell's execution policy blocks the script — use the batch wrapper
-instead. It accepts the same switches and also works by double-clicking in Explorer:
+From cmd.exe — or when PowerShell's execution policy blocks the script — use the standalone
+batch equivalent. It accepts the same switches and also works by double-clicking in Explorer:
 
 ```bat
-scripts\dev.bat
+scripts\local.bat
 ```
 
 Then:
@@ -44,12 +44,12 @@ Then:
 Useful variations:
 
 ```powershell
-.\scripts\dev.ps1 -ApiOnly    # API only, in the current window
-.\scripts\dev.ps1 -WebOnly    # web workbench only, in the current window
+.\scripts\local.ps1 -ApiOnly    # API only, in the current window
+.\scripts\local.ps1 -WebOnly    # web workbench only, in the current window
 ```
 
 Note: the API reads configuration from process environment variables and does not parse `.env`
-by itself; `scripts\dev.ps1` loads it for you.
+by itself; `scripts\local.ps1` loads it for you.
 
 ### Docker quick start (API + web)
 
@@ -72,6 +72,18 @@ docker compose -f docker-compose.quickstart.yml down -v     # remove case data
 ```
 
 `make quickstart-up` / `make quickstart-down` wrap the same commands.
+
+Prefer a single container? `infra/docker/standalone.Dockerfile` packages the API and the built
+web workbench into one minimal image:
+
+```powershell
+docker build -f infra/docker/standalone.Dockerfile -t logan-standalone .
+docker run --rm -p 8000:8000 -p 3000:3000 -v logan-data:/data logan-standalone
+```
+
+It ships the same self-contained defaults (SQLite and uploads on the `logan-data` volume, mock
+LLM, mock SSO) and exits if either process dies. Intended for demos and single-user
+evaluation; production deployments use the separate api/web/worker images.
 
 ### macOS/Linux quick start
 
@@ -314,7 +326,7 @@ smoke runs.
 
 ## Run API and Web Together
 
-On Windows, `scripts\dev.ps1` does all of this in one command; see Quick Start above. The manual
+On Windows, `scripts\local.ps1` does all of this in one command; see Quick Start above. The manual
 path follows.
 
 The API reads process environment variables only and does not parse `.env` itself, so load `.env`

@@ -43,7 +43,7 @@ def _login_via_mock_sso(client: httpx.Client, api_base_url: str) -> str | None:
         return (
             "SSO is disabled on the API. Local runs need LOGAN_SSO_ENABLED=true and "
             "LOGAN_SSO_MOCK_ENABLED=true; copy .env.example to .env and start the API "
-            "with it loaded (scripts\\dev.ps1 does this)."
+            "with it loaded (scripts\\local.ps1 does this)."
         )
     hops = 0
     while response.status_code in REDIRECT_STATUSES:
@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
         except httpx.HTTPError as exc:
             return _fail(
                 f"cannot reach the API at {api_base_url} ({exc.__class__.__name__}). "
-                "Start it first: scripts\\dev.ps1 -ApiOnly, or see the README Quick Start."
+                "Start it first: scripts\\local.ps1 -ApiOnly, or see the README Quick Start."
             )
         if health.status_code != 200:
             return _fail(f"API health check returned HTTP {health.status_code}.")

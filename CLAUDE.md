@@ -16,13 +16,13 @@ npm run e2e                                  # Playwright; self-contained, start
 make openapi-snapshot                        # regenerate docs/openapi.snapshot.json after API changes
 python -m logan_workers.evaluation.run --benchmark benchmarks/logan/checkout_incident \
   --out .logan/evaluation/report.json        # deterministic benchmark; non-zero exit = blocker
-scripts\dev.ps1                              # Windows: bootstrap + run API and web (loads .env)
+scripts\local.ps1                              # Windows: bootstrap + run API and web (loads .env)
 python scripts/seed_demo_case.py             # seed a demo case against a running API
 ```
 
 Local run: API `uvicorn app.main:app --reload --app-dir apps/api` + web
 `npm run dev --workspace @logan/web`. The API reads process env only — it does **not** parse
-`.env`; load it first (`scripts\dev.ps1` does, or `set -a; source .env; set +a`).
+`.env`; load it first (`scripts\local.ps1` does, or `set -a; source .env; set +a`).
 
 ## Architecture crib
 
