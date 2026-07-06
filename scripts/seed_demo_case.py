@@ -79,15 +79,34 @@ def main(argv: list[str] | None = None) -> int:
         default=os.getenv("LOGAN_DEMO_WEB_BASE_URL", "http://localhost:3000"),
         help="Workbench origin used for the printed links (default: %(default)s)",
     )
+    parser.add_argument(
+        "--logs-dir",
+        default=None,
+        help=(
+            "Directory of *.log / *.log.gz files to upload instead of the small test "
+            "fixtures; use demo/logs after running scripts/generate_demo_logs.py"
+        ),
+    )
     args = parser.parse_args(argv)
     api_base_url = args.api_base_url.rstrip("/")
     web_base_url = args.web_base_url.rstrip("/")
 
-    missing = [name for name in FIXTURE_NAMES if not (FIXTURE_DIR / name).is_file()]
-    if missing:
-        return _fail(f"sample logs not found under {FIXTURE_DIR}: {', '.join(missing)}")
+    if args.logs_dir:
+        logs_dir = Path(args.logs_dir)
+        log_files = sorted(logs_dir.glob("*.log")) + sorted(logs_dir.glob("*.log.gz"))
+        if not log_files:
+            return _fail(
+                f"no *.log or *.log.gz files under {logs_dir}; "
+                "run scripts/generate_demo_logs.py first."
+            )
+    else:
+        log_files = [FIXTURE_DIR / name for name in FIXTURE_NAMES]
+        missing = [path.name for path in log_files if not path.is_file()]
+        if missing:
+            return _fail(f"sample logs not found under {FIXTURE_DIR}: {', '.join(missing)}")
 
-    with httpx.Client(base_url=api_base_url, timeout=300) as client:
+    # trust_env=False keeps local API calls off any configured HTTP(S) proxy.
+    with httpx.Client(base_url=api_base_url, timeout=300, trust_env=False) as client:
         try:
             health = client.get("/healthz")
         except httpx.HTTPError as exc:
@@ -121,13 +140,15 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"created case {case_id}")
 
         file_ids: list[str] = []
-        for name in FIXTURE_NAMES:
-            content = (FIXTURE_DIR / name).read_bytes()
+        for path in log_files:
+            name = path.name
+            content = path.read_bytes()
+            content_type = "application/gzip" if name.endswith(".gz") else "text/plain"
             upload = client.post(
                 f"/api/cases/{case_id}/uploads",
                 json={
                     "filename": name,
-                    "content_type": "text/plain",
+                    "content_type": content_type,
                     "size_bytes": len(content),
                 },
             )
@@ -143,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
             put = client.put(
                 info["upload_url"],
                 content=content,
-                headers={"Content-Type": "text/plain"},
+                headers={"Content-Type": content_type},
             )
             if put.status_code != 200:
                 return _fail(f"upload of {name} failed: HTTP {put.status_code}")
