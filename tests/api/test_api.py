@@ -7,7 +7,6 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 import zipfile
 
-import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 
