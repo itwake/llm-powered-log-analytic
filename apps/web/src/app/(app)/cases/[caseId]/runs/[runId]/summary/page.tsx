@@ -14,21 +14,9 @@ import Link from "@/components/Link";
 import { reportsApi, SummaryResponse } from "@/lib/api";
 import type { SummaryItem } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, formatPercent, valueLabel } from "@/lib/format";
+import { signalColor, stripLeadingTimestamp } from "@/lib/signals";
 import { Metric } from "@/components/Shell";
-import { Badge, Button, Card, EmptyState } from "@/components/ui";
-
-function signalTone(signal: string) {
-  if (signal === "error") {
-    return "danger";
-  }
-  if (signal === "availability" || signal === "saturation") {
-    return "warning";
-  }
-  if (signal === "information") {
-    return "neutral";
-  }
-  return "info";
-}
+import { Button, Card, ColorBadge, EmptyState } from "@/components/ui";
 
 type SummaryScope = "attention" | "all";
 
@@ -112,7 +100,11 @@ export default function SummaryPage() {
         field: "golden_signal",
         headerName: "Signal",
         minWidth: 130,
-        renderCell: (params) => <Badge tone={signalTone(params.row.golden_signal)}>{params.row.golden_signal}</Badge>,
+        renderCell: (params) => (
+          <ColorBadge color={signalColor(params.row.golden_signal)}>
+            {params.row.golden_signal}
+          </ColorBadge>
+        ),
       },
       {
         field: "representative_message",
@@ -121,7 +113,9 @@ export default function SummaryPage() {
         minWidth: 320,
         renderCell: (params) => (
           <Box sx={{ py: 1, whiteSpace: "normal", overflowWrap: "anywhere" }}>
-            <Typography variant="body2">{params.row.representative_message}</Typography>
+            <Typography variant="body2">
+              {stripLeadingTimestamp(params.row.representative_message)}
+            </Typography>
             <Typography color="text.secondary" variant="caption">
               {params.row.fault_categories.join(", ") || "uncategorized"}
             </Typography>
@@ -176,12 +170,18 @@ export default function SummaryPage() {
         sx={{ alignItems: { xs: "flex-start", md: "center" }, justifyContent: "space-between" }}
         onSubmit={submit}
       >
-        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
-          Data Summary
-        </Typography>
+        <Box>
+          <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+            Data Summary
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            Each row is one message pattern standing in for many log entries - start here to see
+            what happened without reading everything.
+          </Typography>
+        </Box>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ width: { xs: "100%", md: "auto" } }}>
           <FormControl sx={{ minWidth: 220 }}>
-            <InputLabel id="summary-scope-label">View</InputLabel>
+            <InputLabel id="summary-scope-label" shrink>View</InputLabel>
             <Select
               inputProps={{ "aria-label": "View" }}
               label="View"
@@ -195,7 +195,7 @@ export default function SummaryPage() {
             </Select>
           </FormControl>
           <FormControl sx={{ minWidth: 220 }}>
-            <InputLabel id="summary-signal-label">Signal</InputLabel>
+            <InputLabel id="summary-signal-label" shrink>Signal</InputLabel>
             <Select
               inputProps={{ "aria-label": "Signal" }}
               label="Signal"

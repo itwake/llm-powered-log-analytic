@@ -123,6 +123,32 @@ export function Badge({ children, tone = "neutral", variant = "outlined", ...pro
   );
 }
 
+interface ColorBadgeProps extends Omit<ChipProps, "children" | "color" | "size" | "label"> {
+  color: string;
+  children?: ReactNode;
+}
+
+/** A chip tinted with an arbitrary semantic color (used for golden signals and log levels). */
+export function ColorBadge({ children, color, sx, ...props }: ColorBadgeProps) {
+  const sxArray = Array.isArray(sx) ? sx : sx ? [sx] : [];
+  return (
+    <Chip
+      label={children}
+      size="small"
+      sx={[
+        {
+          bgcolor: `${color}1a`,
+          border: `1px solid ${color}59`,
+          color,
+          fontWeight: 700,
+        },
+        ...sxArray,
+      ]}
+      {...props}
+    />
+  );
+}
+
 interface CardProps extends Omit<MuiCardProps, "variant"> {
   children: ReactNode;
   tone?: CardTone;

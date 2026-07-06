@@ -147,9 +147,15 @@ export default function CausalSummaryPage() {
   return (
     <Stack spacing={2.5}>
       <Stack direction={{ xs: "column", lg: "row" }} spacing={2} sx={{ alignItems: { xs: "flex-start", lg: "center" }, justifyContent: "space-between" }}>
-        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
-          Causal Summary
-        </Typography>
+        <Box>
+          <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+            Causal Summary
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            An evidence-first narrative of the likely cause - every claim links back to raw log
+            lines, and wording stays cautious until humans validate.
+          </Typography>
+        </Box>
         <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
           {!editing && data && (
             <Button type="button" onClick={startEditing}>

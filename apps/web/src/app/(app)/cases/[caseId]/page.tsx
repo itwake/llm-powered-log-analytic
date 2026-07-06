@@ -392,7 +392,7 @@ export default function CaseWorkspacePage() {
                     <Badge tone={statusTone(caseRecord.status)}>{caseRecord.status}</Badge>
                     {latestRun && <Badge tone={statusTone(latestRun.status)}>{latestRun.status}</Badge>}
                   </Stack>
-                  <Typography component="h1" sx={{ fontWeight: 850, overflowWrap: "anywhere" }} variant="h3">
+                  <Typography component="h1" sx={{ fontWeight: 850, overflowWrap: "anywhere" }} variant="h4">
                     {valueLabel(caseRecord.title)}
                   </Typography>
                   <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
@@ -417,7 +417,16 @@ export default function CaseWorkspacePage() {
                   <Button disabled={savingCase || deletingCase} variant="secondary" onClick={() => setEditingCase((current) => !current)}>
                     {editingCase ? "Close edit" : "Edit case"}
                   </Button>
-                  <Button disabled={deletingCase} variant="danger" onClick={() => void deleteCase()}>
+                  <Button
+                    disabled={deletingCase}
+                    sx={{
+                      bgcolor: "transparent",
+                      color: "error.main",
+                      "&:hover": { bgcolor: "rgba(211,47,47,0.08)" },
+                    }}
+                    variant="ghost"
+                    onClick={() => void deleteCase()}
+                  >
                     {deletingCase ? "Deleting" : "Delete case"}
                   </Button>
                 </Stack>

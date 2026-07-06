@@ -331,6 +331,11 @@ class MockAIPlatformAnnotationGateway:
             return "selected evidence"
         service = item.get("service") or "unknown service"
         template = item.get("template_text") or item.get("redacted_message") or "selected evidence"
+        # Parser placeholders and timestamp remnants read as noise in prose.
+        template = re.sub(r"\s*<\*>\s*", " ", str(template)).strip()
+        template = re.sub(r"\s+", " ", template)
+        if len(template) > 110:
+            template = f"{template[:107]}..."
         return f"service `{service}`, template `{template}`"
 
     def _summary_source(self, packet: dict[str, Any]) -> dict[str, Any] | None:
@@ -367,7 +372,7 @@ class MockAIPlatformAnnotationGateway:
     def _summarize(self, text: str) -> dict[str, Any]:
         packet = self._summary_packet(text)
         log_ids = self._summary_log_ids(packet, text)
-        first_refs = log_ids[:3]
+        first_refs = [ref for ref in log_ids[:3] if ref and ref.strip()] or ["unknown-log"]
         source = self._summary_source(packet)
         target = self._summary_target(packet)
         source_label = self._summary_label(source)
@@ -385,7 +390,11 @@ class MockAIPlatformAnnotationGateway:
                 ),
                 "",
                 "## Evidence Claims",
-                f"- Candidate chain is supported by evidence refs: {', '.join(first_refs)}.",
+                (
+                    f"- Candidate chain is supported by evidence refs: {', '.join(first_refs)}."
+                    if first_refs != ["unknown-log"]
+                    else "- Candidate chain evidence is listed in the evidence reference panel."
+                ),
                 "",
                 "## Uncertainties",
                 "- Clock skew and deployment context are not ruled out.",

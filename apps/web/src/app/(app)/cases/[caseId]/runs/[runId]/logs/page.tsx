@@ -12,18 +12,9 @@ import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { LogItem, LogsResponse, reportsApi } from "@/lib/api";
-import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
-import { Badge, Button, Card, EmptyState } from "@/components/ui";
-
-function signalTone(signal: string) {
-  if (signal === "error") {
-    return "danger";
-  }
-  if (signal === "availability" || signal === "saturation") {
-    return "warning";
-  }
-  return "info";
-}
+import { apiErrorMessage, formatDateTime, formatUtcClockTime, valueLabel } from "@/lib/format";
+import { levelColor, signalColor } from "@/lib/signals";
+import { Badge, Button, Card, ColorBadge, EmptyState } from "@/components/ui";
 
 export default function LogsPage() {
   const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
@@ -102,15 +93,24 @@ export default function LogsPage() {
     () => [
       {
         field: "timestamp",
-        headerName: "Time",
-        minWidth: 170,
-        renderCell: (params) => formatDateTime(params.row.timestamp),
+        headerName: "Time (UTC)",
+        minWidth: 120,
+        renderCell: (params) => (
+          <Box component="code" sx={{ fontSize: 13 }}>{formatUtcClockTime(params.row.timestamp)}</Box>
+        ),
       },
       {
         field: "level",
         headerName: "Level",
-        minWidth: 100,
-        renderCell: (params) => valueLabel(params.row.level),
+        minWidth: 110,
+        renderCell: (params) => {
+          const color = levelColor(params.row.level);
+          return color ? (
+            <ColorBadge color={color}>{valueLabel(params.row.level)}</ColorBadge>
+          ) : (
+            valueLabel(params.row.level)
+          );
+        },
       },
       {
         field: "service",
@@ -146,7 +146,9 @@ export default function LogsPage() {
           <Stack spacing={0.75} sx={{ alignItems: "flex-start", py: 1, whiteSpace: "normal", overflowWrap: "anywhere" }}>
             <Typography variant="body2">{params.row.message}</Typography>
             <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
-              <Badge tone={signalTone(params.row.golden_signal)}>{params.row.golden_signal}</Badge>
+              <ColorBadge color={signalColor(params.row.golden_signal)}>
+                {params.row.golden_signal}
+              </ColorBadge>
               {params.row.fault_categories.map((category) => (
                 <Badge key={category} tone="neutral">{category}</Badge>
               ))}
@@ -167,9 +169,15 @@ export default function LogsPage() {
         sx={{ alignItems: { xs: "flex-start", lg: "center" }, justifyContent: "space-between" }}
         onSubmit={submit}
       >
-        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
-          Tabular Logs
-        </Typography>
+        <Box>
+          <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+            Tabular Logs
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            Redacted, annotated raw lines with file:line evidence - search anything, or arrive
+            here from a Temporal View bar.
+          </Typography>
+        </Box>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ width: { xs: "100%", lg: "auto" } }}>
           <TextField
             label="Keyword"
@@ -179,7 +187,7 @@ export default function LogsPage() {
             onChange={(event) => setKeyword(event.target.value)}
           />
           <FormControl sx={{ minWidth: 180 }}>
-            <InputLabel id="logs-service-label">Service</InputLabel>
+            <InputLabel id="logs-service-label" shrink>Service</InputLabel>
             <Select
               inputProps={{ "aria-label": "Service" }}
               label="Service"

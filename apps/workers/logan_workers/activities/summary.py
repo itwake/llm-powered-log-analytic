@@ -747,7 +747,13 @@ async def _call_gateway(
 
 
 def _sanitize_output_text(value: str) -> str:
-    return _safe_text(value, max_length=12000)
+    # Sanitize line by line so markdown structure (headings, lists, and blank
+    # lines between paragraphs) survives; _safe_text collapses all whitespace.
+    lines = str(value or "").splitlines()
+    sanitized = "\n".join(_safe_text(line, max_length=2000) for line in lines)
+    if len(sanitized) > 12000:
+        return f"{sanitized[:11997]}..."
+    return sanitized
 
 
 def _valid_ref_ids(ref_ids: list[str], ref_by_log_id: dict[str, EvidenceRef]) -> list[str]:

@@ -18,30 +18,18 @@ import {
   reportsApi,
 } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, formatPercent } from "@/lib/format";
-import { Badge, Button, Card, EmptyState } from "@/components/ui";
+import { cleanTemplateLabel, signalColor } from "@/lib/signals";
+import { Badge, Button, Card, ColorBadge, EmptyState } from "@/components/ui";
+
+const MAX_RENDERED_EDGES = 20;
 
 function nodeLabel(nodes: CausalNode[], nodeId: string): string {
-  return nodes.find((node) => node.id === nodeId)?.label || nodeId;
+  const node = nodes.find((candidate) => candidate.id === nodeId);
+  return node ? cleanTemplateLabel(node.label, 80) : nodeId;
 }
 
-function shortLabel(label: string): string {
-  return label.length > 34 ? `${label.slice(0, 31)}...` : label;
-}
-
-function signalColor(
-  signal: string,
-  colors: { error: string; warning: string; latency: string; primary: string },
-): string {
-  if (signal === "error") {
-    return colors.error;
-  }
-  if (signal === "availability" || signal === "saturation") {
-    return colors.warning;
-  }
-  if (signal === "latency") {
-    return colors.latency;
-  }
-  return colors.primary;
+function methodParts(method: string): string[] {
+  return method.split("+").map((part) => part.replaceAll("_", " ").trim()).filter(Boolean);
 }
 
 function evidenceRefLabel(ref: EvidenceRef): string {
@@ -151,51 +139,52 @@ export default function CausalGraphPage() {
     [data],
   );
 
-  const signalColors = useMemo(
-    () => ({
-      error: theme.palette.error.main,
-      warning: theme.palette.warning.main,
-      latency: theme.palette.secondary.main,
-      primary: theme.palette.primary.main,
-    }),
-    [theme],
-  );
+  const renderedEdgeCount = useMemo(() => {
+    if (!data) {
+      return 0;
+    }
+    return Math.min(data.edges.length, MAX_RENDERED_EDGES);
+  }, [data]);
 
   const graphElements = useMemo<cytoscape.ElementDefinition[]>(() => {
     if (!data) {
       return [];
     }
     const nodeIds = new Set(data.nodes.map((node) => node.id));
+    // Render only the strongest edges so the graph stays a readable story
+    // instead of a hairball; the full edge list lives in the table below.
+    const strongestEdges = data.edges
+      .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, MAX_RENDERED_EDGES);
     return [
       ...data.nodes.map((node) => ({
         data: {
           id: node.id,
-          label: shortLabel(node.label),
+          label: cleanTemplateLabel(node.label, 44),
           fullLabel: node.label,
           signal: node.golden_signal,
           confidence: node.confidence,
           occurrenceCount: node.occurrence_count,
           rankScore: node.rank_score,
-          color: signalColor(node.golden_signal, signalColors),
+          color: signalColor(node.golden_signal),
         },
         classes: rootTemplateIds.has(node.template_id) ? "root-candidate" : "",
       })),
-      ...data.edges
-        .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
-        .map((edge) => ({
-          data: {
-            id: edge.id,
-            source: edge.source,
-            target: edge.target,
-            edgeLabel: `${edge.method} ${formatPercent(edge.confidence)}`,
-            method: edge.method,
-            confidence: edge.confidence,
-            needsValidation: edge.needs_validation,
-          },
-          classes: edge.needs_validation ? "needs-validation" : "",
-        })),
+      ...strongestEdges.map((edge) => ({
+        data: {
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          confidenceLabel: formatPercent(edge.confidence),
+          method: edge.method,
+          confidence: edge.confidence,
+          needsValidation: edge.needs_validation,
+        },
+        classes: edge.needs_validation ? "needs-validation" : "",
+      })),
     ];
-  }, [data, rootTemplateIds, signalColors]);
+  }, [data, rootTemplateIds]);
 
   const selectedNode = useMemo(
     () => selection?.kind === "node" ? data?.nodes.find((node) => node.id === selection.id) || null : null,
@@ -276,15 +265,14 @@ export default function CausalGraphPage() {
           selector: "edge",
           style: {
             "curve-style": "bezier",
-            "font-size": "9px",
-            label: "data(edgeLabel)",
-            "line-color": theme.palette.text.secondary,
-            "target-arrow-color": theme.palette.text.secondary,
+            "line-color": "#94a3b8",
+            "line-opacity": (edge: cytoscape.EdgeSingular) => {
+              const confidence = Number(edge.data("confidence"));
+              return Math.max(0.3, Math.min(0.95, confidence || 0.3));
+            },
+            "target-arrow-color": "#94a3b8",
             "target-arrow-shape": "triangle",
-            "text-background-color": "#ffffff",
-            "text-background-opacity": 0.82,
-            "text-background-padding": "2px",
-            width: "mapData(confidence, 0, 1, 1, 6)",
+            width: "mapData(confidence, 0, 1, 1.5, 6)",
           },
         },
         {
@@ -296,8 +284,15 @@ export default function CausalGraphPage() {
         {
           selector: "edge:selected",
           style: {
-            "line-color": theme.palette.text.primary,
-            "target-arrow-color": theme.palette.text.primary,
+            "font-size": "11px",
+            "font-weight": "bold",
+            label: "data(confidenceLabel)",
+            "line-color": theme.palette.primary.main,
+            "line-opacity": 1,
+            "target-arrow-color": theme.palette.primary.main,
+            "text-background-color": "#ffffff",
+            "text-background-opacity": 0.9,
+            "text-background-padding": "3px",
             width: "5px",
           },
         },
@@ -371,9 +366,15 @@ export default function CausalGraphPage() {
       },
       {
         field: "method",
-        headerName: "Method",
-        minWidth: 140,
-        renderCell: (params) => <Badge tone="info">{params.row.method}</Badge>,
+        headerName: "Evidence methods",
+        minWidth: 220,
+        renderCell: (params) => (
+          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.5, py: 1 }}>
+            {methodParts(params.row.method).map((part) => (
+              <Badge key={part} tone="info">{part}</Badge>
+            ))}
+          </Stack>
+        ),
       },
       {
         field: "confidence",
@@ -426,9 +427,15 @@ export default function CausalGraphPage() {
         sx={{ alignItems: { xs: "flex-start", lg: "center" }, justifyContent: "space-between" }}
         onSubmit={submit}
       >
-        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
-          Causal Graph
-        </Typography>
+        <Box>
+          <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+            Causal Graph
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            Arrows point from candidate cause to symptom. Click a node or edge to see its
+            evidence; nothing here is a proven root cause.
+          </Typography>
+        </Box>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: { xs: "stretch", sm: "center" }, width: { xs: "100%", lg: "auto" } }}>
           <Box component="label" sx={{ color: "text.secondary", display: "grid", gap: 0.5, minWidth: 260 }}>
             <Typography component="span" variant="caption">
@@ -462,12 +469,30 @@ export default function CausalGraphPage() {
             </EmptyState>
           )}
           {!loading && data && data.nodes.length > 0 && (
-            <Box
-              aria-label="Causal directed graph"
-              className="cytoscape-container"
-              data-testid="cytoscape-graph"
-              ref={graphElement}
-            />
+            <Stack spacing={1.5}>
+              <Stack direction="row" sx={{ alignItems: "center", flexWrap: "wrap", gap: 1.5 }}>
+                {["error", "availability", "saturation", "traffic"].map((signal) => (
+                  <Stack direction="row" key={signal} spacing={0.5} sx={{ alignItems: "center" }}>
+                    <Box sx={{ bgcolor: signalColor(signal), borderRadius: "50%", height: 10, width: 10 }} />
+                    <Typography color="text.secondary" variant="caption">{signal}</Typography>
+                  </Stack>
+                ))}
+                <Typography color="text.secondary" variant="caption">
+                  | size = causal rank | red ring = root-cause candidate | dashed = needs validation
+                </Typography>
+                {data.edges.length > renderedEdgeCount && (
+                  <Typography color="text.secondary" variant="caption">
+                    | strongest {renderedEdgeCount} of {data.edges.length} edges drawn (full list below)
+                  </Typography>
+                )}
+              </Stack>
+              <Box
+                aria-label="Causal directed graph"
+                className="cytoscape-container"
+                data-testid="cytoscape-graph"
+                ref={graphElement}
+              />
+            </Stack>
           )}
         </Card>
 
@@ -504,13 +529,13 @@ export default function CausalGraphPage() {
               {selectedNode && (
                 <Stack data-testid="causal-detail-panel" spacing={2}>
                   <Typography component="h3" sx={{ fontWeight: 800 }} variant="subtitle1">
-                    {selectedNode.label}
+                    {cleanTemplateLabel(selectedNode.label, 120)}
                   </Typography>
                   <DetailList>
                     <dt>Template</dt>
                     <dd>{selectedNode.template_id}</dd>
                     <dt>Signal</dt>
-                    <dd>{selectedNode.golden_signal}</dd>
+                    <dd><ColorBadge color={signalColor(selectedNode.golden_signal)}>{selectedNode.golden_signal}</ColorBadge></dd>
                     <dt>Occurrence</dt>
                     <dd>{selectedNode.occurrence_count}</dd>
                     <dt>Rank</dt>
@@ -539,8 +564,14 @@ export default function CausalGraphPage() {
                     {nodeLabel(data?.nodes || [], selectedEdge.target)}
                   </Typography>
                   <DetailList>
-                    <dt>Method</dt>
-                    <dd>{selectedEdge.method}</dd>
+                    <dt>Evidence methods</dt>
+                    <dd>
+                      <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.5 }}>
+                        {methodParts(selectedEdge.method).map((part) => (
+                          <Badge key={part} tone="info">{part}</Badge>
+                        ))}
+                      </Stack>
+                    </dd>
                     <dt>Confidence</dt>
                     <dd>{formatPercent(selectedEdge.confidence)}</dd>
                     <dt>Validation</dt>
