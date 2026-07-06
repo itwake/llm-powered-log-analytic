@@ -18,10 +18,11 @@ the npm workspace, and copies `.env.example` to `.env`. It then loads `.env` and
 workbench (http://localhost:3000) in a second window and the API (http://localhost:8000) in the
 current window. Stop the API with `Ctrl+C`; close the second window to stop the workbench.
 
-If PowerShell blocks the script, run it as:
+From cmd.exe — or when PowerShell's execution policy blocks the script — use the batch wrapper
+instead. It accepts the same switches and also works by double-clicking in Explorer:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\dev.ps1
+```bat
+scripts\dev.bat
 ```
 
 Then:
