@@ -4,7 +4,7 @@ NPM ?= npm
 SCALE_PROFILE ?= quick
 SCALE_TARGET_BYTES ?=
 
-.PHONY: setup up migrate test evaluate scale-benchmark e2e lint api worker web full-stack-up full-stack-smoke full-stack-down temporal-retry-smoke openapi-snapshot
+.PHONY: setup up migrate test evaluate scale-benchmark e2e lint api worker web quickstart-up quickstart-down full-stack-up full-stack-smoke full-stack-down temporal-retry-smoke openapi-snapshot
 
 setup:
 	$(NPM) install
@@ -48,6 +48,12 @@ worker:
 
 web:
 	$(NPM) run dev --workspace @logan/web
+
+quickstart-up:
+	$(COMPOSE) -f docker-compose.quickstart.yml up -d --build
+
+quickstart-down:
+	$(COMPOSE) -f docker-compose.quickstart.yml down --remove-orphans
 
 full-stack-up:
 	$(COMPOSE) up -d --build postgres redis minio minio-init clickhouse opensearch temporal api worker

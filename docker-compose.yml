@@ -52,6 +52,10 @@ services:
     build:
       context: .
       dockerfile: infra/docker/web.Dockerfile
+      args:
+        # NEXT_PUBLIC_* values are inlined into the client bundle at build
+        # time; the runtime environment value alone does not reach browsers.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
     ports:
       - "${LOGAN_WEB_PORT:-3000}:3000"
     environment:

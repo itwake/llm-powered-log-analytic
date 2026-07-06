@@ -41,8 +41,33 @@ Useful variations:
 ```
 
 Note: the API reads configuration from process environment variables and does not parse `.env`
-by itself; `scripts\dev.ps1` loads it for you. On macOS/Linux, load it in each shell before
-starting a process:
+by itself; `scripts\dev.ps1` loads it for you.
+
+### Docker quick start (API + web)
+
+With Docker Desktop (or any Docker Engine with Compose) you can skip the Python/Node setup
+entirely:
+
+```powershell
+docker compose -f docker-compose.quickstart.yml up --build -d
+```
+
+This builds and starts only the API (http://localhost:8000) and the web workbench
+(http://localhost:3000) with the same self-contained defaults: SQLite metadata and uploaded
+bytes on a named volume, mock LLM analysis, and mock SSO sign-in. No database, MinIO, Temporal,
+ClickHouse, or OpenSearch containers are involved; the full-stack `docker-compose.yml` remains
+available for that. Stop with:
+
+```powershell
+docker compose -f docker-compose.quickstart.yml down        # keep case data
+docker compose -f docker-compose.quickstart.yml down -v     # remove case data
+```
+
+`make quickstart-up` / `make quickstart-down` wrap the same commands.
+
+### macOS/Linux quick start
+
+Load `.env` in each shell before starting a process:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
