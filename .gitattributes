@@ -7,3 +7,6 @@
 # cmd.exe is only fully reliable with CRLF batch files (labels and multi-line
 # blocks can misparse under LF), so pin them regardless of checkout platform.
 *.bat text eol=crlf
+
+# Shell scripts are executed inside Linux containers and break under CRLF.
+*.sh text eol=lf

@@ -87,6 +87,7 @@ def test_dockerfiles_use_ubuntu_2404_external_base_images() -> None:
         REPO_ROOT / "infra" / "docker" / "api.Dockerfile",
         REPO_ROOT / "infra" / "docker" / "worker.Dockerfile",
         REPO_ROOT / "infra" / "docker" / "web.Dockerfile",
+        REPO_ROOT / "infra" / "docker" / "standalone.Dockerfile",
     ]
 
     for dockerfile in dockerfiles:
