@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logan-config
+  namespace: logan
+data:
+  # EKS serves the API behind an AWS load balancer, so uvicorn must trust
+  # forwarded proto/host headers from the in-cluster proxy chain.
+  FORWARDED_ALLOW_IPS: "*"
+  LOGAN_ENV: "production"
+  LOGAN_LLM_PROVIDER: "ai_platform"
+  LOGAN_AI_PLATFORM_MODEL: "gpt-5.4"
+  LOGAN_AI_PLATFORM_REASONING_EFFORT: "high"
+  LOGAN_LOG_LEVEL: "INFO"
+  LOGAN_API_WORKERS: "2"
+  LOGAN_METRICS_ENABLED: "true"
+  LOGAN_METRICS_PATH: "/metrics"
+  LOGAN_SSO_ENABLED: "true"
+  LOGAN_SSO_AUTHORIZE_URL: "https://sso.example.com/realms/persons/protocol/openid-connect/auth"
+  LOGAN_SSO_TOKEN_URL: "https://sso.example.com/realms/persons/protocol/openid-connect/token"
+  LOGAN_SSO_CLIENT_ID: "webapp"
+  LOGAN_WEB_BASE_URL: "https://logan.example.com"
+  LOGAN_CORS_ALLOWED_ORIGINS: "https://logan.example.com"
+  NEXT_PUBLIC_API_BASE_URL: ""
