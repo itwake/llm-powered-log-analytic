@@ -118,6 +118,9 @@ New to the codebase? A reasonable reading order:
    evaluation, deployment, and redaction guarantees.
 6. [CONTRIBUTING.md](CONTRIBUTING.md) — the conventions to know before changing code.
 
+Preparing a presentation? [docs/demo-guide.md](docs/demo-guide.md) scripts a 10-minute
+walkthrough over the bundled deterministic incident in `demo/logs/`.
+
 ## Repository Status
 
 This repository is the staged foundation for the final product. Implemented today:
