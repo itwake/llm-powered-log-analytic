@@ -23,10 +23,10 @@ RUN python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md constraints.txt ./
 COPY apps/api ./apps/api
 COPY apps/workers ./apps/workers
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && python -m pip install --no-cache-dir .
+    && python -m pip install --no-cache-dir . -c constraints.txt
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD python -m logan_workers.healthcheck --timeout 3
 CMD ["python", "-m", "logan_workers.temporal_worker"]
