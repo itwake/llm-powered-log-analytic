@@ -92,6 +92,11 @@ foreach ($line in Get-Content ".env") {
     if ($separator -lt 1) { continue }
     $name = $trimmed.Substring(0, $separator).Trim()
     $value = $trimmed.Substring($separator + 1).Trim()
+    if ($value.Length -ge 2 -and (
+            ($value.StartsWith('"') -and $value.EndsWith('"')) -or
+            ($value.StartsWith("'") -and $value.EndsWith("'")))) {
+        $value = $value.Substring(1, $value.Length - 2)
+    }
     Set-Item -Path "env:$name" -Value $value
 }
 
