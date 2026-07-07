@@ -335,6 +335,15 @@ export default function CausalGraphPage() {
     resizeObserver.observe(graphElement.current);
     cy.ready(() => {
       cy.fit(undefined, 34);
+      // Pre-select the top root-cause candidate so the evidence panel is
+      // populated as soon as the graph appears.
+      const initial =
+        data.nodes.find((node) => rootTemplateIds.has(node.template_id)) ||
+        [...data.nodes].sort((a, b) => (b.rank_score || 0) - (a.rank_score || 0))[0];
+      if (initial) {
+        cy.getElementById(initial.id).select();
+        setSelection((current) => current ?? { kind: "node", id: initial.id });
+      }
     });
 
     return () => {
