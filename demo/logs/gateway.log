@@ -1,0 +1,1465 @@
+2026-06-06T10:00:00Z INFO gateway request_id=req-2 POST /checkout started
+2026-06-06T10:00:00Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:00:00Z INFO gateway request_id=req-2 POST /checkout completed duration_ms=163
+2026-06-06T10:00:06Z INFO gateway request_id=req-3 POST /checkout started
+2026-06-06T10:00:07Z INFO gateway request_id=req-3 POST /checkout completed duration_ms=257
+2026-06-06T10:00:12Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:00:13Z INFO gateway request_id=req-4 POST /checkout started
+2026-06-06T10:00:13Z INFO gateway request_id=req-4 POST /checkout completed duration_ms=264
+2026-06-06T10:00:19Z INFO gateway request_id=req-5 POST /checkout started
+2026-06-06T10:00:19Z INFO gateway request_id=req-5 POST /checkout completed duration_ms=112
+2026-06-06T10:00:24Z INFO gateway request_id=req-6 POST /checkout started
+2026-06-06T10:00:24Z INFO gateway request_id=req-6 POST /checkout completed duration_ms=155
+2026-06-06T10:00:25Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:00:30Z INFO gateway request_id=req-7 POST /checkout started
+2026-06-06T10:00:30Z INFO gateway request_id=req-7 POST /checkout completed duration_ms=201
+2026-06-06T10:00:35Z INFO gateway request_id=req-8 POST /checkout started
+2026-06-06T10:00:35Z INFO gateway request_id=req-8 POST /checkout completed duration_ms=220
+2026-06-06T10:00:40Z INFO gateway request_id=req-9 POST /checkout started
+2026-06-06T10:00:40Z INFO gateway request_id=req-9 POST /checkout completed duration_ms=247
+2026-06-06T10:00:42Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:00:46Z INFO gateway request_id=req-10 POST /checkout started
+2026-06-06T10:00:47Z INFO gateway request_id=req-10 POST /checkout completed duration_ms=219
+2026-06-06T10:00:52Z INFO gateway request_id=req-11 POST /checkout started
+2026-06-06T10:00:52Z INFO gateway request_id=req-11 POST /checkout completed duration_ms=100
+2026-06-06T10:00:56Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:00:59Z INFO gateway request_id=req-12 POST /checkout started
+2026-06-06T10:00:59Z INFO gateway request_id=req-12 POST /checkout completed duration_ms=185
+2026-06-06T10:01:05Z INFO gateway request_id=req-13 POST /checkout started
+2026-06-06T10:01:05Z INFO gateway request_id=req-13 POST /checkout completed duration_ms=235
+2026-06-06T10:01:08Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:01:11Z INFO gateway request_id=req-14 POST /checkout started
+2026-06-06T10:01:12Z INFO gateway request_id=req-14 POST /checkout completed duration_ms=326
+2026-06-06T10:01:19Z INFO gateway request_id=req-15 POST /checkout started
+2026-06-06T10:01:19Z INFO gateway request_id=req-15 POST /checkout completed duration_ms=106
+2026-06-06T10:01:25Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:01:25Z INFO gateway request_id=req-16 POST /checkout started
+2026-06-06T10:01:25Z INFO gateway request_id=req-16 POST /checkout completed duration_ms=382
+2026-06-06T10:01:33Z INFO gateway request_id=req-17 POST /checkout started
+2026-06-06T10:01:33Z INFO gateway request_id=req-17 POST /checkout completed duration_ms=126
+2026-06-06T10:01:41Z INFO gateway request_id=req-18 POST /checkout started
+2026-06-06T10:01:41Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:01:41Z INFO gateway request_id=req-18 POST /checkout completed duration_ms=168
+2026-06-06T10:01:47Z INFO gateway request_id=req-19 POST /checkout started
+2026-06-06T10:01:47Z INFO gateway request_id=req-19 POST /checkout completed duration_ms=132
+2026-06-06T10:01:52Z INFO gateway request_id=req-20 POST /checkout started
+2026-06-06T10:01:52Z INFO gateway request_id=req-20 POST /checkout completed duration_ms=266
+2026-06-06T10:01:57Z INFO gateway request_id=req-21 POST /checkout started
+2026-06-06T10:01:57Z INFO gateway request_id=req-21 POST /checkout completed duration_ms=119
+2026-06-06T10:01:57Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:02:01Z INFO gateway request_id=req-22 POST /checkout started
+2026-06-06T10:02:01Z INFO gateway request_id=req-22 POST /checkout completed duration_ms=420
+2026-06-06T10:02:06Z INFO gateway request_id=req-23 POST /checkout started
+2026-06-06T10:02:06Z INFO gateway request_id=req-23 POST /checkout completed duration_ms=109
+2026-06-06T10:02:13Z INFO gateway request_id=req-24 POST /checkout started
+2026-06-06T10:02:13Z INFO gateway request_id=req-24 POST /checkout completed duration_ms=200
+2026-06-06T10:02:15Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:02:17Z INFO gateway request_id=req-25 POST /checkout started
+2026-06-06T10:02:18Z INFO gateway request_id=req-25 POST /checkout completed duration_ms=128
+2026-06-06T10:02:24Z INFO gateway request_id=req-26 POST /checkout started
+2026-06-06T10:02:24Z INFO gateway request_id=req-26 POST /checkout completed duration_ms=414
+2026-06-06T10:02:28Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:02:28Z INFO gateway request_id=req-27 POST /checkout started
+2026-06-06T10:02:29Z INFO gateway request_id=req-27 POST /checkout completed duration_ms=248
+2026-06-06T10:02:35Z INFO gateway request_id=req-28 POST /checkout started
+2026-06-06T10:02:36Z INFO gateway request_id=req-28 POST /checkout completed duration_ms=358
+2026-06-06T10:02:42Z INFO gateway request_id=req-29 POST /checkout started
+2026-06-06T10:02:43Z INFO gateway request_id=req-29 POST /checkout completed duration_ms=345
+2026-06-06T10:02:44Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:02:47Z INFO gateway request_id=req-30 POST /checkout started
+2026-06-06T10:02:47Z INFO gateway request_id=req-30 POST /checkout completed duration_ms=229
+2026-06-06T10:02:54Z INFO gateway request_id=req-31 POST /checkout started
+2026-06-06T10:02:55Z INFO gateway request_id=req-31 POST /checkout completed duration_ms=269
+2026-06-06T10:03:00Z INFO gateway request_id=req-32 POST /checkout started
+2026-06-06T10:03:00Z INFO gateway request_id=req-32 POST /checkout completed duration_ms=283
+2026-06-06T10:03:00Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:03:05Z INFO gateway request_id=req-33 POST /checkout started
+2026-06-06T10:03:05Z INFO gateway request_id=req-33 POST /checkout completed duration_ms=401
+2026-06-06T10:03:09Z INFO gateway request_id=req-34 POST /checkout started
+2026-06-06T10:03:09Z INFO gateway request_id=req-34 POST /checkout completed duration_ms=130
+2026-06-06T10:03:14Z INFO gateway request_id=req-35 POST /checkout started
+2026-06-06T10:03:15Z INFO gateway request_id=req-35 POST /checkout completed duration_ms=143
+2026-06-06T10:03:15Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:03:22Z INFO gateway request_id=req-36 POST /checkout started
+2026-06-06T10:03:22Z INFO gateway request_id=req-36 POST /checkout completed duration_ms=92
+2026-06-06T10:03:29Z INFO gateway request_id=req-37 POST /checkout started
+2026-06-06T10:03:29Z INFO gateway request_id=req-37 POST /checkout completed duration_ms=238
+2026-06-06T10:03:30Z INFO gateway user profile updated user_email=alice.demo@example.com client_ip=203.0.113.167 session_id=0e943c68-0579-0896-e29d-ad8a6bd4200c
+2026-06-06T10:03:32Z INFO gateway payment method saved card_number=4111111111111111 api_key=sk_live_demo_bded96f6a581 auth_header=Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vLXVzZXIifQ.sigb27f80dc
+2026-06-06T10:03:33Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:03:34Z INFO gateway request_id=req-38 POST /checkout started
+2026-06-06T10:03:34Z INFO gateway request_id=req-38 POST /checkout completed duration_ms=361
+2026-06-06T10:03:39Z INFO gateway request_id=req-39 POST /checkout started
+2026-06-06T10:03:40Z INFO gateway request_id=req-39 POST /checkout completed duration_ms=82
+2026-06-06T10:03:46Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:03:47Z INFO gateway request_id=req-40 POST /checkout started
+2026-06-06T10:03:48Z INFO gateway request_id=req-40 POST /checkout completed duration_ms=415
+2026-06-06T10:03:54Z INFO gateway request_id=req-41 POST /checkout started
+2026-06-06T10:03:54Z INFO gateway request_id=req-41 POST /checkout completed duration_ms=203
+2026-06-06T10:03:59Z INFO gateway request_id=req-42 POST /checkout started
+2026-06-06T10:03:59Z INFO gateway request_id=req-42 POST /checkout completed duration_ms=248
+2026-06-06T10:04:03Z INFO gateway request_id=req-43 POST /checkout started
+2026-06-06T10:04:03Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:04:03Z INFO gateway request_id=req-43 POST /checkout completed duration_ms=150
+2026-06-06T10:04:08Z INFO gateway request_id=req-44 POST /checkout started
+2026-06-06T10:04:08Z INFO gateway request_id=req-44 POST /checkout completed duration_ms=159
+2026-06-06T10:04:14Z INFO gateway request_id=req-45 POST /checkout started
+2026-06-06T10:04:14Z INFO gateway request_id=req-45 POST /checkout completed duration_ms=143
+2026-06-06T10:04:19Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:04:21Z INFO gateway request_id=req-46 POST /checkout started
+2026-06-06T10:04:21Z INFO gateway request_id=req-46 POST /checkout completed duration_ms=176
+2026-06-06T10:04:25Z INFO gateway request_id=req-47 POST /checkout started
+2026-06-06T10:04:26Z INFO gateway request_id=req-47 POST /checkout completed duration_ms=153
+2026-06-06T10:04:32Z INFO gateway request_id=req-48 POST /checkout started
+2026-06-06T10:04:32Z INFO gateway request_id=req-48 POST /checkout completed duration_ms=210
+2026-06-06T10:04:33Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:04:37Z INFO gateway request_id=req-49 POST /checkout started
+2026-06-06T10:04:37Z INFO gateway request_id=req-49 POST /checkout completed duration_ms=331
+2026-06-06T10:04:44Z INFO gateway request_id=req-50 POST /checkout started
+2026-06-06T10:04:44Z INFO gateway request_id=req-50 POST /checkout completed duration_ms=321
+2026-06-06T10:04:48Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:04:51Z INFO gateway request_id=req-51 POST /checkout started
+2026-06-06T10:04:51Z INFO gateway request_id=req-51 POST /checkout completed duration_ms=347
+2026-06-06T10:04:56Z INFO gateway request_id=req-52 POST /checkout started
+2026-06-06T10:04:56Z INFO gateway request_id=req-52 POST /checkout completed duration_ms=393
+2026-06-06T10:05:01Z INFO gateway request_id=req-53 POST /checkout started
+2026-06-06T10:05:01Z INFO gateway request_id=req-53 POST /checkout completed duration_ms=108
+2026-06-06T10:05:05Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:05:08Z INFO gateway request_id=req-54 POST /checkout started
+2026-06-06T10:05:08Z INFO gateway request_id=req-54 POST /checkout completed duration_ms=166
+2026-06-06T10:05:12Z INFO gateway request_id=req-55 POST /checkout started
+2026-06-06T10:05:13Z INFO gateway request_id=req-55 POST /checkout completed duration_ms=197
+2026-06-06T10:05:18Z INFO gateway request_id=req-56 POST /checkout started
+2026-06-06T10:05:18Z INFO gateway request_id=req-56 POST /checkout completed duration_ms=157
+2026-06-06T10:05:19Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:05:22Z INFO gateway request_id=req-57 POST /checkout started
+2026-06-06T10:05:23Z INFO gateway request_id=req-57 POST /checkout completed duration_ms=149
+2026-06-06T10:05:30Z INFO gateway request_id=req-58 POST /checkout started
+2026-06-06T10:05:31Z INFO gateway request_id=req-58 POST /checkout completed duration_ms=131
+2026-06-06T10:05:35Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:05:37Z INFO gateway request_id=req-59 POST /checkout started
+2026-06-06T10:05:38Z INFO gateway request_id=req-59 POST /checkout completed duration_ms=108
+2026-06-06T10:05:45Z INFO gateway request_id=req-60 POST /checkout started
+2026-06-06T10:05:45Z INFO gateway request_id=req-60 POST /checkout completed duration_ms=164
+2026-06-06T10:05:49Z INFO gateway request_id=req-61 POST /checkout started
+2026-06-06T10:05:50Z INFO gateway request_id=req-61 POST /checkout completed duration_ms=413
+2026-06-06T10:05:53Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:05:57Z INFO gateway request_id=req-62 POST /checkout started
+2026-06-06T10:05:57Z INFO gateway request_id=req-62 POST /checkout completed duration_ms=349
+2026-06-06T10:06:02Z INFO gateway request_id=req-63 POST /checkout started
+2026-06-06T10:06:02Z INFO gateway request_id=req-63 POST /checkout completed duration_ms=142
+2026-06-06T10:06:07Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:06:10Z INFO gateway request_id=req-64 POST /checkout started
+2026-06-06T10:06:10Z INFO gateway request_id=req-64 POST /checkout completed duration_ms=211
+2026-06-06T10:06:14Z INFO gateway request_id=req-65 POST /checkout started
+2026-06-06T10:06:14Z INFO gateway request_id=req-65 POST /checkout completed duration_ms=186
+2026-06-06T10:06:20Z INFO gateway request_id=req-66 POST /checkout started
+2026-06-06T10:06:20Z INFO gateway request_id=req-66 POST /checkout completed duration_ms=305
+2026-06-06T10:06:21Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:06:25Z INFO gateway request_id=req-67 POST /checkout started
+2026-06-06T10:06:25Z INFO gateway request_id=req-67 POST /checkout completed duration_ms=305
+2026-06-06T10:06:30Z INFO gateway request_id=req-68 POST /checkout started
+2026-06-06T10:06:31Z INFO gateway request_id=req-68 POST /checkout completed duration_ms=403
+2026-06-06T10:06:34Z INFO gateway request_id=req-69 POST /checkout started
+2026-06-06T10:06:35Z INFO gateway request_id=req-69 POST /checkout completed duration_ms=123
+2026-06-06T10:06:38Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:06:42Z INFO gateway request_id=req-70 POST /checkout started
+2026-06-06T10:06:42Z INFO gateway request_id=req-70 POST /checkout completed duration_ms=153
+2026-06-06T10:06:49Z INFO gateway request_id=req-71 POST /checkout started
+2026-06-06T10:06:50Z INFO gateway request_id=req-71 POST /checkout completed duration_ms=336
+2026-06-06T10:06:53Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:06:56Z INFO gateway request_id=req-72 POST /checkout started
+2026-06-06T10:06:57Z INFO gateway request_id=req-72 POST /checkout completed duration_ms=382
+2026-06-06T10:07:04Z INFO gateway request_id=req-73 POST /checkout started
+2026-06-06T10:07:04Z INFO gateway request_id=req-73 POST /checkout completed duration_ms=212
+2026-06-06T10:07:06Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:07:09Z INFO gateway request_id=req-74 POST /checkout started
+2026-06-06T10:07:10Z INFO gateway request_id=req-74 POST /checkout completed duration_ms=387
+2026-06-06T10:07:12Z INFO gateway user profile updated user_email=bob.demo@example.com client_ip=203.0.113.93 session_id=a36dcb6d-9308-a9d3-29f2-b4a5b4f3dffe
+2026-06-06T10:07:14Z INFO gateway payment method saved card_number=4111111111111111 api_key=sk_live_demo_0cc8a0787570 auth_header=Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vLXVzZXIifQ.sig541efcc4
+2026-06-06T10:07:15Z INFO gateway request_id=req-75 POST /checkout started
+2026-06-06T10:07:15Z INFO gateway request_id=req-75 POST /checkout completed duration_ms=90
+2026-06-06T10:07:20Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:07:22Z INFO gateway request_id=req-76 POST /checkout started
+2026-06-06T10:07:22Z INFO gateway request_id=req-76 POST /checkout completed duration_ms=300
+2026-06-06T10:07:26Z INFO gateway request_id=req-77 POST /checkout started
+2026-06-06T10:07:27Z INFO gateway request_id=req-77 POST /checkout completed duration_ms=382
+2026-06-06T10:07:31Z INFO gateway request_id=req-78 POST /checkout started
+2026-06-06T10:07:32Z INFO gateway request_id=req-78 POST /checkout completed duration_ms=371
+2026-06-06T10:07:38Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:07:39Z INFO gateway request_id=req-79 POST /checkout started
+2026-06-06T10:07:39Z INFO gateway request_id=req-79 POST /checkout completed duration_ms=93
+2026-06-06T10:07:46Z INFO gateway request_id=req-80 POST /checkout started
+2026-06-06T10:07:46Z INFO gateway request_id=req-80 POST /checkout completed duration_ms=230
+2026-06-06T10:07:50Z INFO gateway request_id=req-81 POST /checkout started
+2026-06-06T10:07:50Z INFO gateway request_id=req-81 POST /checkout completed duration_ms=233
+2026-06-06T10:07:56Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:07:57Z INFO gateway request_id=req-82 POST /checkout started
+2026-06-06T10:07:57Z INFO gateway request_id=req-82 POST /checkout completed duration_ms=123
+2026-06-06T10:08:02Z INFO gateway request_id=req-83 POST /checkout started
+2026-06-06T10:08:02Z INFO gateway request_id=req-83 POST /checkout completed duration_ms=114
+2026-06-06T10:08:09Z INFO gateway request_id=req-84 POST /checkout started
+2026-06-06T10:08:09Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:08:09Z INFO gateway request_id=req-84 POST /checkout completed duration_ms=308
+2026-06-06T10:08:15Z INFO gateway request_id=req-85 POST /checkout started
+2026-06-06T10:08:15Z INFO gateway request_id=req-85 POST /checkout completed duration_ms=189
+2026-06-06T10:08:19Z INFO gateway request_id=req-86 POST /checkout started
+2026-06-06T10:08:19Z INFO gateway request_id=req-86 POST /checkout completed duration_ms=158
+2026-06-06T10:08:24Z INFO gateway request_id=req-87 POST /checkout started
+2026-06-06T10:08:25Z INFO gateway request_id=req-87 POST /checkout completed duration_ms=114
+2026-06-06T10:08:25Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:08:30Z INFO gateway request_id=req-88 POST /checkout started
+2026-06-06T10:08:30Z INFO gateway request_id=req-88 POST /checkout completed duration_ms=81
+2026-06-06T10:08:37Z INFO gateway request_id=req-89 POST /checkout started
+2026-06-06T10:08:38Z INFO gateway request_id=req-89 POST /checkout completed duration_ms=274
+2026-06-06T10:08:39Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:08:45Z INFO gateway request_id=req-90 POST /checkout started
+2026-06-06T10:08:45Z INFO gateway request_id=req-90 POST /checkout completed duration_ms=95
+2026-06-06T10:08:50Z INFO gateway request_id=req-91 POST /checkout started
+2026-06-06T10:08:50Z INFO gateway request_id=req-91 POST /checkout completed duration_ms=216
+2026-06-06T10:08:55Z INFO gateway request_id=req-92 POST /checkout started
+2026-06-06T10:08:55Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:08:55Z INFO gateway request_id=req-92 POST /checkout completed duration_ms=245
+2026-06-06T10:09:02Z INFO gateway request_id=req-93 POST /checkout started
+2026-06-06T10:09:02Z INFO gateway request_id=req-93 POST /checkout completed duration_ms=289
+2026-06-06T10:09:07Z INFO gateway request_id=req-94 POST /checkout started
+2026-06-06T10:09:08Z INFO gateway request_id=req-94 POST /checkout completed duration_ms=92
+2026-06-06T10:09:12Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:09:14Z INFO gateway request_id=req-95 POST /checkout started
+2026-06-06T10:09:14Z INFO gateway request_id=req-95 POST /checkout completed duration_ms=243
+2026-06-06T10:09:21Z INFO gateway request_id=req-96 POST /checkout started
+2026-06-06T10:09:21Z INFO gateway request_id=req-96 POST /checkout completed duration_ms=308
+2026-06-06T10:09:27Z INFO gateway request_id=req-97 POST /checkout started
+2026-06-06T10:09:27Z INFO gateway request_id=req-97 POST /checkout completed duration_ms=182
+2026-06-06T10:09:28Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:09:31Z INFO gateway request_id=req-98 POST /checkout started
+2026-06-06T10:09:32Z INFO gateway request_id=req-98 POST /checkout completed duration_ms=311
+2026-06-06T10:09:37Z INFO gateway request_id=req-99 POST /checkout started
+2026-06-06T10:09:38Z INFO gateway request_id=req-99 POST /checkout completed duration_ms=413
+2026-06-06T10:09:42Z INFO gateway request_id=req-100 POST /checkout started
+2026-06-06T10:09:42Z INFO gateway request_id=req-100 POST /checkout completed duration_ms=229
+2026-06-06T10:09:44Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:09:48Z INFO gateway request_id=req-101 POST /checkout started
+2026-06-06T10:09:48Z INFO gateway request_id=req-101 POST /checkout completed duration_ms=396
+2026-06-06T10:09:55Z INFO gateway request_id=req-102 POST /checkout started
+2026-06-06T10:09:56Z INFO gateway request_id=req-102 POST /checkout completed duration_ms=159
+2026-06-06T10:10:01Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:10:02Z INFO gateway request_id=req-103 POST /checkout started
+2026-06-06T10:10:02Z INFO gateway request_id=req-103 POST /checkout completed duration_ms=230
+2026-06-06T10:10:09Z INFO gateway request_id=req-104 POST /checkout started
+2026-06-06T10:10:09Z INFO gateway request_id=req-104 POST /checkout completed duration_ms=377
+2026-06-06T10:10:13Z INFO gateway request_id=req-105 POST /checkout started
+2026-06-06T10:10:13Z INFO gateway request_id=req-105 POST /checkout completed duration_ms=309
+2026-06-06T10:10:15Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:10:19Z INFO gateway request_id=req-106 POST /checkout started
+2026-06-06T10:10:20Z INFO gateway request_id=req-106 POST /checkout completed duration_ms=374
+2026-06-06T10:10:26Z INFO gateway request_id=req-107 POST /checkout started
+2026-06-06T10:10:27Z INFO gateway request_id=req-107 POST /checkout completed duration_ms=256
+2026-06-06T10:10:30Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:10:34Z INFO gateway request_id=req-108 POST /checkout started
+2026-06-06T10:10:34Z INFO gateway request_id=req-108 POST /checkout completed duration_ms=81
+2026-06-06T10:10:41Z INFO gateway request_id=req-109 POST /checkout started
+2026-06-06T10:10:41Z INFO gateway request_id=req-109 POST /checkout completed duration_ms=235
+2026-06-06T10:10:45Z INFO gateway request_id=req-110 POST /checkout started
+2026-06-06T10:10:45Z INFO gateway request_id=req-110 POST /checkout completed duration_ms=191
+2026-06-06T10:10:47Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:10:50Z INFO gateway request_id=req-111 POST /checkout started
+2026-06-06T10:10:51Z INFO gateway request_id=req-111 POST /checkout completed duration_ms=170
+2026-06-06T10:10:56Z INFO gateway request_id=req-112 POST /checkout started
+2026-06-06T10:10:56Z INFO gateway request_id=req-112 POST /checkout completed duration_ms=296
+2026-06-06T10:11:01Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:11:01Z INFO gateway request_id=req-113 POST /checkout started
+2026-06-06T10:11:01Z INFO gateway request_id=req-113 POST /checkout completed duration_ms=393
+2026-06-06T10:11:06Z INFO gateway request_id=req-114 POST /checkout started
+2026-06-06T10:11:06Z INFO gateway request_id=req-114 POST /checkout completed duration_ms=346
+2026-06-06T10:11:13Z INFO gateway request_id=req-115 POST /checkout started
+2026-06-06T10:11:13Z INFO gateway request_id=req-115 POST /checkout completed duration_ms=135
+2026-06-06T10:11:14Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:11:19Z INFO gateway request_id=req-116 POST /checkout started
+2026-06-06T10:11:19Z INFO gateway request_id=req-116 POST /checkout completed duration_ms=295
+2026-06-06T10:11:23Z INFO gateway request_id=req-117 POST /checkout started
+2026-06-06T10:11:24Z INFO gateway request_id=req-117 POST /checkout completed duration_ms=223
+2026-06-06T10:11:29Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:11:30Z INFO gateway request_id=req-118 POST /checkout started
+2026-06-06T10:11:30Z INFO gateway request_id=req-118 POST /checkout completed duration_ms=269
+2026-06-06T10:11:38Z INFO gateway request_id=req-119 POST /checkout started
+2026-06-06T10:11:38Z INFO gateway request_id=req-119 POST /checkout completed duration_ms=99
+2026-06-06T10:11:42Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:11:44Z INFO gateway request_id=req-120 POST /checkout started
+2026-06-06T10:11:45Z INFO gateway request_id=req-120 POST /checkout completed duration_ms=172
+2026-06-06T10:11:50Z INFO gateway request_id=req-121 POST /checkout started
+2026-06-06T10:11:50Z INFO gateway request_id=req-121 POST /checkout completed duration_ms=157
+2026-06-06T10:11:55Z INFO gateway request_id=req-122 POST /checkout started
+2026-06-06T10:11:56Z INFO gateway request_id=req-122 POST /checkout completed duration_ms=153
+2026-06-06T10:11:59Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:12:00Z INFO gateway request_id=req-123 POST /checkout started
+2026-06-06T10:12:08Z INFO gateway request_id=req-124 POST /checkout started
+2026-06-06T10:12:12Z INFO gateway request_id=req-125 POST /checkout started
+2026-06-06T10:12:13Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:12:20Z INFO gateway request_id=req-126 POST /checkout started
+2026-06-06T10:12:27Z INFO gateway request_id=req-127 POST /checkout started
+2026-06-06T10:12:28Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:12:30Z ERROR gateway request_id=req-123 POST /checkout failed status=500 duration_ms=30402
+2026-06-06T10:12:33Z INFO gateway request_id=req-128 POST /checkout started
+2026-06-06T10:12:38Z ERROR gateway request_id=req-124 POST /checkout failed status=500 duration_ms=30407
+2026-06-06T10:12:39Z INFO gateway request_id=req-129 POST /checkout started
+2026-06-06T10:12:42Z ERROR gateway request_id=req-125 POST /checkout failed status=500 duration_ms=30738
+2026-06-06T10:12:45Z INFO gateway request_id=req-130 POST /checkout started
+2026-06-06T10:12:45Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:12:50Z ERROR gateway request_id=req-126 POST /checkout failed status=500 duration_ms=30231
+2026-06-06T10:12:53Z INFO gateway request_id=req-131 POST /checkout started
+2026-06-06T10:12:57Z ERROR gateway request_id=req-127 POST /checkout failed status=500 duration_ms=31363
+2026-06-06T10:12:57Z INFO gateway request_id=req-132 POST /checkout started
+2026-06-06T10:12:58Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:13:03Z ERROR gateway request_id=req-128 POST /checkout failed status=500 duration_ms=31080
+2026-06-06T10:13:03Z INFO gateway request_id=req-133 POST /checkout started
+2026-06-06T10:13:09Z INFO gateway request_id=req-134 POST /checkout started
+2026-06-06T10:13:09Z INFO gateway request_id=req-134 POST /checkout completed duration_ms=113
+2026-06-06T10:13:09Z ERROR gateway request_id=req-129 POST /checkout failed status=500 duration_ms=30922
+2026-06-06T10:13:12Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:13:13Z INFO gateway request_id=req-135 POST /checkout started
+2026-06-06T10:13:15Z ERROR gateway request_id=req-130 POST /checkout failed status=500 duration_ms=30081
+2026-06-06T10:13:20Z INFO gateway request_id=req-136 POST /checkout started
+2026-06-06T10:13:23Z ERROR gateway request_id=req-131 POST /checkout failed status=500 duration_ms=30936
+2026-06-06T10:13:25Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:13:26Z INFO gateway request_id=req-137 POST /checkout started
+2026-06-06T10:13:27Z ERROR gateway request_id=req-132 POST /checkout failed status=500 duration_ms=30848
+2026-06-06T10:13:30Z INFO gateway request_id=req-138 POST /checkout started
+2026-06-06T10:13:33Z ERROR gateway request_id=req-133 POST /checkout failed status=500 duration_ms=31120
+2026-06-06T10:13:37Z INFO gateway request_id=req-139 POST /checkout started
+2026-06-06T10:13:38Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:13:43Z INFO gateway request_id=req-140 POST /checkout started
+2026-06-06T10:13:43Z ERROR gateway request_id=req-135 POST /checkout failed status=500 duration_ms=30546
+2026-06-06T10:13:47Z INFO gateway request_id=req-141 POST /checkout started
+2026-06-06T10:13:50Z ERROR gateway request_id=req-136 POST /checkout failed status=500 duration_ms=30215
+2026-06-06T10:13:52Z INFO gateway request_id=req-142 POST /checkout started
+2026-06-06T10:13:53Z INFO gateway request_id=req-142 POST /checkout completed duration_ms=209
+2026-06-06T10:13:56Z ERROR gateway request_id=req-137 POST /checkout failed status=500 duration_ms=30127
+2026-06-06T10:13:56Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:13:58Z INFO gateway request_id=req-143 POST /checkout started
+2026-06-06T10:14:00Z ERROR gateway request_id=req-138 POST /checkout failed status=500 duration_ms=31039
+2026-06-06T10:14:02Z INFO gateway request_id=req-144 POST /checkout started
+2026-06-06T10:14:07Z ERROR gateway request_id=req-139 POST /checkout failed status=500 duration_ms=30172
+2026-06-06T10:14:07Z INFO gateway request_id=req-145 POST /checkout started
+2026-06-06T10:14:10Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:14:12Z INFO gateway request_id=req-146 POST /checkout started
+2026-06-06T10:14:13Z ERROR gateway request_id=req-140 POST /checkout failed status=500 duration_ms=31210
+2026-06-06T10:14:17Z INFO gateway request_id=req-147 POST /checkout started
+2026-06-06T10:14:17Z ERROR gateway request_id=req-141 POST /checkout failed status=500 duration_ms=30534
+2026-06-06T10:14:22Z INFO gateway request_id=req-148 POST /checkout started
+2026-06-06T10:14:28Z INFO gateway request_id=req-149 POST /checkout started
+2026-06-06T10:14:28Z ERROR gateway request_id=req-143 POST /checkout failed status=500 duration_ms=30145
+2026-06-06T10:14:28Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:14:32Z INFO gateway request_id=req-150 POST /checkout started
+2026-06-06T10:14:32Z ERROR gateway request_id=req-144 POST /checkout failed status=500 duration_ms=30102
+2026-06-06T10:14:37Z ERROR gateway request_id=req-145 POST /checkout failed status=500 duration_ms=30076
+2026-06-06T10:14:38Z INFO gateway request_id=req-151 POST /checkout started
+2026-06-06T10:14:41Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:14:42Z INFO gateway request_id=req-152 POST /checkout started
+2026-06-06T10:14:42Z ERROR gateway request_id=req-146 POST /checkout failed status=500 duration_ms=30446
+2026-06-06T10:14:47Z ERROR gateway request_id=req-147 POST /checkout failed status=500 duration_ms=30602
+2026-06-06T10:14:50Z INFO gateway request_id=req-153 POST /checkout started
+2026-06-06T10:14:52Z ERROR gateway request_id=req-148 POST /checkout failed status=500 duration_ms=30437
+2026-06-06T10:14:56Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:14:56Z INFO gateway request_id=req-154 POST /checkout started
+2026-06-06T10:14:56Z INFO gateway request_id=req-154 POST /checkout completed duration_ms=335
+2026-06-06T10:14:58Z ERROR gateway request_id=req-149 POST /checkout failed status=500 duration_ms=31461
+2026-06-06T10:15:02Z ERROR gateway request_id=req-150 POST /checkout failed status=500 duration_ms=31105
+2026-06-06T10:15:02Z INFO gateway request_id=req-155 POST /checkout started
+2026-06-06T10:15:08Z ERROR gateway request_id=req-151 POST /checkout failed status=500 duration_ms=30605
+2026-06-06T10:15:08Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:15:08Z INFO gateway request_id=req-156 POST /checkout started
+2026-06-06T10:15:08Z INFO gateway request_id=req-156 POST /checkout completed duration_ms=284
+2026-06-06T10:15:12Z ERROR gateway request_id=req-152 POST /checkout failed status=500 duration_ms=30856
+2026-06-06T10:15:13Z INFO gateway request_id=req-157 POST /checkout started
+2026-06-06T10:15:20Z ERROR gateway request_id=req-153 POST /checkout failed status=500 duration_ms=30138
+2026-06-06T10:15:20Z INFO gateway request_id=req-158 POST /checkout started
+2026-06-06T10:15:24Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:15:24Z INFO gateway request_id=req-159 POST /checkout started
+2026-06-06T10:15:30Z INFO gateway request_id=req-160 POST /checkout started
+2026-06-06T10:15:31Z INFO gateway request_id=req-160 POST /checkout completed duration_ms=217
+2026-06-06T10:15:32Z ERROR gateway request_id=req-155 POST /checkout failed status=500 duration_ms=31432
+2026-06-06T10:15:38Z INFO gateway request_id=req-161 POST /checkout started
+2026-06-06T10:15:41Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:15:42Z INFO gateway request_id=req-162 POST /checkout started
+2026-06-06T10:15:43Z INFO gateway request_id=req-162 POST /checkout completed duration_ms=291
+2026-06-06T10:15:43Z ERROR gateway request_id=req-157 POST /checkout failed status=500 duration_ms=31409
+2026-06-06T10:15:50Z INFO gateway request_id=req-163 POST /checkout started
+2026-06-06T10:15:50Z ERROR gateway request_id=req-158 POST /checkout failed status=500 duration_ms=30281
+2026-06-06T10:15:54Z INFO gateway request_id=req-164 POST /checkout started
+2026-06-06T10:15:54Z ERROR gateway request_id=req-159 POST /checkout failed status=500 duration_ms=30567
+2026-06-06T10:15:59Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:16:00Z INFO gateway request_id=req-165 POST /checkout started
+2026-06-06T10:16:01Z INFO gateway request_id=req-165 POST /checkout completed duration_ms=314
+2026-06-06T10:16:05Z INFO gateway request_id=req-166 POST /checkout started
+2026-06-06T10:16:08Z ERROR gateway request_id=req-161 POST /checkout failed status=500 duration_ms=30281
+2026-06-06T10:16:13Z INFO gateway request_id=req-167 POST /checkout started
+2026-06-06T10:16:15Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:16:20Z ERROR gateway request_id=req-163 POST /checkout failed status=500 duration_ms=30921
+2026-06-06T10:16:20Z INFO gateway request_id=req-168 POST /checkout started
+2026-06-06T10:16:20Z INFO gateway request_id=req-168 POST /checkout completed duration_ms=349
+2026-06-06T10:16:24Z INFO gateway user profile updated user_email=carol.demo@example.com client_ip=203.0.113.226 session_id=5b755a4a-3e66-9986-ba90-702ea6fefebf
+2026-06-06T10:16:24Z ERROR gateway request_id=req-164 POST /checkout failed status=500 duration_ms=30112
+2026-06-06T10:16:26Z INFO gateway payment method saved card_number=4111111111111111 api_key=sk_live_demo_c065f54cd4e6 auth_header=Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vLXVzZXIifQ.sig4022a789
+2026-06-06T10:16:26Z INFO gateway request_id=req-169 POST /checkout started
+2026-06-06T10:16:26Z INFO gateway request_id=req-169 POST /checkout completed duration_ms=412
+2026-06-06T10:16:32Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:16:33Z INFO gateway request_id=req-170 POST /checkout started
+2026-06-06T10:16:33Z INFO gateway request_id=req-170 POST /checkout completed duration_ms=333
+2026-06-06T10:16:35Z ERROR gateway request_id=req-166 POST /checkout failed status=500 duration_ms=30540
+2026-06-06T10:16:40Z INFO gateway request_id=req-171 POST /checkout started
+2026-06-06T10:16:43Z ERROR gateway request_id=req-167 POST /checkout failed status=500 duration_ms=30958
+2026-06-06T10:16:46Z INFO gateway request_id=req-172 POST /checkout started
+2026-06-06T10:16:49Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:16:51Z INFO gateway request_id=req-173 POST /checkout started
+2026-06-06T10:16:57Z INFO gateway request_id=req-174 POST /checkout started
+2026-06-06T10:17:01Z INFO gateway request_id=req-175 POST /checkout started
+2026-06-06T10:17:04Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:17:08Z INFO gateway request_id=req-176 POST /checkout started
+2026-06-06T10:17:10Z ERROR gateway request_id=req-171 POST /checkout failed status=500 duration_ms=30546
+2026-06-06T10:17:13Z INFO gateway request_id=req-177 POST /checkout started
+2026-06-06T10:17:16Z ERROR gateway request_id=req-172 POST /checkout failed status=500 duration_ms=30309
+2026-06-06T10:17:17Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:17:18Z INFO gateway request_id=req-178 POST /checkout started
+2026-06-06T10:17:21Z ERROR gateway request_id=req-173 POST /checkout failed status=500 duration_ms=30332
+2026-06-06T10:17:25Z INFO gateway request_id=req-179 POST /checkout started
+2026-06-06T10:17:25Z INFO gateway request_id=req-179 POST /checkout completed duration_ms=325
+2026-06-06T10:17:27Z ERROR gateway request_id=req-174 POST /checkout failed status=500 duration_ms=30141
+2026-06-06T10:17:29Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:17:31Z ERROR gateway request_id=req-175 POST /checkout failed status=500 duration_ms=30977
+2026-06-06T10:17:33Z INFO gateway request_id=req-180 POST /checkout started
+2026-06-06T10:17:38Z ERROR gateway request_id=req-176 POST /checkout failed status=500 duration_ms=30561
+2026-06-06T10:17:39Z INFO gateway request_id=req-181 POST /checkout started
+2026-06-06T10:17:43Z ERROR gateway request_id=req-177 POST /checkout failed status=500 duration_ms=30667
+2026-06-06T10:17:45Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:17:46Z INFO gateway request_id=req-182 POST /checkout started
+2026-06-06T10:17:48Z ERROR gateway request_id=req-178 POST /checkout failed status=500 duration_ms=31409
+2026-06-06T10:17:54Z INFO gateway request_id=req-183 POST /checkout started
+2026-06-06T10:17:54Z INFO gateway request_id=req-183 POST /checkout completed duration_ms=408
+2026-06-06T10:18:02Z INFO gateway request_id=req-184 POST /checkout started
+2026-06-06T10:18:03Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:18:03Z ERROR gateway request_id=req-180 POST /checkout failed status=500 duration_ms=31335
+2026-06-06T10:18:09Z ERROR gateway request_id=req-181 POST /checkout failed status=500 duration_ms=31097
+2026-06-06T10:18:09Z INFO gateway request_id=req-185 POST /checkout started
+2026-06-06T10:18:14Z INFO gateway request_id=req-186 POST /checkout started
+2026-06-06T10:18:16Z ERROR gateway request_id=req-182 POST /checkout failed status=500 duration_ms=30141
+2026-06-06T10:18:19Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:18:21Z INFO gateway request_id=req-187 POST /checkout started
+2026-06-06T10:18:28Z INFO gateway request_id=req-188 POST /checkout started
+2026-06-06T10:18:32Z ERROR gateway request_id=req-184 POST /checkout failed status=500 duration_ms=30531
+2026-06-06T10:18:33Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:18:34Z INFO gateway request_id=req-189 POST /checkout started
+2026-06-06T10:18:39Z ERROR gateway request_id=req-185 POST /checkout failed status=500 duration_ms=30464
+2026-06-06T10:18:40Z INFO gateway request_id=req-190 POST /checkout started
+2026-06-06T10:18:44Z ERROR gateway request_id=req-186 POST /checkout failed status=500 duration_ms=31399
+2026-06-06T10:18:47Z INFO gateway request_id=req-191 POST /checkout started
+2026-06-06T10:18:47Z INFO gateway request_id=req-191 POST /checkout completed duration_ms=154
+2026-06-06T10:18:48Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:18:51Z ERROR gateway request_id=req-187 POST /checkout failed status=500 duration_ms=30050
+2026-06-06T10:18:54Z INFO gateway request_id=req-192 POST /checkout started
+2026-06-06T10:18:58Z ERROR gateway request_id=req-188 POST /checkout failed status=500 duration_ms=30711
+2026-06-06T10:18:59Z INFO gateway request_id=req-193 POST /checkout started
+2026-06-06T10:19:01Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:19:03Z INFO gateway request_id=req-194 POST /checkout started
+2026-06-06T10:19:04Z ERROR gateway request_id=req-189 POST /checkout failed status=500 duration_ms=31071
+2026-06-06T10:19:09Z INFO gateway request_id=req-195 POST /checkout started
+2026-06-06T10:19:10Z ERROR gateway request_id=req-190 POST /checkout failed status=500 duration_ms=31103
+2026-06-06T10:19:13Z INFO gateway request_id=req-196 POST /checkout started
+2026-06-06T10:19:17Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:19:19Z INFO gateway request_id=req-197 POST /checkout started
+2026-06-06T10:19:24Z INFO gateway request_id=req-198 POST /checkout started
+2026-06-06T10:19:24Z ERROR gateway request_id=req-192 POST /checkout failed status=500 duration_ms=31080
+2026-06-06T10:19:24Z INFO gateway request_id=req-198 POST /checkout completed duration_ms=180
+2026-06-06T10:19:29Z ERROR gateway request_id=req-193 POST /checkout failed status=500 duration_ms=30959
+2026-06-06T10:19:30Z INFO gateway request_id=req-199 POST /checkout started
+2026-06-06T10:19:31Z INFO gateway request_id=req-199 POST /checkout completed duration_ms=395
+2026-06-06T10:19:33Z ERROR gateway request_id=req-194 POST /checkout failed status=500 duration_ms=30587
+2026-06-06T10:19:33Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:19:35Z INFO gateway request_id=req-200 POST /checkout started
+2026-06-06T10:19:39Z ERROR gateway request_id=req-195 POST /checkout failed status=500 duration_ms=30900
+2026-06-06T10:19:39Z INFO gateway request_id=req-201 POST /checkout started
+2026-06-06T10:19:43Z ERROR gateway request_id=req-196 POST /checkout failed status=500 duration_ms=30975
+2026-06-06T10:19:45Z INFO gateway request_id=req-202 POST /checkout started
+2026-06-06T10:19:49Z ERROR gateway request_id=req-197 POST /checkout failed status=500 duration_ms=30844
+2026-06-06T10:19:49Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:19:50Z INFO gateway request_id=req-203 POST /checkout started
+2026-06-06T10:19:55Z INFO gateway request_id=req-204 POST /checkout started
+2026-06-06T10:19:56Z INFO gateway request_id=req-204 POST /checkout completed duration_ms=86
+2026-06-06T10:19:59Z INFO gateway request_id=req-205 POST /checkout started
+2026-06-06T10:20:01Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:20:04Z INFO gateway request_id=req-206 POST /checkout started
+2026-06-06T10:20:05Z ERROR gateway request_id=req-200 POST /checkout failed status=500 duration_ms=31499
+2026-06-06T10:20:09Z INFO gateway request_id=req-207 POST /checkout started
+2026-06-06T10:20:09Z ERROR gateway request_id=req-201 POST /checkout failed status=500 duration_ms=30381
+2026-06-06T10:20:14Z INFO gateway request_id=req-208 POST /checkout started
+2026-06-06T10:20:15Z ERROR gateway request_id=req-202 POST /checkout failed status=500 duration_ms=30463
+2026-06-06T10:20:17Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:20:18Z INFO gateway request_id=req-209 POST /checkout started
+2026-06-06T10:20:19Z INFO gateway request_id=req-209 POST /checkout completed duration_ms=402
+2026-06-06T10:20:20Z ERROR gateway request_id=req-203 POST /checkout failed status=500 duration_ms=30869
+2026-06-06T10:20:24Z INFO gateway request_id=req-210 POST /checkout started
+2026-06-06T10:20:25Z INFO gateway request_id=req-210 POST /checkout completed duration_ms=191
+2026-06-06T10:20:29Z ERROR gateway request_id=req-205 POST /checkout failed status=500 duration_ms=30838
+2026-06-06T10:20:30Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:20:31Z INFO gateway request_id=req-211 POST /checkout started
+2026-06-06T10:20:31Z INFO gateway request_id=req-211 POST /checkout completed duration_ms=151
+2026-06-06T10:20:34Z ERROR gateway request_id=req-206 POST /checkout failed status=500 duration_ms=30958
+2026-06-06T10:20:36Z INFO gateway request_id=req-212 POST /checkout started
+2026-06-06T10:20:39Z ERROR gateway request_id=req-207 POST /checkout failed status=500 duration_ms=30531
+2026-06-06T10:20:42Z INFO gateway request_id=req-213 POST /checkout started
+2026-06-06T10:20:44Z ERROR gateway request_id=req-208 POST /checkout failed status=500 duration_ms=31437
+2026-06-06T10:20:47Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:20:50Z INFO gateway request_id=req-214 POST /checkout started
+2026-06-06T10:20:56Z INFO gateway request_id=req-215 POST /checkout started
+2026-06-06T10:21:01Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:21:02Z INFO gateway request_id=req-216 POST /checkout started
+2026-06-06T10:21:06Z ERROR gateway request_id=req-212 POST /checkout failed status=500 duration_ms=31120
+2026-06-06T10:21:08Z INFO gateway request_id=req-217 POST /checkout started
+2026-06-06T10:21:08Z INFO gateway request_id=req-217 POST /checkout completed duration_ms=242
+2026-06-06T10:21:12Z ERROR gateway request_id=req-213 POST /checkout failed status=500 duration_ms=30095
+2026-06-06T10:21:14Z INFO gateway request_id=req-218 POST /checkout started
+2026-06-06T10:21:15Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:21:20Z ERROR gateway request_id=req-214 POST /checkout failed status=500 duration_ms=30021
+2026-06-06T10:21:20Z INFO gateway request_id=req-219 POST /checkout started
+2026-06-06T10:21:24Z INFO gateway request_id=req-220 POST /checkout started
+2026-06-06T10:21:26Z ERROR gateway request_id=req-215 POST /checkout failed status=500 duration_ms=30841
+2026-06-06T10:21:29Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:21:30Z INFO gateway request_id=req-221 POST /checkout started
+2026-06-06T10:21:32Z ERROR gateway request_id=req-216 POST /checkout failed status=500 duration_ms=30966
+2026-06-06T10:21:37Z INFO gateway request_id=req-222 POST /checkout started
+2026-06-06T10:21:44Z ERROR gateway request_id=req-218 POST /checkout failed status=500 duration_ms=30001
+2026-06-06T10:21:45Z INFO gateway request_id=req-223 POST /checkout started
+2026-06-06T10:21:45Z INFO gateway request_id=req-223 POST /checkout completed duration_ms=179
+2026-06-06T10:21:45Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:21:49Z INFO gateway request_id=req-224 POST /checkout started
+2026-06-06T10:21:50Z ERROR gateway request_id=req-219 POST /checkout failed status=500 duration_ms=31337
+2026-06-06T10:21:54Z ERROR gateway request_id=req-220 POST /checkout failed status=500 duration_ms=30557
+2026-06-06T10:21:55Z INFO gateway request_id=req-225 POST /checkout started
+2026-06-06T10:21:59Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:22:00Z INFO gateway request_id=req-226 POST /checkout started
+2026-06-06T10:22:00Z ERROR gateway request_id=req-221 POST /checkout failed status=500 duration_ms=31410
+2026-06-06T10:22:07Z INFO gateway request_id=req-227 POST /checkout started
+2026-06-06T10:22:07Z ERROR gateway request_id=req-222 POST /checkout failed status=500 duration_ms=31094
+2026-06-06T10:22:07Z INFO gateway request_id=req-227 POST /checkout completed duration_ms=386
+2026-06-06T10:22:12Z INFO gateway request_id=req-228 POST /checkout started
+2026-06-06T10:22:16Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:22:19Z ERROR gateway request_id=req-224 POST /checkout failed status=500 duration_ms=30592
+2026-06-06T10:22:19Z INFO gateway request_id=req-229 POST /checkout started
+2026-06-06T10:22:25Z ERROR gateway request_id=req-225 POST /checkout failed status=500 duration_ms=30656
+2026-06-06T10:22:25Z INFO gateway request_id=req-230 POST /checkout started
+2026-06-06T10:22:29Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:22:30Z ERROR gateway request_id=req-226 POST /checkout failed status=500 duration_ms=30025
+2026-06-06T10:22:31Z INFO gateway request_id=req-231 POST /checkout started
+2026-06-06T10:22:36Z INFO gateway request_id=req-232 POST /checkout started
+2026-06-06T10:22:42Z ERROR gateway request_id=req-228 POST /checkout failed status=500 duration_ms=30083
+2026-06-06T10:22:42Z INFO gateway request_id=req-233 POST /checkout started
+2026-06-06T10:22:47Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:22:48Z INFO gateway request_id=req-234 POST /checkout started
+2026-06-06T10:22:48Z INFO gateway request_id=req-234 POST /checkout completed duration_ms=197
+2026-06-06T10:22:49Z ERROR gateway request_id=req-229 POST /checkout failed status=500 duration_ms=31452
+2026-06-06T10:22:55Z ERROR gateway request_id=req-230 POST /checkout failed status=500 duration_ms=30780
+2026-06-06T10:22:55Z INFO gateway request_id=req-235 POST /checkout started
+2026-06-06T10:23:01Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:23:01Z ERROR gateway request_id=req-231 POST /checkout failed status=500 duration_ms=30661
+2026-06-06T10:23:01Z INFO gateway request_id=req-236 POST /checkout started
+2026-06-06T10:23:01Z INFO gateway request_id=req-236 POST /checkout completed duration_ms=210
+2026-06-06T10:23:06Z ERROR gateway request_id=req-232 POST /checkout failed status=500 duration_ms=31080
+2026-06-06T10:23:07Z INFO gateway request_id=req-237 POST /checkout started
+2026-06-06T10:23:12Z INFO gateway request_id=req-238 POST /checkout started
+2026-06-06T10:23:12Z ERROR gateway request_id=req-233 POST /checkout failed status=500 duration_ms=30778
+2026-06-06T10:23:17Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:23:19Z INFO gateway request_id=req-239 POST /checkout started
+2026-06-06T10:23:24Z INFO gateway request_id=req-240 POST /checkout started
+2026-06-06T10:23:24Z INFO gateway request_id=req-240 POST /checkout completed duration_ms=244
+2026-06-06T10:23:25Z ERROR gateway request_id=req-235 POST /checkout failed status=500 duration_ms=30908
+2026-06-06T10:23:29Z INFO gateway request_id=req-241 POST /checkout started
+2026-06-06T10:23:30Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:23:36Z INFO gateway request_id=req-242 POST /checkout started
+2026-06-06T10:23:37Z ERROR gateway request_id=req-237 POST /checkout failed status=500 duration_ms=30767
+2026-06-06T10:23:42Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:23:42Z ERROR gateway request_id=req-238 POST /checkout failed status=500 duration_ms=31002
+2026-06-06T10:23:42Z INFO gateway request_id=req-243 POST /checkout started
+2026-06-06T10:23:48Z INFO gateway request_id=req-244 POST /checkout started
+2026-06-06T10:23:49Z ERROR gateway request_id=req-239 POST /checkout failed status=500 duration_ms=30999
+2026-06-06T10:23:54Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:23:54Z INFO gateway request_id=req-245 POST /checkout started
+2026-06-06T10:23:59Z ERROR gateway request_id=req-241 POST /checkout failed status=500 duration_ms=30201
+2026-06-06T10:24:00Z INFO gateway request_id=req-246 POST /checkout started
+2026-06-06T10:24:06Z ERROR gateway request_id=req-242 POST /checkout failed status=500 duration_ms=30407
+2026-06-06T10:24:07Z INFO gateway request_id=req-247 POST /checkout started
+2026-06-06T10:24:09Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:24:12Z ERROR gateway request_id=req-243 POST /checkout failed status=500 duration_ms=31409
+2026-06-06T10:24:13Z INFO gateway request_id=req-248 POST /checkout started
+2026-06-06T10:24:18Z ERROR gateway request_id=req-244 POST /checkout failed status=500 duration_ms=30764
+2026-06-06T10:24:20Z INFO gateway request_id=req-249 POST /checkout started
+2026-06-06T10:24:21Z INFO gateway request_id=req-249 POST /checkout completed duration_ms=312
+2026-06-06T10:24:24Z ERROR gateway request_id=req-245 POST /checkout failed status=500 duration_ms=30882
+2026-06-06T10:24:26Z INFO gateway request_id=req-250 POST /checkout started
+2026-06-06T10:24:26Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:24:30Z INFO gateway request_id=req-251 POST /checkout started
+2026-06-06T10:24:30Z ERROR gateway request_id=req-246 POST /checkout failed status=500 duration_ms=30416
+2026-06-06T10:24:35Z INFO gateway request_id=req-252 POST /checkout started
+2026-06-06T10:24:35Z INFO gateway request_id=req-252 POST /checkout completed duration_ms=106
+2026-06-06T10:24:37Z ERROR gateway request_id=req-247 POST /checkout failed status=500 duration_ms=31058
+2026-06-06T10:24:41Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:24:41Z INFO gateway request_id=req-253 POST /checkout started
+2026-06-06T10:24:43Z ERROR gateway request_id=req-248 POST /checkout failed status=500 duration_ms=30779
+2026-06-06T10:24:48Z INFO gateway request_id=req-254 POST /checkout started
+2026-06-06T10:24:54Z INFO gateway user profile updated user_email=dave.demo@example.com client_ip=203.0.113.8 session_id=b7994549-1b11-9ddb-8971-5e20bb2f3e06
+2026-06-06T10:24:54Z INFO gateway request_id=req-255 POST /checkout started
+2026-06-06T10:24:55Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:24:56Z INFO gateway payment method saved card_number=4111111111111111 api_key=sk_live_demo_25afb4ac2dea auth_header=Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vLXVzZXIifQ.sig6db07306
+2026-06-06T10:24:56Z ERROR gateway request_id=req-250 POST /checkout failed status=500 duration_ms=31259
+2026-06-06T10:25:00Z ERROR gateway request_id=req-251 POST /checkout failed status=500 duration_ms=30689
+2026-06-06T10:25:02Z INFO gateway request_id=req-256 POST /checkout started
+2026-06-06T10:25:02Z INFO gateway request_id=req-256 POST /checkout completed duration_ms=370
+2026-06-06T10:25:08Z INFO gateway request_id=req-257 POST /checkout started
+2026-06-06T10:25:09Z INFO gateway request_id=req-257 POST /checkout completed duration_ms=396
+2026-06-06T10:25:11Z ERROR gateway request_id=req-253 POST /checkout failed status=500 duration_ms=30623
+2026-06-06T10:25:12Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:25:14Z INFO gateway request_id=req-258 POST /checkout started
+2026-06-06T10:25:18Z INFO gateway request_id=req-259 POST /checkout started
+2026-06-06T10:25:18Z ERROR gateway request_id=req-254 POST /checkout failed status=500 duration_ms=31266
+2026-06-06T10:25:24Z ERROR gateway request_id=req-255 POST /checkout failed status=500 duration_ms=31107
+2026-06-06T10:25:24Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:25:25Z INFO gateway request_id=req-260 POST /checkout started
+2026-06-06T10:25:33Z INFO gateway request_id=req-261 POST /checkout started
+2026-06-06T10:25:39Z INFO gateway request_id=req-262 POST /checkout started
+2026-06-06T10:25:39Z INFO gateway request_id=req-262 POST /checkout completed duration_ms=171
+2026-06-06T10:25:40Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:25:44Z ERROR gateway request_id=req-258 POST /checkout failed status=500 duration_ms=30813
+2026-06-06T10:25:45Z INFO gateway request_id=req-263 POST /checkout started
+2026-06-06T10:25:45Z INFO gateway request_id=req-263 POST /checkout completed duration_ms=327
+2026-06-06T10:25:48Z ERROR gateway request_id=req-259 POST /checkout failed status=500 duration_ms=30159
+2026-06-06T10:25:49Z INFO gateway request_id=req-264 POST /checkout started
+2026-06-06T10:25:52Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:25:55Z ERROR gateway request_id=req-260 POST /checkout failed status=500 duration_ms=30492
+2026-06-06T10:25:55Z INFO gateway request_id=req-265 POST /checkout started
+2026-06-06T10:25:59Z INFO gateway request_id=req-266 POST /checkout started
+2026-06-06T10:26:03Z ERROR gateway request_id=req-261 POST /checkout failed status=500 duration_ms=30727
+2026-06-06T10:26:06Z INFO gateway request_id=req-267 POST /checkout started
+2026-06-06T10:26:07Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:26:14Z INFO gateway request_id=req-268 POST /checkout started
+2026-06-06T10:26:19Z ERROR gateway request_id=req-264 POST /checkout failed status=500 duration_ms=30797
+2026-06-06T10:26:20Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:26:20Z INFO gateway request_id=req-269 POST /checkout started
+2026-06-06T10:26:25Z INFO gateway request_id=req-270 POST /checkout started
+2026-06-06T10:26:25Z ERROR gateway request_id=req-265 POST /checkout failed status=500 duration_ms=31162
+2026-06-06T10:26:29Z ERROR gateway request_id=req-266 POST /checkout failed status=500 duration_ms=31462
+2026-06-06T10:26:33Z INFO gateway request_id=req-271 POST /checkout started
+2026-06-06T10:26:35Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:26:36Z ERROR gateway request_id=req-267 POST /checkout failed status=500 duration_ms=31485
+2026-06-06T10:26:37Z INFO gateway request_id=req-272 POST /checkout started
+2026-06-06T10:26:42Z INFO gateway request_id=req-273 POST /checkout started
+2026-06-06T10:26:44Z ERROR gateway request_id=req-268 POST /checkout failed status=500 duration_ms=30571
+2026-06-06T10:26:49Z INFO gateway request_id=req-274 POST /checkout started
+2026-06-06T10:26:49Z INFO gateway request_id=req-274 POST /checkout completed duration_ms=353
+2026-06-06T10:26:50Z ERROR gateway request_id=req-269 POST /checkout failed status=500 duration_ms=30192
+2026-06-06T10:26:53Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:26:53Z INFO gateway request_id=req-275 POST /checkout started
+2026-06-06T10:26:55Z ERROR gateway request_id=req-270 POST /checkout failed status=500 duration_ms=31360
+2026-06-06T10:27:01Z INFO gateway request_id=req-276 POST /checkout started
+2026-06-06T10:27:03Z ERROR gateway request_id=req-271 POST /checkout failed status=500 duration_ms=30436
+2026-06-06T10:27:05Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:27:07Z ERROR gateway request_id=req-272 POST /checkout failed status=500 duration_ms=30537
+2026-06-06T10:27:08Z INFO gateway request_id=req-277 POST /checkout started
+2026-06-06T10:27:12Z ERROR gateway request_id=req-273 POST /checkout failed status=500 duration_ms=30091
+2026-06-06T10:27:15Z INFO gateway request_id=req-278 POST /checkout started
+2026-06-06T10:27:20Z INFO gateway request_id=req-279 POST /checkout started
+2026-06-06T10:27:20Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:27:23Z ERROR gateway request_id=req-275 POST /checkout failed status=500 duration_ms=31039
+2026-06-06T10:27:26Z INFO gateway request_id=req-280 POST /checkout started
+2026-06-06T10:27:31Z INFO gateway request_id=req-281 POST /checkout started
+2026-06-06T10:27:31Z ERROR gateway request_id=req-276 POST /checkout failed status=500 duration_ms=30350
+2026-06-06T10:27:35Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:27:37Z INFO gateway request_id=req-282 POST /checkout started
+2026-06-06T10:27:38Z ERROR gateway request_id=req-277 POST /checkout failed status=500 duration_ms=30256
+2026-06-06T10:27:41Z INFO gateway request_id=req-283 POST /checkout started
+2026-06-06T10:27:41Z INFO gateway request_id=req-283 POST /checkout completed duration_ms=321
+2026-06-06T10:27:45Z ERROR gateway request_id=req-278 POST /checkout failed status=500 duration_ms=30739
+2026-06-06T10:27:47Z INFO gateway request_id=req-284 POST /checkout started
+2026-06-06T10:27:49Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:27:50Z ERROR gateway request_id=req-279 POST /checkout failed status=500 duration_ms=30844
+2026-06-06T10:27:53Z INFO gateway request_id=req-285 POST /checkout started
+2026-06-06T10:27:56Z ERROR gateway request_id=req-280 POST /checkout failed status=500 duration_ms=31239
+2026-06-06T10:28:01Z INFO gateway request_id=req-286 POST /checkout started
+2026-06-06T10:28:01Z ERROR gateway request_id=req-281 POST /checkout failed status=500 duration_ms=30210
+2026-06-06T10:28:02Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:28:07Z ERROR gateway request_id=req-282 POST /checkout failed status=500 duration_ms=31119
+2026-06-06T10:28:08Z INFO gateway request_id=req-287 POST /checkout started
+2026-06-06T10:28:14Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:28:14Z INFO gateway request_id=req-288 POST /checkout started
+2026-06-06T10:28:17Z ERROR gateway request_id=req-284 POST /checkout failed status=500 duration_ms=30099
+2026-06-06T10:28:21Z INFO gateway request_id=req-289 POST /checkout started
+2026-06-06T10:28:23Z ERROR gateway request_id=req-285 POST /checkout failed status=500 duration_ms=31161
+2026-06-06T10:28:26Z INFO gateway request_id=req-290 POST /checkout started
+2026-06-06T10:28:27Z INFO gateway request_id=req-290 POST /checkout completed duration_ms=143
+2026-06-06T10:28:31Z ERROR gateway request_id=req-286 POST /checkout failed status=500 duration_ms=30145
+2026-06-06T10:28:31Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:28:32Z INFO gateway request_id=req-291 POST /checkout started
+2026-06-06T10:28:37Z INFO gateway request_id=req-292 POST /checkout started
+2026-06-06T10:28:37Z INFO gateway request_id=req-292 POST /checkout completed duration_ms=387
+2026-06-06T10:28:38Z ERROR gateway request_id=req-287 POST /checkout failed status=500 duration_ms=31014
+2026-06-06T10:28:44Z ERROR gateway request_id=req-288 POST /checkout failed status=500 duration_ms=30893
+2026-06-06T10:28:45Z INFO gateway request_id=req-293 POST /checkout started
+2026-06-06T10:28:45Z INFO gateway request_id=req-293 POST /checkout completed duration_ms=375
+2026-06-06T10:28:46Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:28:51Z ERROR gateway request_id=req-289 POST /checkout failed status=500 duration_ms=30990
+2026-06-06T10:28:53Z INFO gateway request_id=req-294 POST /checkout started
+2026-06-06T10:28:53Z INFO gateway request_id=req-294 POST /checkout completed duration_ms=278
+2026-06-06T10:28:58Z INFO gateway request_id=req-295 POST /checkout started
+2026-06-06T10:28:58Z INFO gateway request_id=req-295 POST /checkout completed duration_ms=367
+2026-06-06T10:29:00Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:29:02Z ERROR gateway request_id=req-291 POST /checkout failed status=500 duration_ms=30254
+2026-06-06T10:29:05Z INFO gateway request_id=req-296 POST /checkout started
+2026-06-06T10:29:10Z INFO gateway request_id=req-297 POST /checkout started
+2026-06-06T10:29:15Z INFO gateway request_id=req-298 POST /checkout started
+2026-06-06T10:29:16Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:29:22Z INFO gateway request_id=req-299 POST /checkout started
+2026-06-06T10:29:29Z INFO gateway request_id=req-300 POST /checkout started
+2026-06-06T10:29:32Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:29:35Z ERROR gateway request_id=req-296 POST /checkout failed status=500 duration_ms=30605
+2026-06-06T10:29:35Z INFO gateway request_id=req-301 POST /checkout started
+2026-06-06T10:29:36Z INFO gateway request_id=req-301 POST /checkout completed duration_ms=82
+2026-06-06T10:29:40Z INFO gateway request_id=req-302 POST /checkout started
+2026-06-06T10:29:40Z ERROR gateway request_id=req-297 POST /checkout failed status=500 duration_ms=30330
+2026-06-06T10:29:45Z ERROR gateway request_id=req-298 POST /checkout failed status=500 duration_ms=30068
+2026-06-06T10:29:46Z INFO gateway request_id=req-303 POST /checkout started
+2026-06-06T10:29:46Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:29:52Z ERROR gateway request_id=req-299 POST /checkout failed status=500 duration_ms=30197
+2026-06-06T10:29:53Z INFO gateway request_id=req-304 POST /checkout started
+2026-06-06T10:29:53Z INFO gateway request_id=req-304 POST /checkout completed duration_ms=140
+2026-06-06T10:29:58Z INFO gateway request_id=req-305 POST /checkout started
+2026-06-06T10:29:59Z ERROR gateway request_id=req-300 POST /checkout failed status=500 duration_ms=30944
+2026-06-06T10:30:03Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:30:05Z INFO gateway request_id=req-306 POST /checkout started
+2026-06-06T10:30:10Z ERROR gateway request_id=req-302 POST /checkout failed status=500 duration_ms=30606
+2026-06-06T10:30:10Z INFO gateway request_id=req-307 POST /checkout started
+2026-06-06T10:30:16Z ERROR gateway request_id=req-303 POST /checkout failed status=500 duration_ms=30209
+2026-06-06T10:30:16Z INFO gateway request_id=req-308 POST /checkout started
+2026-06-06T10:30:20Z INFO gateway request_id=req-309 POST /checkout started
+2026-06-06T10:30:21Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:30:26Z INFO gateway request_id=req-310 POST /checkout started
+2026-06-06T10:30:28Z ERROR gateway request_id=req-305 POST /checkout failed status=500 duration_ms=30916
+2026-06-06T10:30:33Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:30:33Z INFO gateway request_id=req-311 POST /checkout started
+2026-06-06T10:30:35Z ERROR gateway request_id=req-306 POST /checkout failed status=500 duration_ms=30922
+2026-06-06T10:30:39Z INFO gateway request_id=req-312 POST /checkout started
+2026-06-06T10:30:40Z ERROR gateway request_id=req-307 POST /checkout failed status=500 duration_ms=31331
+2026-06-06T10:30:44Z INFO gateway request_id=req-313 POST /checkout started
+2026-06-06T10:30:46Z ERROR gateway request_id=req-308 POST /checkout failed status=500 duration_ms=30377
+2026-06-06T10:30:48Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:30:50Z INFO gateway request_id=req-314 POST /checkout started
+2026-06-06T10:30:50Z ERROR gateway request_id=req-309 POST /checkout failed status=500 duration_ms=31039
+2026-06-06T10:30:55Z INFO gateway request_id=req-315 POST /checkout started
+2026-06-06T10:30:56Z ERROR gateway request_id=req-310 POST /checkout failed status=500 duration_ms=31471
+2026-06-06T10:31:00Z INFO gateway request_id=req-316 POST /checkout started
+2026-06-06T10:31:01Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:31:03Z ERROR gateway request_id=req-311 POST /checkout failed status=500 duration_ms=30512
+2026-06-06T10:31:08Z INFO gateway request_id=req-317 POST /checkout started
+2026-06-06T10:31:09Z ERROR gateway request_id=req-312 POST /checkout failed status=500 duration_ms=30699
+2026-06-06T10:31:14Z ERROR gateway request_id=req-313 POST /checkout failed status=500 duration_ms=30428
+2026-06-06T10:31:14Z INFO gateway request_id=req-318 POST /checkout started
+2026-06-06T10:31:15Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:31:20Z ERROR gateway request_id=req-314 POST /checkout failed status=500 duration_ms=31287
+2026-06-06T10:31:20Z INFO gateway request_id=req-319 POST /checkout started
+2026-06-06T10:31:21Z INFO gateway request_id=req-319 POST /checkout completed duration_ms=274
+2026-06-06T10:31:25Z ERROR gateway request_id=req-315 POST /checkout failed status=500 duration_ms=30480
+2026-06-06T10:31:25Z INFO gateway request_id=req-320 POST /checkout started
+2026-06-06T10:31:30Z ERROR gateway request_id=req-316 POST /checkout failed status=500 duration_ms=31175
+2026-06-06T10:31:30Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:31:32Z INFO gateway request_id=req-321 POST /checkout started
+2026-06-06T10:31:36Z INFO gateway request_id=req-322 POST /checkout started
+2026-06-06T10:31:38Z ERROR gateway request_id=req-317 POST /checkout failed status=500 duration_ms=30507
+2026-06-06T10:31:41Z INFO gateway request_id=req-323 POST /checkout started
+2026-06-06T10:31:41Z INFO gateway request_id=req-323 POST /checkout completed duration_ms=228
+2026-06-06T10:31:44Z ERROR gateway request_id=req-318 POST /checkout failed status=500 duration_ms=30808
+2026-06-06T10:31:46Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:31:48Z INFO gateway request_id=req-324 POST /checkout started
+2026-06-06T10:31:52Z INFO gateway request_id=req-325 POST /checkout started
+2026-06-06T10:31:55Z ERROR gateway request_id=req-320 POST /checkout failed status=500 duration_ms=30014
+2026-06-06T10:31:57Z INFO gateway request_id=req-326 POST /checkout started
+2026-06-06T10:32:02Z ERROR gateway request_id=req-321 POST /checkout failed status=500 duration_ms=31351
+2026-06-06T10:32:03Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:32:03Z INFO gateway request_id=req-327 POST /checkout started
+2026-06-06T10:32:04Z INFO gateway request_id=req-327 POST /checkout completed duration_ms=398
+2026-06-06T10:32:06Z ERROR gateway request_id=req-322 POST /checkout failed status=500 duration_ms=30944
+2026-06-06T10:32:09Z INFO gateway request_id=req-328 POST /checkout started
+2026-06-06T10:32:13Z INFO gateway request_id=req-329 POST /checkout started
+2026-06-06T10:32:18Z ERROR gateway request_id=req-324 POST /checkout failed status=500 duration_ms=31130
+2026-06-06T10:32:20Z INFO gateway request_id=req-330 POST /checkout started
+2026-06-06T10:32:21Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:32:22Z ERROR gateway request_id=req-325 POST /checkout failed status=500 duration_ms=31124
+2026-06-06T10:32:27Z ERROR gateway request_id=req-326 POST /checkout failed status=500 duration_ms=30948
+2026-06-06T10:32:27Z INFO gateway request_id=req-331 POST /checkout started
+2026-06-06T10:32:34Z INFO gateway request_id=req-332 POST /checkout started
+2026-06-06T10:32:34Z INFO gateway request_id=req-332 POST /checkout completed duration_ms=402
+2026-06-06T10:32:38Z INFO gateway request_id=req-333 POST /checkout started
+2026-06-06T10:32:38Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:32:39Z ERROR gateway request_id=req-328 POST /checkout failed status=500 duration_ms=30712
+2026-06-06T10:32:43Z ERROR gateway request_id=req-329 POST /checkout failed status=500 duration_ms=30609
+2026-06-06T10:32:46Z INFO gateway request_id=req-334 POST /checkout started
+2026-06-06T10:32:50Z ERROR gateway request_id=req-330 POST /checkout failed status=500 duration_ms=30393
+2026-06-06T10:32:53Z INFO gateway request_id=req-335 POST /checkout started
+2026-06-06T10:32:56Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:32:57Z ERROR gateway request_id=req-331 POST /checkout failed status=500 duration_ms=31140
+2026-06-06T10:33:00Z INFO gateway request_id=req-336 POST /checkout started
+2026-06-06T10:33:00Z INFO gateway request_id=req-336 POST /checkout completed duration_ms=411
+2026-06-06T10:33:06Z INFO gateway request_id=req-337 POST /checkout started
+2026-06-06T10:33:06Z INFO gateway request_id=req-337 POST /checkout completed duration_ms=191
+2026-06-06T10:33:08Z ERROR gateway request_id=req-333 POST /checkout failed status=500 duration_ms=30382
+2026-06-06T10:33:09Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:33:11Z INFO gateway request_id=req-338 POST /checkout started
+2026-06-06T10:33:11Z INFO gateway request_id=req-338 POST /checkout completed duration_ms=385
+2026-06-06T10:33:16Z ERROR gateway request_id=req-334 POST /checkout failed status=500 duration_ms=30299
+2026-06-06T10:33:17Z INFO gateway request_id=req-339 POST /checkout started
+2026-06-06T10:33:17Z INFO gateway request_id=req-339 POST /checkout completed duration_ms=226
+2026-06-06T10:33:21Z INFO gateway request_id=req-340 POST /checkout started
+2026-06-06T10:33:21Z INFO gateway request_id=req-340 POST /checkout completed duration_ms=223
+2026-06-06T10:33:23Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:33:23Z ERROR gateway request_id=req-335 POST /checkout failed status=500 duration_ms=31187
+2026-06-06T10:33:29Z INFO gateway request_id=req-341 POST /checkout started
+2026-06-06T10:33:29Z INFO gateway request_id=req-341 POST /checkout completed duration_ms=158
+2026-06-06T10:33:33Z INFO gateway request_id=req-342 POST /checkout started
+2026-06-06T10:33:33Z INFO gateway request_id=req-342 POST /checkout completed duration_ms=332
+2026-06-06T10:33:36Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:33:40Z INFO gateway request_id=req-343 POST /checkout started
+2026-06-06T10:33:40Z INFO gateway request_id=req-343 POST /checkout completed duration_ms=372
+2026-06-06T10:33:47Z INFO gateway request_id=req-344 POST /checkout started
+2026-06-06T10:33:47Z INFO gateway request_id=req-344 POST /checkout completed duration_ms=82
+2026-06-06T10:33:54Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:33:54Z INFO gateway request_id=req-345 POST /checkout started
+2026-06-06T10:33:55Z INFO gateway request_id=req-345 POST /checkout completed duration_ms=144
+2026-06-06T10:33:59Z INFO gateway request_id=req-346 POST /checkout started
+2026-06-06T10:33:59Z INFO gateway request_id=req-346 POST /checkout completed duration_ms=220
+2026-06-06T10:34:04Z INFO gateway request_id=req-347 POST /checkout started
+2026-06-06T10:34:04Z INFO gateway request_id=req-347 POST /checkout completed duration_ms=171
+2026-06-06T10:34:07Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:34:09Z INFO gateway request_id=req-348 POST /checkout started
+2026-06-06T10:34:09Z INFO gateway request_id=req-348 POST /checkout completed duration_ms=110
+2026-06-06T10:34:13Z INFO gateway request_id=req-349 POST /checkout started
+2026-06-06T10:34:13Z INFO gateway request_id=req-349 POST /checkout completed duration_ms=221
+2026-06-06T10:34:19Z INFO gateway request_id=req-350 POST /checkout started
+2026-06-06T10:34:19Z INFO gateway request_id=req-350 POST /checkout completed duration_ms=135
+2026-06-06T10:34:25Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:34:25Z INFO gateway request_id=req-351 POST /checkout started
+2026-06-06T10:34:26Z INFO gateway request_id=req-351 POST /checkout completed duration_ms=314
+2026-06-06T10:34:31Z INFO gateway request_id=req-352 POST /checkout started
+2026-06-06T10:34:31Z INFO gateway request_id=req-352 POST /checkout completed duration_ms=235
+2026-06-06T10:34:37Z INFO gateway request_id=req-353 POST /checkout started
+2026-06-06T10:34:37Z INFO gateway request_id=req-353 POST /checkout completed duration_ms=372
+2026-06-06T10:34:38Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:34:43Z INFO gateway request_id=req-354 POST /checkout started
+2026-06-06T10:34:44Z INFO gateway request_id=req-354 POST /checkout completed duration_ms=414
+2026-06-06T10:34:49Z INFO gateway request_id=req-355 POST /checkout started
+2026-06-06T10:34:49Z INFO gateway request_id=req-355 POST /checkout completed duration_ms=251
+2026-06-06T10:34:52Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:34:55Z INFO gateway request_id=req-356 POST /checkout started
+2026-06-06T10:34:55Z INFO gateway request_id=req-356 POST /checkout completed duration_ms=83
+2026-06-06T10:35:00Z INFO gateway request_id=req-357 POST /checkout started
+2026-06-06T10:35:00Z INFO gateway request_id=req-357 POST /checkout completed duration_ms=133
+2026-06-06T10:35:05Z INFO gateway request_id=req-358 POST /checkout started
+2026-06-06T10:35:05Z INFO gateway request_id=req-358 POST /checkout completed duration_ms=361
+2026-06-06T10:35:10Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:35:11Z INFO gateway request_id=req-359 POST /checkout started
+2026-06-06T10:35:11Z INFO gateway request_id=req-359 POST /checkout completed duration_ms=241
+2026-06-06T10:35:16Z INFO gateway request_id=req-360 POST /checkout started
+2026-06-06T10:35:16Z INFO gateway request_id=req-360 POST /checkout completed duration_ms=219
+2026-06-06T10:35:23Z INFO gateway request_id=req-361 POST /checkout started
+2026-06-06T10:35:23Z INFO gateway request_id=req-361 POST /checkout completed duration_ms=313
+2026-06-06T10:35:25Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:35:29Z INFO gateway request_id=req-362 POST /checkout started
+2026-06-06T10:35:29Z INFO gateway request_id=req-362 POST /checkout completed duration_ms=312
+2026-06-06T10:35:36Z INFO gateway request_id=req-363 POST /checkout started
+2026-06-06T10:35:36Z INFO gateway request_id=req-363 POST /checkout completed duration_ms=165
+2026-06-06T10:35:41Z INFO gateway request_id=req-364 POST /checkout started
+2026-06-06T10:35:41Z INFO gateway request_id=req-364 POST /checkout completed duration_ms=330
+2026-06-06T10:35:42Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:35:45Z INFO gateway request_id=req-365 POST /checkout started
+2026-06-06T10:35:45Z INFO gateway request_id=req-365 POST /checkout completed duration_ms=300
+2026-06-06T10:35:50Z INFO gateway request_id=req-366 POST /checkout started
+2026-06-06T10:35:50Z INFO gateway request_id=req-366 POST /checkout completed duration_ms=298
+2026-06-06T10:35:57Z INFO gateway request_id=req-367 POST /checkout started
+2026-06-06T10:35:57Z INFO gateway request_id=req-367 POST /checkout completed duration_ms=323
+2026-06-06T10:36:00Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:36:03Z INFO gateway request_id=req-368 POST /checkout started
+2026-06-06T10:36:03Z INFO gateway request_id=req-368 POST /checkout completed duration_ms=95
+2026-06-06T10:36:10Z INFO gateway request_id=req-369 POST /checkout started
+2026-06-06T10:36:10Z INFO gateway request_id=req-369 POST /checkout completed duration_ms=379
+2026-06-06T10:36:13Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:36:15Z INFO gateway request_id=req-370 POST /checkout started
+2026-06-06T10:36:15Z INFO gateway request_id=req-370 POST /checkout completed duration_ms=156
+2026-06-06T10:36:22Z INFO gateway request_id=req-371 POST /checkout started
+2026-06-06T10:36:22Z INFO gateway request_id=req-371 POST /checkout completed duration_ms=209
+2026-06-06T10:36:29Z INFO gateway request_id=req-372 POST /checkout started
+2026-06-06T10:36:29Z INFO gateway request_id=req-372 POST /checkout completed duration_ms=416
+2026-06-06T10:36:31Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:36:37Z INFO gateway request_id=req-373 POST /checkout started
+2026-06-06T10:36:37Z INFO gateway request_id=req-373 POST /checkout completed duration_ms=349
+2026-06-06T10:36:43Z INFO gateway request_id=req-374 POST /checkout started
+2026-06-06T10:36:44Z INFO gateway request_id=req-374 POST /checkout completed duration_ms=146
+2026-06-06T10:36:48Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:36:49Z INFO gateway request_id=req-375 POST /checkout started
+2026-06-06T10:36:50Z INFO gateway request_id=req-375 POST /checkout completed duration_ms=156
+2026-06-06T10:36:55Z INFO gateway request_id=req-376 POST /checkout started
+2026-06-06T10:36:56Z INFO gateway request_id=req-376 POST /checkout completed duration_ms=398
+2026-06-06T10:37:01Z INFO gateway request_id=req-377 POST /checkout started
+2026-06-06T10:37:01Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:37:01Z INFO gateway request_id=req-377 POST /checkout completed duration_ms=165
+2026-06-06T10:37:07Z INFO gateway request_id=req-378 POST /checkout started
+2026-06-06T10:37:07Z INFO gateway request_id=req-378 POST /checkout completed duration_ms=372
+2026-06-06T10:37:14Z INFO gateway request_id=req-379 POST /checkout started
+2026-06-06T10:37:14Z INFO gateway request_id=req-379 POST /checkout completed duration_ms=176
+2026-06-06T10:37:16Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:37:20Z INFO gateway request_id=req-380 POST /checkout started
+2026-06-06T10:37:21Z INFO gateway request_id=req-380 POST /checkout completed duration_ms=205
+2026-06-06T10:37:28Z INFO gateway request_id=req-381 POST /checkout started
+2026-06-06T10:37:28Z INFO gateway request_id=req-381 POST /checkout completed duration_ms=403
+2026-06-06T10:37:28Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:37:34Z INFO gateway request_id=req-382 POST /checkout started
+2026-06-06T10:37:35Z INFO gateway request_id=req-382 POST /checkout completed duration_ms=277
+2026-06-06T10:37:41Z INFO gateway request_id=req-383 POST /checkout started
+2026-06-06T10:37:41Z INFO gateway request_id=req-383 POST /checkout completed duration_ms=393
+2026-06-06T10:37:41Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:37:46Z INFO gateway request_id=req-384 POST /checkout started
+2026-06-06T10:37:47Z INFO gateway request_id=req-384 POST /checkout completed duration_ms=105
+2026-06-06T10:37:51Z INFO gateway request_id=req-385 POST /checkout started
+2026-06-06T10:37:51Z INFO gateway request_id=req-385 POST /checkout completed duration_ms=257
+2026-06-06T10:37:57Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:37:58Z INFO gateway request_id=req-386 POST /checkout started
+2026-06-06T10:37:59Z INFO gateway request_id=req-386 POST /checkout completed duration_ms=420
+2026-06-06T10:38:04Z INFO gateway request_id=req-387 POST /checkout started
+2026-06-06T10:38:04Z INFO gateway request_id=req-387 POST /checkout completed duration_ms=353
+2026-06-06T10:38:08Z INFO gateway request_id=req-388 POST /checkout started
+2026-06-06T10:38:08Z INFO gateway request_id=req-388 POST /checkout completed duration_ms=400
+2026-06-06T10:38:11Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:38:15Z INFO gateway request_id=req-389 POST /checkout started
+2026-06-06T10:38:15Z INFO gateway request_id=req-389 POST /checkout completed duration_ms=338
+2026-06-06T10:38:19Z INFO gateway request_id=req-390 POST /checkout started
+2026-06-06T10:38:19Z INFO gateway request_id=req-390 POST /checkout completed duration_ms=124
+2026-06-06T10:38:25Z INFO gateway request_id=req-391 POST /checkout started
+2026-06-06T10:38:25Z INFO gateway request_id=req-391 POST /checkout completed duration_ms=144
+2026-06-06T10:38:27Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:38:31Z INFO gateway request_id=req-392 POST /checkout started
+2026-06-06T10:38:31Z INFO gateway request_id=req-392 POST /checkout completed duration_ms=257
+2026-06-06T10:38:36Z INFO gateway user profile updated user_email=erin.demo@example.com client_ip=203.0.113.111 session_id=ff3eb9c3-162c-0cbd-458a-50b4dfb4d8b8
+2026-06-06T10:38:37Z INFO gateway request_id=req-393 POST /checkout started
+2026-06-06T10:38:37Z INFO gateway request_id=req-393 POST /checkout completed duration_ms=253
+2026-06-06T10:38:38Z INFO gateway payment method saved card_number=4111111111111111 api_key=sk_live_demo_bfc6f21ace24 auth_header=Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vLXVzZXIifQ.sig42f35954
+2026-06-06T10:38:39Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:38:44Z INFO gateway request_id=req-394 POST /checkout started
+2026-06-06T10:38:44Z INFO gateway request_id=req-394 POST /checkout completed duration_ms=401
+2026-06-06T10:38:49Z INFO gateway request_id=req-395 POST /checkout started
+2026-06-06T10:38:49Z INFO gateway request_id=req-395 POST /checkout completed duration_ms=268
+2026-06-06T10:38:54Z INFO gateway request_id=req-396 POST /checkout started
+2026-06-06T10:38:55Z INFO gateway request_id=req-396 POST /checkout completed duration_ms=396
+2026-06-06T10:38:57Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:38:59Z INFO gateway request_id=req-397 POST /checkout started
+2026-06-06T10:38:59Z INFO gateway request_id=req-397 POST /checkout completed duration_ms=164
+2026-06-06T10:39:05Z INFO gateway request_id=req-398 POST /checkout started
+2026-06-06T10:39:05Z INFO gateway request_id=req-398 POST /checkout completed duration_ms=113
+2026-06-06T10:39:10Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:39:11Z INFO gateway request_id=req-399 POST /checkout started
+2026-06-06T10:39:11Z INFO gateway request_id=req-399 POST /checkout completed duration_ms=161
+2026-06-06T10:39:18Z INFO gateway request_id=req-400 POST /checkout started
+2026-06-06T10:39:18Z INFO gateway request_id=req-400 POST /checkout completed duration_ms=247
+2026-06-06T10:39:25Z INFO gateway request_id=req-401 POST /checkout started
+2026-06-06T10:39:25Z INFO gateway request_id=req-401 POST /checkout completed duration_ms=322
+2026-06-06T10:39:28Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:39:31Z INFO gateway request_id=req-402 POST /checkout started
+2026-06-06T10:39:31Z INFO gateway request_id=req-402 POST /checkout completed duration_ms=336
+2026-06-06T10:39:36Z INFO gateway request_id=req-403 POST /checkout started
+2026-06-06T10:39:36Z INFO gateway request_id=req-403 POST /checkout completed duration_ms=313
+2026-06-06T10:39:41Z INFO gateway request_id=req-404 POST /checkout started
+2026-06-06T10:39:41Z INFO gateway request_id=req-404 POST /checkout completed duration_ms=289
+2026-06-06T10:39:42Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:39:47Z INFO gateway request_id=req-405 POST /checkout started
+2026-06-06T10:39:47Z INFO gateway request_id=req-405 POST /checkout completed duration_ms=157
+2026-06-06T10:39:54Z INFO gateway request_id=req-406 POST /checkout started
+2026-06-06T10:39:55Z INFO gateway request_id=req-406 POST /checkout completed duration_ms=379
+2026-06-06T10:39:58Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:40:00Z INFO gateway request_id=req-407 POST /checkout started
+2026-06-06T10:40:00Z INFO gateway request_id=req-407 POST /checkout completed duration_ms=311
+2026-06-06T10:40:04Z INFO gateway request_id=req-408 POST /checkout started
+2026-06-06T10:40:05Z INFO gateway request_id=req-408 POST /checkout completed duration_ms=234
+2026-06-06T10:40:11Z INFO gateway request_id=req-409 POST /checkout started
+2026-06-06T10:40:11Z INFO gateway request_id=req-409 POST /checkout completed duration_ms=321
+2026-06-06T10:40:13Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:40:18Z INFO gateway request_id=req-410 POST /checkout started
+2026-06-06T10:40:18Z INFO gateway request_id=req-410 POST /checkout completed duration_ms=197
+2026-06-06T10:40:25Z INFO gateway request_id=req-411 POST /checkout started
+2026-06-06T10:40:25Z INFO gateway request_id=req-411 POST /checkout completed duration_ms=412
+2026-06-06T10:40:25Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:40:29Z INFO gateway request_id=req-412 POST /checkout started
+2026-06-06T10:40:29Z INFO gateway request_id=req-412 POST /checkout completed duration_ms=366
+2026-06-06T10:40:35Z INFO gateway request_id=req-413 POST /checkout started
+2026-06-06T10:40:35Z INFO gateway request_id=req-413 POST /checkout completed duration_ms=111
+2026-06-06T10:40:39Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:40:42Z INFO gateway request_id=req-414 POST /checkout started
+2026-06-06T10:40:42Z INFO gateway request_id=req-414 POST /checkout completed duration_ms=176
+2026-06-06T10:40:49Z INFO gateway request_id=req-415 POST /checkout started
+2026-06-06T10:40:49Z INFO gateway request_id=req-415 POST /checkout completed duration_ms=124
+2026-06-06T10:40:52Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:40:53Z INFO gateway request_id=req-416 POST /checkout started
+2026-06-06T10:40:54Z INFO gateway request_id=req-416 POST /checkout completed duration_ms=151
+2026-06-06T10:41:01Z INFO gateway request_id=req-417 POST /checkout started
+2026-06-06T10:41:01Z INFO gateway request_id=req-417 POST /checkout completed duration_ms=93
+2026-06-06T10:41:05Z INFO gateway request_id=req-418 POST /checkout started
+2026-06-06T10:41:06Z INFO gateway request_id=req-418 POST /checkout completed duration_ms=329
+2026-06-06T10:41:08Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:41:10Z INFO gateway request_id=req-419 POST /checkout started
+2026-06-06T10:41:10Z INFO gateway request_id=req-419 POST /checkout completed duration_ms=188
+2026-06-06T10:41:15Z INFO gateway request_id=req-420 POST /checkout started
+2026-06-06T10:41:15Z INFO gateway request_id=req-420 POST /checkout completed duration_ms=362
+2026-06-06T10:41:23Z INFO gateway request_id=req-421 POST /checkout started
+2026-06-06T10:41:23Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:41:23Z INFO gateway request_id=req-421 POST /checkout completed duration_ms=163
+2026-06-06T10:41:27Z INFO gateway request_id=req-422 POST /checkout started
+2026-06-06T10:41:27Z INFO gateway request_id=req-422 POST /checkout completed duration_ms=375
+2026-06-06T10:41:34Z INFO gateway request_id=req-423 POST /checkout started
+2026-06-06T10:41:35Z INFO gateway request_id=req-423 POST /checkout completed duration_ms=154
+2026-06-06T10:41:37Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:41:40Z INFO gateway request_id=req-424 POST /checkout started
+2026-06-06T10:41:40Z INFO gateway request_id=req-424 POST /checkout completed duration_ms=183
+2026-06-06T10:41:47Z INFO gateway request_id=req-425 POST /checkout started
+2026-06-06T10:41:47Z INFO gateway request_id=req-425 POST /checkout completed duration_ms=150
+2026-06-06T10:41:51Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:41:52Z INFO gateway request_id=req-426 POST /checkout started
+2026-06-06T10:41:52Z INFO gateway request_id=req-426 POST /checkout completed duration_ms=115
+2026-06-06T10:41:59Z INFO gateway request_id=req-427 POST /checkout started
+2026-06-06T10:41:59Z INFO gateway request_id=req-427 POST /checkout completed duration_ms=124
+2026-06-06T10:42:04Z INFO gateway request_id=req-428 POST /checkout started
+2026-06-06T10:42:04Z INFO gateway request_id=req-428 POST /checkout completed duration_ms=177
+2026-06-06T10:42:07Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:42:11Z INFO gateway request_id=req-429 POST /checkout started
+2026-06-06T10:42:11Z INFO gateway request_id=req-429 POST /checkout completed duration_ms=132
+2026-06-06T10:42:18Z INFO gateway request_id=req-430 POST /checkout started
+2026-06-06T10:42:18Z INFO gateway request_id=req-430 POST /checkout completed duration_ms=148
+2026-06-06T10:42:20Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:42:25Z INFO gateway request_id=req-431 POST /checkout started
+2026-06-06T10:42:25Z INFO gateway request_id=req-431 POST /checkout completed duration_ms=127
+2026-06-06T10:42:29Z INFO gateway request_id=req-432 POST /checkout started
+2026-06-06T10:42:29Z INFO gateway request_id=req-432 POST /checkout completed duration_ms=102
+2026-06-06T10:42:35Z INFO gateway request_id=req-433 POST /checkout started
+2026-06-06T10:42:35Z INFO gateway request_id=req-433 POST /checkout completed duration_ms=420
+2026-06-06T10:42:38Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:42:40Z INFO gateway request_id=req-434 POST /checkout started
+2026-06-06T10:42:40Z INFO gateway request_id=req-434 POST /checkout completed duration_ms=241
+2026-06-06T10:42:46Z INFO gateway request_id=req-435 POST /checkout started
+2026-06-06T10:42:46Z INFO gateway request_id=req-435 POST /checkout completed duration_ms=396
+2026-06-06T10:42:52Z INFO gateway request_id=req-436 POST /checkout started
+2026-06-06T10:42:52Z INFO gateway request_id=req-436 POST /checkout completed duration_ms=150
+2026-06-06T10:42:53Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:42:58Z INFO gateway request_id=req-437 POST /checkout started
+2026-06-06T10:42:58Z INFO gateway request_id=req-437 POST /checkout completed duration_ms=139
+2026-06-06T10:43:03Z INFO gateway request_id=req-438 POST /checkout started
+2026-06-06T10:43:03Z INFO gateway request_id=req-438 POST /checkout completed duration_ms=218
+2026-06-06T10:43:06Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:43:11Z INFO gateway request_id=req-439 POST /checkout started
+2026-06-06T10:43:11Z INFO gateway request_id=req-439 POST /checkout completed duration_ms=373
+2026-06-06T10:43:16Z INFO gateway request_id=req-440 POST /checkout started
+2026-06-06T10:43:16Z INFO gateway request_id=req-440 POST /checkout completed duration_ms=330
+2026-06-06T10:43:21Z INFO gateway request_id=req-441 POST /checkout started
+2026-06-06T10:43:22Z INFO gateway request_id=req-441 POST /checkout completed duration_ms=349
+2026-06-06T10:43:22Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:43:28Z INFO gateway request_id=req-442 POST /checkout started
+2026-06-06T10:43:28Z INFO gateway request_id=req-442 POST /checkout completed duration_ms=305
+2026-06-06T10:43:34Z INFO gateway request_id=req-443 POST /checkout started
+2026-06-06T10:43:35Z INFO gateway request_id=req-443 POST /checkout completed duration_ms=297
+2026-06-06T10:43:35Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:43:40Z INFO gateway request_id=req-444 POST /checkout started
+2026-06-06T10:43:40Z INFO gateway request_id=req-444 POST /checkout completed duration_ms=240
+2026-06-06T10:43:45Z INFO gateway request_id=req-445 POST /checkout started
+2026-06-06T10:43:45Z INFO gateway request_id=req-445 POST /checkout completed duration_ms=269
+2026-06-06T10:43:49Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:43:51Z INFO gateway request_id=req-446 POST /checkout started
+2026-06-06T10:43:51Z INFO gateway request_id=req-446 POST /checkout completed duration_ms=346
+2026-06-06T10:43:56Z INFO gateway request_id=req-447 POST /checkout started
+2026-06-06T10:43:56Z INFO gateway request_id=req-447 POST /checkout completed duration_ms=260
+2026-06-06T10:44:02Z INFO gateway request_id=req-448 POST /checkout started
+2026-06-06T10:44:03Z INFO gateway request_id=req-448 POST /checkout completed duration_ms=145
+2026-06-06T10:44:05Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:44:10Z INFO gateway request_id=req-449 POST /checkout started
+2026-06-06T10:44:10Z INFO gateway request_id=req-449 POST /checkout completed duration_ms=191
+2026-06-06T10:44:15Z INFO gateway request_id=req-450 POST /checkout started
+2026-06-06T10:44:16Z INFO gateway request_id=req-450 POST /checkout completed duration_ms=379
+2026-06-06T10:44:21Z INFO gateway request_id=req-451 POST /checkout started
+2026-06-06T10:44:21Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:44:21Z INFO gateway request_id=req-451 POST /checkout completed duration_ms=331
+2026-06-06T10:44:25Z INFO gateway request_id=req-452 POST /checkout started
+2026-06-06T10:44:25Z INFO gateway request_id=req-452 POST /checkout completed duration_ms=175
+2026-06-06T10:44:30Z INFO gateway request_id=req-453 POST /checkout started
+2026-06-06T10:44:31Z INFO gateway request_id=req-453 POST /checkout completed duration_ms=414
+2026-06-06T10:44:36Z INFO gateway request_id=req-454 POST /checkout started
+2026-06-06T10:44:36Z INFO gateway request_id=req-454 POST /checkout completed duration_ms=264
+2026-06-06T10:44:37Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:44:43Z INFO gateway request_id=req-455 POST /checkout started
+2026-06-06T10:44:44Z INFO gateway request_id=req-455 POST /checkout completed duration_ms=212
+2026-06-06T10:44:50Z INFO gateway request_id=req-456 POST /checkout started
+2026-06-06T10:44:51Z INFO gateway request_id=req-456 POST /checkout completed duration_ms=196
+2026-06-06T10:44:52Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:44:55Z INFO gateway request_id=req-457 POST /checkout started
+2026-06-06T10:44:55Z INFO gateway request_id=req-457 POST /checkout completed duration_ms=299
+2026-06-06T10:45:01Z INFO gateway request_id=req-458 POST /checkout started
+2026-06-06T10:45:02Z INFO gateway request_id=req-458 POST /checkout completed duration_ms=93
+2026-06-06T10:45:06Z INFO gateway user profile updated user_email=frank.demo@example.com client_ip=203.0.113.25 session_id=89e95bb4-8358-cbcd-64c1-f955eb089416
+2026-06-06T10:45:08Z INFO gateway payment method saved card_number=4111111111111111 api_key=sk_live_demo_7957cb17a227 auth_header=Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vLXVzZXIifQ.sig7c4cb94e
+2026-06-06T10:45:08Z INFO gateway request_id=req-459 POST /checkout started
+2026-06-06T10:45:08Z INFO gateway request_id=req-459 POST /checkout completed duration_ms=346
+2026-06-06T10:45:08Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:45:14Z INFO gateway request_id=req-460 POST /checkout started
+2026-06-06T10:45:14Z INFO gateway request_id=req-460 POST /checkout completed duration_ms=197
+2026-06-06T10:45:21Z INFO gateway request_id=req-461 POST /checkout started
+2026-06-06T10:45:21Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:45:21Z INFO gateway request_id=req-461 POST /checkout completed duration_ms=373
+2026-06-06T10:45:27Z INFO gateway request_id=req-462 POST /checkout started
+2026-06-06T10:45:28Z INFO gateway request_id=req-462 POST /checkout completed duration_ms=402
+2026-06-06T10:45:32Z INFO gateway request_id=req-463 POST /checkout started
+2026-06-06T10:45:32Z INFO gateway request_id=req-463 POST /checkout completed duration_ms=336
+2026-06-06T10:45:34Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:45:38Z INFO gateway request_id=req-464 POST /checkout started
+2026-06-06T10:45:39Z INFO gateway request_id=req-464 POST /checkout completed duration_ms=114
+2026-06-06T10:45:43Z INFO gateway request_id=req-465 POST /checkout started
+2026-06-06T10:45:44Z INFO gateway request_id=req-465 POST /checkout completed duration_ms=325
+2026-06-06T10:45:49Z INFO gateway request_id=req-466 POST /checkout started
+2026-06-06T10:45:49Z INFO gateway request_id=req-466 POST /checkout completed duration_ms=225
+2026-06-06T10:45:50Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:45:56Z INFO gateway request_id=req-467 POST /checkout started
+2026-06-06T10:45:57Z INFO gateway request_id=req-467 POST /checkout completed duration_ms=404
+2026-06-06T10:46:01Z INFO gateway request_id=req-468 POST /checkout started
+2026-06-06T10:46:02Z INFO gateway request_id=req-468 POST /checkout completed duration_ms=172
+2026-06-06T10:46:05Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:46:07Z INFO gateway request_id=req-469 POST /checkout started
+2026-06-06T10:46:07Z INFO gateway request_id=req-469 POST /checkout completed duration_ms=412
+2026-06-06T10:46:11Z INFO gateway request_id=req-470 POST /checkout started
+2026-06-06T10:46:11Z INFO gateway request_id=req-470 POST /checkout completed duration_ms=188
+2026-06-06T10:46:15Z INFO gateway request_id=req-471 POST /checkout started
+2026-06-06T10:46:16Z INFO gateway request_id=req-471 POST /checkout completed duration_ms=368
+2026-06-06T10:46:19Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:46:22Z INFO gateway request_id=req-472 POST /checkout started
+2026-06-06T10:46:23Z INFO gateway request_id=req-472 POST /checkout completed duration_ms=212
+2026-06-06T10:46:27Z INFO gateway request_id=req-473 POST /checkout started
+2026-06-06T10:46:27Z INFO gateway request_id=req-473 POST /checkout completed duration_ms=399
+2026-06-06T10:46:33Z INFO gateway request_id=req-474 POST /checkout started
+2026-06-06T10:46:33Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:46:34Z INFO gateway request_id=req-474 POST /checkout completed duration_ms=301
+2026-06-06T10:46:39Z INFO gateway request_id=req-475 POST /checkout started
+2026-06-06T10:46:39Z INFO gateway request_id=req-475 POST /checkout completed duration_ms=207
+2026-06-06T10:46:46Z INFO gateway request_id=req-476 POST /checkout started
+2026-06-06T10:46:46Z INFO gateway request_id=req-476 POST /checkout completed duration_ms=257
+2026-06-06T10:46:51Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:46:53Z INFO gateway request_id=req-477 POST /checkout started
+2026-06-06T10:46:53Z INFO gateway request_id=req-477 POST /checkout completed duration_ms=106
+2026-06-06T10:47:00Z INFO gateway request_id=req-478 POST /checkout started
+2026-06-06T10:47:00Z INFO gateway request_id=req-478 POST /checkout completed duration_ms=150
+2026-06-06T10:47:04Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:47:05Z INFO gateway request_id=req-479 POST /checkout started
+2026-06-06T10:47:06Z INFO gateway request_id=req-479 POST /checkout completed duration_ms=369
+2026-06-06T10:47:12Z INFO gateway request_id=req-480 POST /checkout started
+2026-06-06T10:47:12Z INFO gateway request_id=req-480 POST /checkout completed duration_ms=83
+2026-06-06T10:47:19Z INFO gateway request_id=req-481 POST /checkout started
+2026-06-06T10:47:19Z INFO gateway request_id=req-481 POST /checkout completed duration_ms=141
+2026-06-06T10:47:22Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:47:25Z INFO gateway request_id=req-482 POST /checkout started
+2026-06-06T10:47:26Z INFO gateway request_id=req-482 POST /checkout completed duration_ms=238
+2026-06-06T10:47:33Z INFO gateway request_id=req-483 POST /checkout started
+2026-06-06T10:47:34Z INFO gateway request_id=req-483 POST /checkout completed duration_ms=161
+2026-06-06T10:47:36Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:47:41Z INFO gateway request_id=req-484 POST /checkout started
+2026-06-06T10:47:41Z INFO gateway request_id=req-484 POST /checkout completed duration_ms=367
+2026-06-06T10:47:46Z INFO gateway request_id=req-485 POST /checkout started
+2026-06-06T10:47:46Z INFO gateway request_id=req-485 POST /checkout completed duration_ms=116
+2026-06-06T10:47:52Z INFO gateway request_id=req-486 POST /checkout started
+2026-06-06T10:47:52Z INFO gateway request_id=req-486 POST /checkout completed duration_ms=356
+2026-06-06T10:47:53Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:47:59Z INFO gateway request_id=req-487 POST /checkout started
+2026-06-06T10:47:59Z INFO gateway request_id=req-487 POST /checkout completed duration_ms=361
+2026-06-06T10:48:03Z INFO gateway request_id=req-488 POST /checkout started
+2026-06-06T10:48:04Z INFO gateway request_id=req-488 POST /checkout completed duration_ms=112
+2026-06-06T10:48:05Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:48:10Z INFO gateway request_id=req-489 POST /checkout started
+2026-06-06T10:48:10Z INFO gateway request_id=req-489 POST /checkout completed duration_ms=351
+2026-06-06T10:48:16Z INFO gateway request_id=req-490 POST /checkout started
+2026-06-06T10:48:16Z INFO gateway request_id=req-490 POST /checkout completed duration_ms=203
+2026-06-06T10:48:22Z INFO gateway request_id=req-491 POST /checkout started
+2026-06-06T10:48:22Z INFO gateway request_id=req-491 POST /checkout completed duration_ms=295
+2026-06-06T10:48:22Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:48:28Z INFO gateway request_id=req-492 POST /checkout started
+2026-06-06T10:48:28Z INFO gateway request_id=req-492 POST /checkout completed duration_ms=341
+2026-06-06T10:48:34Z INFO gateway request_id=req-493 POST /checkout started
+2026-06-06T10:48:34Z INFO gateway request_id=req-493 POST /checkout completed duration_ms=369
+2026-06-06T10:48:39Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:48:39Z INFO gateway request_id=req-494 POST /checkout started
+2026-06-06T10:48:39Z INFO gateway request_id=req-494 POST /checkout completed duration_ms=411
+2026-06-06T10:48:47Z INFO gateway request_id=req-495 POST /checkout started
+2026-06-06T10:48:47Z INFO gateway request_id=req-495 POST /checkout completed duration_ms=317
+2026-06-06T10:48:53Z INFO gateway request_id=req-496 POST /checkout started
+2026-06-06T10:48:53Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:48:53Z INFO gateway request_id=req-496 POST /checkout completed duration_ms=299
+2026-06-06T10:48:59Z INFO gateway request_id=req-497 POST /checkout started
+2026-06-06T10:49:00Z INFO gateway request_id=req-497 POST /checkout completed duration_ms=384
+2026-06-06T10:49:06Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:49:06Z INFO gateway request_id=req-498 POST /checkout started
+2026-06-06T10:49:06Z INFO gateway request_id=req-498 POST /checkout completed duration_ms=219
+2026-06-06T10:49:12Z INFO gateway request_id=req-499 POST /checkout started
+2026-06-06T10:49:12Z INFO gateway request_id=req-499 POST /checkout completed duration_ms=273
+2026-06-06T10:49:18Z INFO gateway request_id=req-500 POST /checkout started
+2026-06-06T10:49:18Z INFO gateway request_id=req-500 POST /checkout completed duration_ms=156
+2026-06-06T10:49:19Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:49:24Z INFO gateway request_id=req-501 POST /checkout started
+2026-06-06T10:49:24Z INFO gateway request_id=req-501 POST /checkout completed duration_ms=208
+2026-06-06T10:49:30Z INFO gateway request_id=req-502 POST /checkout started
+2026-06-06T10:49:30Z INFO gateway request_id=req-502 POST /checkout completed duration_ms=176
+2026-06-06T10:49:32Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:49:36Z INFO gateway request_id=req-503 POST /checkout started
+2026-06-06T10:49:37Z INFO gateway request_id=req-503 POST /checkout completed duration_ms=156
+2026-06-06T10:49:43Z INFO gateway request_id=req-504 POST /checkout started
+2026-06-06T10:49:44Z INFO gateway request_id=req-504 POST /checkout completed duration_ms=127
+2026-06-06T10:49:46Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:49:48Z INFO gateway request_id=req-505 POST /checkout started
+2026-06-06T10:49:48Z INFO gateway request_id=req-505 POST /checkout completed duration_ms=266
+2026-06-06T10:49:54Z INFO gateway request_id=req-506 POST /checkout started
+2026-06-06T10:49:54Z INFO gateway request_id=req-506 POST /checkout completed duration_ms=383
+2026-06-06T10:50:00Z INFO gateway request_id=req-507 POST /checkout started
+2026-06-06T10:50:00Z INFO gateway request_id=req-507 POST /checkout completed duration_ms=322
+2026-06-06T10:50:01Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:50:08Z INFO gateway request_id=req-508 POST /checkout started
+2026-06-06T10:50:08Z INFO gateway request_id=req-508 POST /checkout completed duration_ms=151
+2026-06-06T10:50:13Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:50:15Z INFO gateway request_id=req-509 POST /checkout started
+2026-06-06T10:50:15Z INFO gateway request_id=req-509 POST /checkout completed duration_ms=180
+2026-06-06T10:50:21Z INFO gateway request_id=req-510 POST /checkout started
+2026-06-06T10:50:21Z INFO gateway request_id=req-510 POST /checkout completed duration_ms=171
+2026-06-06T10:50:28Z INFO gateway request_id=req-511 POST /checkout started
+2026-06-06T10:50:28Z INFO gateway request_id=req-511 POST /checkout completed duration_ms=179
+2026-06-06T10:50:29Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:50:33Z INFO gateway request_id=req-512 POST /checkout started
+2026-06-06T10:50:34Z INFO gateway request_id=req-512 POST /checkout completed duration_ms=317
+2026-06-06T10:50:38Z INFO gateway request_id=req-513 POST /checkout started
+2026-06-06T10:50:38Z INFO gateway request_id=req-513 POST /checkout completed duration_ms=305
+2026-06-06T10:50:42Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:50:44Z INFO gateway request_id=req-514 POST /checkout started
+2026-06-06T10:50:44Z INFO gateway request_id=req-514 POST /checkout completed duration_ms=230
+2026-06-06T10:50:51Z INFO gateway request_id=req-515 POST /checkout started
+2026-06-06T10:50:51Z INFO gateway request_id=req-515 POST /checkout completed duration_ms=304
+2026-06-06T10:50:55Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:50:56Z INFO gateway request_id=req-516 POST /checkout started
+2026-06-06T10:50:56Z INFO gateway request_id=req-516 POST /checkout completed duration_ms=339
+2026-06-06T10:51:03Z INFO gateway request_id=req-517 POST /checkout started
+2026-06-06T10:51:04Z INFO gateway request_id=req-517 POST /checkout completed duration_ms=112
+2026-06-06T10:51:08Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:51:09Z INFO gateway request_id=req-518 POST /checkout started
+2026-06-06T10:51:10Z INFO gateway request_id=req-518 POST /checkout completed duration_ms=100
+2026-06-06T10:51:16Z INFO gateway request_id=req-519 POST /checkout started
+2026-06-06T10:51:16Z INFO gateway request_id=req-519 POST /checkout completed duration_ms=274
+2026-06-06T10:51:21Z INFO gateway request_id=req-520 POST /checkout started
+2026-06-06T10:51:21Z INFO gateway request_id=req-520 POST /checkout completed duration_ms=420
+2026-06-06T10:51:24Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:51:28Z INFO gateway request_id=req-521 POST /checkout started
+2026-06-06T10:51:29Z INFO gateway request_id=req-521 POST /checkout completed duration_ms=205
+2026-06-06T10:51:35Z INFO gateway request_id=req-522 POST /checkout started
+2026-06-06T10:51:36Z INFO gateway request_id=req-522 POST /checkout completed duration_ms=208
+2026-06-06T10:51:41Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:51:42Z INFO gateway request_id=req-523 POST /checkout started
+2026-06-06T10:51:42Z INFO gateway request_id=req-523 POST /checkout completed duration_ms=123
+2026-06-06T10:51:49Z INFO gateway request_id=req-524 POST /checkout started
+2026-06-06T10:51:49Z INFO gateway request_id=req-524 POST /checkout completed duration_ms=202
+2026-06-06T10:51:53Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:51:55Z INFO gateway request_id=req-525 POST /checkout started
+2026-06-06T10:51:56Z INFO gateway request_id=req-525 POST /checkout completed duration_ms=114
+2026-06-06T10:52:01Z INFO gateway request_id=req-526 POST /checkout started
+2026-06-06T10:52:01Z INFO gateway request_id=req-526 POST /checkout completed duration_ms=410
+2026-06-06T10:52:08Z INFO gateway request_id=req-527 POST /checkout started
+2026-06-06T10:52:08Z INFO gateway request_id=req-527 POST /checkout completed duration_ms=217
+2026-06-06T10:52:11Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:52:14Z INFO gateway request_id=req-528 POST /checkout started
+2026-06-06T10:52:14Z INFO gateway request_id=req-528 POST /checkout completed duration_ms=368
+2026-06-06T10:52:19Z INFO gateway request_id=req-529 POST /checkout started
+2026-06-06T10:52:19Z INFO gateway request_id=req-529 POST /checkout completed duration_ms=112
+2026-06-06T10:52:24Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:52:26Z INFO gateway request_id=req-530 POST /checkout started
+2026-06-06T10:52:26Z INFO gateway request_id=req-530 POST /checkout completed duration_ms=288
+2026-06-06T10:52:31Z INFO gateway request_id=req-531 POST /checkout started
+2026-06-06T10:52:31Z INFO gateway request_id=req-531 POST /checkout completed duration_ms=367
+2026-06-06T10:52:37Z INFO gateway request_id=req-532 POST /checkout started
+2026-06-06T10:52:37Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:52:37Z INFO gateway request_id=req-532 POST /checkout completed duration_ms=121
+2026-06-06T10:52:41Z INFO gateway request_id=req-533 POST /checkout started
+2026-06-06T10:52:41Z INFO gateway request_id=req-533 POST /checkout completed duration_ms=124
+2026-06-06T10:52:47Z INFO gateway request_id=req-534 POST /checkout started
+2026-06-06T10:52:47Z INFO gateway request_id=req-534 POST /checkout completed duration_ms=235
+2026-06-06T10:52:48Z INFO gateway user profile updated user_email=grace.demo@example.com client_ip=203.0.113.3 session_id=2a39f109-3398-9488-4670-a9592c19eac2
+2026-06-06T10:52:50Z INFO gateway payment method saved card_number=4111111111111111 api_key=sk_live_demo_e05fd4df6faa auth_header=Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vLXVzZXIifQ.sig87ced4ac
+2026-06-06T10:52:50Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:52:51Z INFO gateway request_id=req-535 POST /checkout started
+2026-06-06T10:52:52Z INFO gateway request_id=req-535 POST /checkout completed duration_ms=90
+2026-06-06T10:52:56Z INFO gateway request_id=req-536 POST /checkout started
+2026-06-06T10:52:56Z INFO gateway request_id=req-536 POST /checkout completed duration_ms=102
+2026-06-06T10:53:02Z INFO gateway request_id=req-537 POST /checkout started
+2026-06-06T10:53:02Z INFO gateway request_id=req-537 POST /checkout completed duration_ms=131
+2026-06-06T10:53:06Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:53:09Z INFO gateway request_id=req-538 POST /checkout started
+2026-06-06T10:53:09Z INFO gateway request_id=req-538 POST /checkout completed duration_ms=117
+2026-06-06T10:53:16Z INFO gateway request_id=req-539 POST /checkout started
+2026-06-06T10:53:16Z INFO gateway request_id=req-539 POST /checkout completed duration_ms=315
+2026-06-06T10:53:22Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:53:22Z INFO gateway request_id=req-540 POST /checkout started
+2026-06-06T10:53:23Z INFO gateway request_id=req-540 POST /checkout completed duration_ms=240
+2026-06-06T10:53:28Z INFO gateway request_id=req-541 POST /checkout started
+2026-06-06T10:53:29Z INFO gateway request_id=req-541 POST /checkout completed duration_ms=209
+2026-06-06T10:53:33Z INFO gateway request_id=req-542 POST /checkout started
+2026-06-06T10:53:33Z INFO gateway request_id=req-542 POST /checkout completed duration_ms=403
+2026-06-06T10:53:35Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:53:39Z INFO gateway request_id=req-543 POST /checkout started
+2026-06-06T10:53:39Z INFO gateway request_id=req-543 POST /checkout completed duration_ms=266
+2026-06-06T10:53:47Z INFO gateway request_id=req-544 POST /checkout started
+2026-06-06T10:53:47Z INFO gateway request_id=req-544 POST /checkout completed duration_ms=168
+2026-06-06T10:53:49Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:53:55Z INFO gateway request_id=req-545 POST /checkout started
+2026-06-06T10:53:55Z INFO gateway request_id=req-545 POST /checkout completed duration_ms=83
+2026-06-06T10:54:01Z INFO gateway request_id=req-546 POST /checkout started
+2026-06-06T10:54:01Z INFO gateway request_id=req-546 POST /checkout completed duration_ms=243
+2026-06-06T10:54:06Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:54:09Z INFO gateway request_id=req-547 POST /checkout started
+2026-06-06T10:54:09Z INFO gateway request_id=req-547 POST /checkout completed duration_ms=318
+2026-06-06T10:54:16Z INFO gateway request_id=req-548 POST /checkout started
+2026-06-06T10:54:16Z INFO gateway request_id=req-548 POST /checkout completed duration_ms=124
+2026-06-06T10:54:22Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:54:22Z INFO gateway request_id=req-549 POST /checkout started
+2026-06-06T10:54:23Z INFO gateway request_id=req-549 POST /checkout completed duration_ms=306
+2026-06-06T10:54:28Z INFO gateway request_id=req-550 POST /checkout started
+2026-06-06T10:54:29Z INFO gateway request_id=req-550 POST /checkout completed duration_ms=368
+2026-06-06T10:54:33Z INFO gateway request_id=req-551 POST /checkout started
+2026-06-06T10:54:34Z INFO gateway request_id=req-551 POST /checkout completed duration_ms=171
+2026-06-06T10:54:36Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:54:41Z INFO gateway request_id=req-552 POST /checkout started
+2026-06-06T10:54:41Z INFO gateway request_id=req-552 POST /checkout completed duration_ms=192
+2026-06-06T10:54:46Z INFO gateway request_id=req-553 POST /checkout started
+2026-06-06T10:54:46Z INFO gateway request_id=req-553 POST /checkout completed duration_ms=211
+2026-06-06T10:54:51Z INFO gateway request_id=req-554 POST /checkout started
+2026-06-06T10:54:51Z INFO gateway request_id=req-554 POST /checkout completed duration_ms=224
+2026-06-06T10:54:54Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:54:57Z INFO gateway request_id=req-555 POST /checkout started
+2026-06-06T10:54:57Z INFO gateway request_id=req-555 POST /checkout completed duration_ms=398
+2026-06-06T10:55:04Z INFO gateway request_id=req-556 POST /checkout started
+2026-06-06T10:55:04Z INFO gateway request_id=req-556 POST /checkout completed duration_ms=98
+2026-06-06T10:55:08Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:55:11Z INFO gateway request_id=req-557 POST /checkout started
+2026-06-06T10:55:11Z INFO gateway request_id=req-557 POST /checkout completed duration_ms=108
+2026-06-06T10:55:16Z INFO gateway request_id=req-558 POST /checkout started
+2026-06-06T10:55:17Z INFO gateway request_id=req-558 POST /checkout completed duration_ms=222
+2026-06-06T10:55:21Z INFO gateway request_id=req-559 POST /checkout started
+2026-06-06T10:55:21Z INFO gateway request_id=req-559 POST /checkout completed duration_ms=333
+2026-06-06T10:55:23Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:55:28Z INFO gateway request_id=req-560 POST /checkout started
+2026-06-06T10:55:28Z INFO gateway request_id=req-560 POST /checkout completed duration_ms=413
+2026-06-06T10:55:33Z INFO gateway request_id=req-561 POST /checkout started
+2026-06-06T10:55:33Z INFO gateway request_id=req-561 POST /checkout completed duration_ms=333
+2026-06-06T10:55:37Z INFO gateway request_id=req-562 POST /checkout started
+2026-06-06T10:55:38Z INFO gateway request_id=req-562 POST /checkout completed duration_ms=274
+2026-06-06T10:55:39Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:55:43Z INFO gateway request_id=req-563 POST /checkout started
+2026-06-06T10:55:43Z INFO gateway request_id=req-563 POST /checkout completed duration_ms=275
+2026-06-06T10:55:50Z INFO gateway request_id=req-564 POST /checkout started
+2026-06-06T10:55:51Z INFO gateway request_id=req-564 POST /checkout completed duration_ms=101
+2026-06-06T10:55:57Z INFO gateway request_id=req-565 POST /checkout started
+2026-06-06T10:55:57Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:55:57Z INFO gateway request_id=req-565 POST /checkout completed duration_ms=115
+2026-06-06T10:56:05Z INFO gateway request_id=req-566 POST /checkout started
+2026-06-06T10:56:05Z INFO gateway request_id=req-566 POST /checkout completed duration_ms=146
+2026-06-06T10:56:09Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:56:11Z INFO gateway request_id=req-567 POST /checkout started
+2026-06-06T10:56:11Z INFO gateway request_id=req-567 POST /checkout completed duration_ms=362
+2026-06-06T10:56:17Z INFO gateway request_id=req-568 POST /checkout started
+2026-06-06T10:56:17Z INFO gateway request_id=req-568 POST /checkout completed duration_ms=391
+2026-06-06T10:56:24Z INFO gateway request_id=req-569 POST /checkout started
+2026-06-06T10:56:24Z INFO gateway request_id=req-569 POST /checkout completed duration_ms=212
+2026-06-06T10:56:27Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:56:29Z INFO gateway request_id=req-570 POST /checkout started
+2026-06-06T10:56:29Z INFO gateway request_id=req-570 POST /checkout completed duration_ms=378
+2026-06-06T10:56:35Z INFO gateway request_id=req-571 POST /checkout started
+2026-06-06T10:56:36Z INFO gateway request_id=req-571 POST /checkout completed duration_ms=90
+2026-06-06T10:56:42Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:56:43Z INFO gateway request_id=req-572 POST /checkout started
+2026-06-06T10:56:43Z INFO gateway request_id=req-572 POST /checkout completed duration_ms=235
+2026-06-06T10:56:47Z INFO gateway request_id=req-573 POST /checkout started
+2026-06-06T10:56:47Z INFO gateway request_id=req-573 POST /checkout completed duration_ms=335
+2026-06-06T10:56:53Z INFO gateway request_id=req-574 POST /checkout started
+2026-06-06T10:56:53Z INFO gateway request_id=req-574 POST /checkout completed duration_ms=106
+2026-06-06T10:56:56Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:56:59Z INFO gateway request_id=req-575 POST /checkout started
+2026-06-06T10:56:59Z INFO gateway request_id=req-575 POST /checkout completed duration_ms=255
+2026-06-06T10:57:06Z INFO gateway request_id=req-576 POST /checkout started
+2026-06-06T10:57:06Z INFO gateway request_id=req-576 POST /checkout completed duration_ms=85
+2026-06-06T10:57:10Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:57:13Z INFO gateway request_id=req-577 POST /checkout started
+2026-06-06T10:57:13Z INFO gateway request_id=req-577 POST /checkout completed duration_ms=399
+2026-06-06T10:57:18Z INFO gateway user profile updated user_email=heidi.demo@example.com client_ip=203.0.113.245 session_id=e2429e47-ea11-0d75-b4bb-7f4663d97354
+2026-06-06T10:57:19Z INFO gateway request_id=req-578 POST /checkout started
+2026-06-06T10:57:19Z INFO gateway request_id=req-578 POST /checkout completed duration_ms=235
+2026-06-06T10:57:20Z INFO gateway payment method saved card_number=4111111111111111 api_key=sk_live_demo_7ad7d6614e22 auth_header=Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vLXVzZXIifQ.sigf80c8d2c
+2026-06-06T10:57:23Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:57:26Z INFO gateway request_id=req-579 POST /checkout started
+2026-06-06T10:57:26Z INFO gateway request_id=req-579 POST /checkout completed duration_ms=406
+2026-06-06T10:57:32Z INFO gateway request_id=req-580 POST /checkout started
+2026-06-06T10:57:32Z INFO gateway request_id=req-580 POST /checkout completed duration_ms=377
+2026-06-06T10:57:36Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:57:37Z INFO gateway request_id=req-581 POST /checkout started
+2026-06-06T10:57:37Z INFO gateway request_id=req-581 POST /checkout completed duration_ms=154
+2026-06-06T10:57:44Z INFO gateway request_id=req-582 POST /checkout started
+2026-06-06T10:57:44Z INFO gateway request_id=req-582 POST /checkout completed duration_ms=161
+2026-06-06T10:57:51Z INFO gateway GET /healthz completed duration_ms=2
+2026-06-06T10:57:52Z INFO gateway request_id=req-583 POST /checkout started
+2026-06-06T10:57:52Z INFO gateway request_id=req-583 POST /checkout completed duration_ms=377
+2026-06-06T10:57:56Z INFO gateway request_id=req-584 POST /checkout started
+2026-06-06T10:57:57Z INFO gateway request_id=req-584 POST /checkout completed duration_ms=354
+2026-06-06T10:58:01Z INFO gateway request_id=req-585 POST /checkout started
+2026-06-06T10:58:01Z INFO gateway request_id=req-585 POST /checkout completed duration_ms=223
+2026-06-06T10:58:08Z INFO gateway GET /healthz completed duration_ms=5
+2026-06-06T10:58:08Z INFO gateway request_id=req-586 POST /checkout started
+2026-06-06T10:58:09Z INFO gateway request_id=req-586 POST /checkout completed duration_ms=305
+2026-06-06T10:58:16Z INFO gateway request_id=req-587 POST /checkout started
+2026-06-06T10:58:16Z INFO gateway request_id=req-587 POST /checkout completed duration_ms=405
+2026-06-06T10:58:22Z INFO gateway GET /healthz completed duration_ms=3
+2026-06-06T10:58:23Z INFO gateway request_id=req-588 POST /checkout started
+2026-06-06T10:58:23Z INFO gateway request_id=req-588 POST /checkout completed duration_ms=274
+2026-06-06T10:58:28Z INFO gateway request_id=req-589 POST /checkout started
+2026-06-06T10:58:28Z INFO gateway request_id=req-589 POST /checkout completed duration_ms=101
+2026-06-06T10:58:32Z INFO gateway request_id=req-590 POST /checkout started
+2026-06-06T10:58:33Z INFO gateway request_id=req-590 POST /checkout completed duration_ms=245
+2026-06-06T10:58:39Z INFO gateway request_id=req-591 POST /checkout started
+2026-06-06T10:58:39Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:58:39Z INFO gateway request_id=req-591 POST /checkout completed duration_ms=401
+2026-06-06T10:58:45Z INFO gateway request_id=req-592 POST /checkout started
+2026-06-06T10:58:46Z INFO gateway request_id=req-592 POST /checkout completed duration_ms=303
+2026-06-06T10:58:50Z INFO gateway request_id=req-593 POST /checkout started
+2026-06-06T10:58:50Z INFO gateway request_id=req-593 POST /checkout completed duration_ms=230
+2026-06-06T10:58:52Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:58:57Z INFO gateway request_id=req-594 POST /checkout started
+2026-06-06T10:58:57Z INFO gateway request_id=req-594 POST /checkout completed duration_ms=116
+2026-06-06T10:59:03Z INFO gateway request_id=req-595 POST /checkout started
+2026-06-06T10:59:03Z INFO gateway request_id=req-595 POST /checkout completed duration_ms=314
+2026-06-06T10:59:08Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:59:10Z INFO gateway request_id=req-596 POST /checkout started
+2026-06-06T10:59:10Z INFO gateway request_id=req-596 POST /checkout completed duration_ms=258
+2026-06-06T10:59:16Z INFO gateway request_id=req-597 POST /checkout started
+2026-06-06T10:59:16Z INFO gateway request_id=req-597 POST /checkout completed duration_ms=327
+2026-06-06T10:59:21Z INFO gateway request_id=req-598 POST /checkout started
+2026-06-06T10:59:21Z INFO gateway request_id=req-598 POST /checkout completed duration_ms=110
+2026-06-06T10:59:24Z INFO gateway GET /healthz completed duration_ms=4
+2026-06-06T10:59:26Z INFO gateway request_id=req-599 POST /checkout started
+2026-06-06T10:59:27Z INFO gateway request_id=req-599 POST /checkout completed duration_ms=259
+2026-06-06T10:59:32Z INFO gateway request_id=req-600 POST /checkout started
+2026-06-06T10:59:32Z INFO gateway request_id=req-600 POST /checkout completed duration_ms=345
+2026-06-06T10:59:37Z INFO gateway request_id=req-601 POST /checkout started
+2026-06-06T10:59:37Z INFO gateway request_id=req-601 POST /checkout completed duration_ms=271
+2026-06-06T10:59:39Z INFO gateway GET /healthz completed duration_ms=1
+2026-06-06T10:59:42Z INFO gateway request_id=req-602 POST /checkout started
+2026-06-06T10:59:42Z INFO gateway request_id=req-602 POST /checkout completed duration_ms=92
+2026-06-06T10:59:47Z INFO gateway request_id=req-603 POST /checkout started
+2026-06-06T10:59:47Z INFO gateway request_id=req-603 POST /checkout completed duration_ms=146
+2026-06-06T10:59:54Z INFO gateway request_id=req-604 POST /checkout started
+2026-06-06T10:59:54Z INFO gateway request_id=req-604 POST /checkout completed duration_ms=207
+2026-06-06T10:59:56Z INFO gateway GET /healthz completed duration_ms=6
+2026-06-06T10:59:59Z INFO gateway request_id=req-605 POST /checkout started
+2026-06-06T11:00:00Z INFO gateway request_id=req-605 POST /checkout completed duration_ms=160

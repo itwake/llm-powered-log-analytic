@@ -1,0 +1,665 @@
+2026-06-06T10:00:00Z INFO auth-service session validated user_id=u-0468 duration_ms=17
+2026-06-06T10:00:00Z INFO auth-service healthcheck ok pool_active=19 pool_max=50
+2026-06-06T10:00:06Z INFO auth-service session validated user_id=u-0787 duration_ms=19
+2026-06-06T10:00:13Z INFO auth-service session validated user_id=u-0016 duration_ms=10
+2026-06-06T10:00:16Z INFO auth-service healthcheck ok pool_active=6 pool_max=50
+2026-06-06T10:00:18Z INFO auth-service session validated user_id=u-0089 duration_ms=8
+2026-06-06T10:00:25Z INFO auth-service session validated user_id=u-0116 duration_ms=11
+2026-06-06T10:00:34Z INFO auth-service session validated user_id=u-0503 duration_ms=20
+2026-06-06T10:00:40Z INFO auth-service healthcheck ok pool_active=19 pool_max=50
+2026-06-06T10:00:44Z INFO auth-service session validated user_id=u-0012 duration_ms=17
+2026-06-06T10:00:54Z INFO auth-service session validated user_id=u-0125 duration_ms=5
+2026-06-06T10:00:59Z INFO auth-service healthcheck ok pool_active=16 pool_max=50
+2026-06-06T10:01:05Z INFO auth-service session validated user_id=u-0551 duration_ms=15
+2026-06-06T10:01:11Z INFO auth-service session validated user_id=u-0412 duration_ms=4
+2026-06-06T10:01:18Z INFO auth-service healthcheck ok pool_active=22 pool_max=50
+2026-06-06T10:01:19Z INFO auth-service session validated user_id=u-0265 duration_ms=14
+2026-06-06T10:01:25Z INFO auth-service session validated user_id=u-0230 duration_ms=14
+2026-06-06T10:01:34Z INFO auth-service session validated user_id=u-0207 duration_ms=4
+2026-06-06T10:01:41Z INFO auth-service healthcheck ok pool_active=6 pool_max=50
+2026-06-06T10:01:43Z INFO auth-service session validated user_id=u-0057 duration_ms=7
+2026-06-06T10:01:51Z INFO auth-service session validated user_id=u-0695 duration_ms=28
+2026-06-06T10:01:57Z INFO auth-service session validated user_id=u-0203 duration_ms=24
+2026-06-06T10:02:02Z INFO auth-service session validated user_id=u-0445 duration_ms=8
+2026-06-06T10:02:04Z INFO auth-service healthcheck ok pool_active=10 pool_max=50
+2026-06-06T10:02:12Z INFO auth-service session validated user_id=u-0183 duration_ms=12
+2026-06-06T10:02:18Z INFO auth-service session validated user_id=u-0089 duration_ms=19
+2026-06-06T10:02:25Z INFO auth-service healthcheck ok pool_active=19 pool_max=50
+2026-06-06T10:02:26Z INFO auth-service session validated user_id=u-0363 duration_ms=24
+2026-06-06T10:02:35Z INFO auth-service session validated user_id=u-0389 duration_ms=20
+2026-06-06T10:02:43Z INFO auth-service healthcheck ok pool_active=23 pool_max=50
+2026-06-06T10:02:46Z INFO auth-service session validated user_id=u-0409 duration_ms=22
+2026-06-06T10:02:57Z INFO auth-service session validated user_id=u-0668 duration_ms=25
+2026-06-06T10:03:05Z INFO auth-service session validated user_id=u-0063 duration_ms=10
+2026-06-06T10:03:05Z INFO auth-service healthcheck ok pool_active=10 pool_max=50
+2026-06-06T10:03:11Z INFO auth-service session validated user_id=u-0843 duration_ms=28
+2026-06-06T10:03:19Z INFO auth-service session validated user_id=u-0007 duration_ms=12
+2026-06-06T10:03:26Z INFO auth-service session validated user_id=u-0256 duration_ms=24
+2026-06-06T10:03:27Z INFO auth-service healthcheck ok pool_active=12 pool_max=50
+2026-06-06T10:03:36Z INFO auth-service session validated user_id=u-0600 duration_ms=16
+2026-06-06T10:03:43Z INFO auth-service healthcheck ok pool_active=8 pool_max=50
+2026-06-06T10:03:44Z INFO auth-service session validated user_id=u-0657 duration_ms=12
+2026-06-06T10:03:52Z INFO auth-service session validated user_id=u-0661 duration_ms=28
+2026-06-06T10:03:58Z INFO auth-service session validated user_id=u-0409 duration_ms=17
+2026-06-06T10:04:05Z INFO auth-service healthcheck ok pool_active=21 pool_max=50
+2026-06-06T10:04:08Z INFO auth-service session validated user_id=u-0157 duration_ms=16
+2026-06-06T10:04:16Z INFO auth-service session validated user_id=u-0835 duration_ms=24
+2026-06-06T10:04:25Z INFO auth-service healthcheck ok pool_active=12 pool_max=50
+2026-06-06T10:04:27Z INFO auth-service session validated user_id=u-0143 duration_ms=22
+2026-06-06T10:04:32Z INFO auth-service session validated user_id=u-0286 duration_ms=17
+2026-06-06T10:04:43Z INFO auth-service session validated user_id=u-0008 duration_ms=21
+2026-06-06T10:04:45Z INFO auth-service healthcheck ok pool_active=14 pool_max=50
+2026-06-06T10:04:49Z INFO auth-service session validated user_id=u-0093 duration_ms=27
+2026-06-06T10:04:58Z INFO auth-service session validated user_id=u-0027 duration_ms=17
+2026-06-06T10:05:03Z INFO auth-service session validated user_id=u-0201 duration_ms=8
+2026-06-06T10:05:08Z INFO auth-service healthcheck ok pool_active=9 pool_max=50
+2026-06-06T10:05:11Z INFO auth-service session validated user_id=u-0524 duration_ms=8
+2026-06-06T10:05:21Z INFO auth-service session validated user_id=u-0083 duration_ms=8
+2026-06-06T10:05:30Z INFO auth-service session validated user_id=u-0847 duration_ms=9
+2026-06-06T10:05:32Z INFO auth-service healthcheck ok pool_active=15 pool_max=50
+2026-06-06T10:05:37Z INFO auth-service session validated user_id=u-0877 duration_ms=4
+2026-06-06T10:05:44Z INFO auth-service session validated user_id=u-0139 duration_ms=9
+2026-06-06T10:05:49Z INFO auth-service healthcheck ok pool_active=22 pool_max=50
+2026-06-06T10:05:52Z INFO auth-service session validated user_id=u-0708 duration_ms=15
+2026-06-06T10:05:58Z INFO auth-service session validated user_id=u-0657 duration_ms=12
+2026-06-06T10:06:04Z INFO auth-service session validated user_id=u-0121 duration_ms=22
+2026-06-06T10:06:10Z INFO auth-service healthcheck ok pool_active=9 pool_max=50
+2026-06-06T10:06:13Z INFO auth-service session validated user_id=u-0375 duration_ms=10
+2026-06-06T10:06:20Z INFO auth-service session validated user_id=u-0852 duration_ms=17
+2026-06-06T10:06:25Z INFO auth-service session validated user_id=u-0227 duration_ms=7
+2026-06-06T10:06:33Z INFO auth-service session validated user_id=u-0459 duration_ms=17
+2026-06-06T10:06:33Z INFO auth-service healthcheck ok pool_active=20 pool_max=50
+2026-06-06T10:06:43Z INFO auth-service session validated user_id=u-0488 duration_ms=11
+2026-06-06T10:06:52Z INFO auth-service session validated user_id=u-0733 duration_ms=21
+2026-06-06T10:06:53Z INFO auth-service healthcheck ok pool_active=11 pool_max=50
+2026-06-06T10:07:03Z INFO auth-service session validated user_id=u-0322 duration_ms=19
+2026-06-06T10:07:10Z INFO auth-service healthcheck ok pool_active=12 pool_max=50
+2026-06-06T10:07:11Z INFO auth-service session validated user_id=u-0552 duration_ms=22
+2026-06-06T10:07:21Z INFO auth-service session validated user_id=u-0853 duration_ms=5
+2026-06-06T10:07:29Z INFO auth-service session validated user_id=u-0882 duration_ms=13
+2026-06-06T10:07:33Z INFO auth-service healthcheck ok pool_active=9 pool_max=50
+2026-06-06T10:07:39Z INFO auth-service session validated user_id=u-0527 duration_ms=13
+2026-06-06T10:07:46Z INFO auth-service session validated user_id=u-0451 duration_ms=13
+2026-06-06T10:07:52Z INFO auth-service healthcheck ok pool_active=14 pool_max=50
+2026-06-06T10:07:53Z INFO auth-service session validated user_id=u-0714 duration_ms=9
+2026-06-06T10:08:00Z WARN auth-service db connection pool usage high active=45 max=50
+2026-06-06T10:08:01Z INFO auth-service session validated user_id=u-0129 duration_ms=18
+2026-06-06T10:08:09Z WARN auth-service db connection pool usage high active=49 max=50
+2026-06-06T10:08:09Z INFO auth-service session validated user_id=u-0461 duration_ms=23
+2026-06-06T10:08:12Z INFO auth-service healthcheck ok pool_active=21 pool_max=50
+2026-06-06T10:08:15Z INFO auth-service session validated user_id=u-0384 duration_ms=23
+2026-06-06T10:08:16Z WARN auth-service db connection pool usage high active=45 max=50
+2026-06-06T10:08:22Z INFO auth-service session validated user_id=u-0019 duration_ms=5
+2026-06-06T10:08:24Z WARN auth-service db connection pool usage high active=45 max=50
+2026-06-06T10:08:29Z INFO auth-service healthcheck ok pool_active=8 pool_max=50
+2026-06-06T10:08:31Z INFO auth-service session validated user_id=u-0746 duration_ms=22
+2026-06-06T10:08:33Z WARN auth-service db connection pool usage high active=46 max=50
+2026-06-06T10:08:39Z INFO auth-service session validated user_id=u-0105 duration_ms=14
+2026-06-06T10:08:41Z WARN auth-service db connection pool usage high active=47 max=50
+2026-06-06T10:08:48Z INFO auth-service session validated user_id=u-0734 duration_ms=17
+2026-06-06T10:08:49Z INFO auth-service healthcheck ok pool_active=9 pool_max=50
+2026-06-06T10:08:49Z WARN auth-service db connection pool usage high active=49 max=50
+2026-06-06T10:08:59Z WARN auth-service db connection pool usage high active=46 max=50
+2026-06-06T10:08:59Z INFO auth-service session validated user_id=u-0678 duration_ms=6
+2026-06-06T10:09:07Z INFO auth-service healthcheck ok pool_active=19 pool_max=50
+2026-06-06T10:09:09Z WARN auth-service db connection pool usage high active=49 max=50
+2026-06-06T10:09:09Z INFO auth-service session validated user_id=u-0228 duration_ms=22
+2026-06-06T10:09:17Z WARN auth-service db connection pool usage high active=49 max=50
+2026-06-06T10:09:19Z INFO auth-service session validated user_id=u-0047 duration_ms=10
+2026-06-06T10:09:25Z WARN auth-service db connection pool usage high active=49 max=50
+2026-06-06T10:09:25Z INFO auth-service session validated user_id=u-0018 duration_ms=23
+2026-06-06T10:09:27Z INFO auth-service healthcheck ok pool_active=8 pool_max=50
+2026-06-06T10:09:32Z INFO auth-service session validated user_id=u-0725 duration_ms=19
+2026-06-06T10:09:33Z WARN auth-service db connection pool usage high active=47 max=50
+2026-06-06T10:09:38Z INFO auth-service session validated user_id=u-0124 duration_ms=11
+2026-06-06T10:09:43Z WARN auth-service db connection pool usage high active=45 max=50
+2026-06-06T10:09:44Z INFO auth-service healthcheck ok pool_active=9 pool_max=50
+2026-06-06T10:09:48Z INFO auth-service session validated user_id=u-0423 duration_ms=13
+2026-06-06T10:09:50Z WARN auth-service db connection pool usage high active=44 max=50
+2026-06-06T10:09:56Z INFO auth-service session validated user_id=u-0529 duration_ms=14
+2026-06-06T10:09:58Z WARN auth-service db connection pool usage high active=49 max=50
+2026-06-06T10:10:00Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=8
+2026-06-06T10:10:01Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:10:13Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=15
+2026-06-06T10:10:19Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:10:30Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-5473
+2026-06-06T10:10:30Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=22
+2026-06-06T10:10:36Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:10:42Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=12
+2026-06-06T10:10:42Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-7760
+2026-06-06T10:10:53Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=22
+2026-06-06T10:10:55Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-5141
+2026-06-06T10:10:56Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:11:03Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=14
+2026-06-06T10:11:13Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3092
+2026-06-06T10:11:17Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:11:20Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=31
+2026-06-06T10:11:33Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-2671
+2026-06-06T10:11:34Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=28
+2026-06-06T10:11:38Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:11:45Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=22
+2026-06-06T10:11:50Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3427
+2026-06-06T10:11:56Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:11:59Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=18
+2026-06-06T10:12:07Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-2805
+2026-06-06T10:12:09Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=12
+2026-06-06T10:12:13Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:12:22Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=16
+2026-06-06T10:12:26Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-8214
+2026-06-06T10:12:32Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:12:36Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-7282
+2026-06-06T10:12:36Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=23
+2026-06-06T10:12:50Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4375
+2026-06-06T10:12:51Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=7
+2026-06-06T10:12:55Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:13:01Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=27
+2026-06-06T10:13:09Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1505
+2026-06-06T10:13:15Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=17
+2026-06-06T10:13:18Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:13:22Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-6311
+2026-06-06T10:13:28Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=28
+2026-06-06T10:13:35Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:13:39Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=23
+2026-06-06T10:13:39Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-8444
+2026-06-06T10:13:50Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-5265
+2026-06-06T10:13:52Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:13:55Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=8
+2026-06-06T10:14:10Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4998
+2026-06-06T10:14:12Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=5
+2026-06-06T10:14:13Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:14:23Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-9104
+2026-06-06T10:14:23Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=15
+2026-06-06T10:14:35Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:14:38Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3097
+2026-06-06T10:14:39Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=16
+2026-06-06T10:14:51Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=9
+2026-06-06T10:14:54Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3923
+2026-06-06T10:14:56Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:15:03Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=30
+2026-06-06T10:15:13Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-6183
+2026-06-06T10:15:13Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:15:18Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=4
+2026-06-06T10:15:27Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1137
+2026-06-06T10:15:28Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=5
+2026-06-06T10:15:31Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:15:41Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=21
+2026-06-06T10:15:43Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1014
+2026-06-06T10:15:51Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:15:56Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=6
+2026-06-06T10:16:01Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-9137
+2026-06-06T10:16:09Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=19
+2026-06-06T10:16:13Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:16:17Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4392
+2026-06-06T10:16:21Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=14
+2026-06-06T10:16:30Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:16:33Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=7
+2026-06-06T10:16:35Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1231
+2026-06-06T10:16:42Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=26
+2026-06-06T10:16:51Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:16:52Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-9135
+2026-06-06T10:16:55Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=9
+2026-06-06T10:17:05Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=28
+2026-06-06T10:17:11Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1435
+2026-06-06T10:17:12Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:17:21Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=6
+2026-06-06T10:17:28Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-7461
+2026-06-06T10:17:31Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=25
+2026-06-06T10:17:34Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:17:39Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-2050
+2026-06-06T10:17:43Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=10
+2026-06-06T10:17:51Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:17:52Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=17
+2026-06-06T10:17:55Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-6075
+2026-06-06T10:18:05Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3517
+2026-06-06T10:18:07Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=6
+2026-06-06T10:18:15Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:18:18Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=24
+2026-06-06T10:18:23Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-9766
+2026-06-06T10:18:34Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=6
+2026-06-06T10:18:37Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:18:40Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-9728
+2026-06-06T10:18:45Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=7
+2026-06-06T10:18:52Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-5200
+2026-06-06T10:18:58Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:19:00Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=9
+2026-06-06T10:19:10Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=8
+2026-06-06T10:19:11Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-7603
+2026-06-06T10:19:19Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:19:26Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=22
+2026-06-06T10:19:29Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4775
+2026-06-06T10:19:41Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=8
+2026-06-06T10:19:43Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:19:48Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-2598
+2026-06-06T10:19:56Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=28
+2026-06-06T10:20:01Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-5058
+2026-06-06T10:20:04Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:20:13Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=8
+2026-06-06T10:20:13Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-2843
+2026-06-06T10:20:23Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:20:26Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=14
+2026-06-06T10:20:31Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4058
+2026-06-06T10:20:41Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=10
+2026-06-06T10:20:43Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:20:50Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-5851
+2026-06-06T10:20:53Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=9
+2026-06-06T10:21:02Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-9981
+2026-06-06T10:21:06Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:21:07Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=9
+2026-06-06T10:21:16Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-8028
+2026-06-06T10:21:20Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=27
+2026-06-06T10:21:22Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:21:31Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=9
+2026-06-06T10:21:34Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-6026
+2026-06-06T10:21:43Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=11
+2026-06-06T10:21:46Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:21:53Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-8557
+2026-06-06T10:21:57Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=17
+2026-06-06T10:22:03Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:22:05Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1726
+2026-06-06T10:22:14Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=28
+2026-06-06T10:22:18Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4098
+2026-06-06T10:22:24Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:22:28Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=30
+2026-06-06T10:22:31Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-9373
+2026-06-06T10:22:43Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:22:44Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=31
+2026-06-06T10:22:45Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-6090
+2026-06-06T10:22:55Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=8
+2026-06-06T10:23:01Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:23:01Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-5209
+2026-06-06T10:23:09Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=6
+2026-06-06T10:23:20Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3447
+2026-06-06T10:23:21Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:23:23Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=31
+2026-06-06T10:23:32Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1120
+2026-06-06T10:23:36Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=25
+2026-06-06T10:23:40Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:23:44Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3981
+2026-06-06T10:23:51Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=22
+2026-06-06T10:23:57Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4530
+2026-06-06T10:24:01Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=9
+2026-06-06T10:24:01Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:24:09Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1541
+2026-06-06T10:24:12Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=30
+2026-06-06T10:24:20Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-8479
+2026-06-06T10:24:25Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:24:29Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=19
+2026-06-06T10:24:32Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4289
+2026-06-06T10:24:38Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=19
+2026-06-06T10:24:44Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:24:52Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3110
+2026-06-06T10:24:53Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=30
+2026-06-06T10:25:05Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:25:05Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-8779
+2026-06-06T10:25:07Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=14
+2026-06-06T10:25:19Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-9942
+2026-06-06T10:25:21Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=9
+2026-06-06T10:25:24Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:25:35Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=22
+2026-06-06T10:25:36Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1709
+2026-06-06T10:25:43Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:25:46Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=12
+2026-06-06T10:25:53Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-7003
+2026-06-06T10:25:59Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=22
+2026-06-06T10:26:07Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:26:09Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-9836
+2026-06-06T10:26:13Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=15
+2026-06-06T10:26:28Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=29
+2026-06-06T10:26:28Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:26:29Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1541
+2026-06-06T10:26:40Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-2271
+2026-06-06T10:26:41Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=5
+2026-06-06T10:26:45Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:26:52Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=7
+2026-06-06T10:26:58Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4094
+2026-06-06T10:27:03Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=14
+2026-06-06T10:27:07Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:27:08Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3829
+2026-06-06T10:27:13Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=21
+2026-06-06T10:27:22Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1762
+2026-06-06T10:27:27Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=10
+2026-06-06T10:27:31Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:27:32Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-8955
+2026-06-06T10:27:39Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=21
+2026-06-06T10:27:49Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:27:50Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-1617
+2026-06-06T10:27:51Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=30
+2026-06-06T10:28:06Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-2119
+2026-06-06T10:28:06Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=21
+2026-06-06T10:28:12Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:28:17Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-6643
+2026-06-06T10:28:18Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=16
+2026-06-06T10:28:31Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=15
+2026-06-06T10:28:35Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:28:35Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4331
+2026-06-06T10:28:48Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=4
+2026-06-06T10:28:49Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-2810
+2026-06-06T10:28:53Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:29:03Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-9143
+2026-06-06T10:29:04Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=28
+2026-06-06T10:29:12Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:29:20Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4414
+2026-06-06T10:29:20Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=16
+2026-06-06T10:29:33Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=5
+2026-06-06T10:29:35Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:29:37Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-5395
+2026-06-06T10:29:49Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=29
+2026-06-06T10:29:51Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-7530
+2026-06-06T10:29:56Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:30:01Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=7
+2026-06-06T10:30:06Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-2145
+2026-06-06T10:30:13Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:30:14Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=13
+2026-06-06T10:30:24Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-7475
+2026-06-06T10:30:29Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=26
+2026-06-06T10:30:32Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:30:40Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=25
+2026-06-06T10:30:41Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3259
+2026-06-06T10:30:51Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:30:52Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=15
+2026-06-06T10:31:00Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-4577
+2026-06-06T10:31:08Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=29
+2026-06-06T10:31:12Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:31:15Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-6158
+2026-06-06T10:31:23Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=14
+2026-06-06T10:31:33Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-7411
+2026-06-06T10:31:34Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:31:38Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=8
+2026-06-06T10:31:49Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-5041
+2026-06-06T10:31:53Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=16
+2026-06-06T10:31:57Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:32:07Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-3127
+2026-06-06T10:32:10Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=8
+2026-06-06T10:32:17Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:32:24Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-2367
+2026-06-06T10:32:24Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=20
+2026-06-06T10:32:34Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:32:37Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-8229
+2026-06-06T10:32:39Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=24
+2026-06-06T10:32:53Z ERROR auth-service db connection pool exhausted active=50 max=50 waiters=16
+2026-06-06T10:32:53Z INFO auth-service healthcheck ok pool_active=50 pool_max=50
+2026-06-06T10:32:56Z ERROR auth-service failed to acquire db connection timeout_ms=5000 request_id=req-7675
+2026-06-06T10:33:01Z INFO auth-service session validated user_id=u-0192 duration_ms=12
+2026-06-06T10:33:05Z INFO auth-service db connection pool recovered active=11 max=50
+2026-06-06T10:33:09Z INFO auth-service healthcheck ok pool_active=10 pool_max=50
+2026-06-06T10:33:10Z INFO auth-service session validated user_id=u-0058 duration_ms=25
+2026-06-06T10:33:16Z INFO auth-service session validated user_id=u-0629 duration_ms=12
+2026-06-06T10:33:25Z INFO auth-service session validated user_id=u-0753 duration_ms=15
+2026-06-06T10:33:32Z INFO auth-service healthcheck ok pool_active=15 pool_max=50
+2026-06-06T10:33:35Z INFO auth-service session validated user_id=u-0443 duration_ms=13
+2026-06-06T10:33:41Z INFO auth-service session validated user_id=u-0435 duration_ms=27
+2026-06-06T10:33:50Z INFO auth-service session validated user_id=u-0167 duration_ms=14
+2026-06-06T10:33:53Z INFO auth-service healthcheck ok pool_active=8 pool_max=50
+2026-06-06T10:33:58Z INFO auth-service session validated user_id=u-0245 duration_ms=12
+2026-06-06T10:34:07Z INFO auth-service session validated user_id=u-0698 duration_ms=25
+2026-06-06T10:34:12Z INFO auth-service healthcheck ok pool_active=16 pool_max=50
+2026-06-06T10:34:14Z INFO auth-service session validated user_id=u-0050 duration_ms=4
+2026-06-06T10:34:23Z INFO auth-service session validated user_id=u-0771 duration_ms=7
+2026-06-06T10:34:31Z INFO auth-service session validated user_id=u-0109 duration_ms=5
+2026-06-06T10:34:35Z INFO auth-service healthcheck ok pool_active=19 pool_max=50
+2026-06-06T10:34:40Z INFO auth-service session validated user_id=u-0516 duration_ms=11
+2026-06-06T10:34:46Z INFO auth-service session validated user_id=u-0252 duration_ms=17
+2026-06-06T10:34:53Z INFO auth-service healthcheck ok pool_active=22 pool_max=50
+2026-06-06T10:34:56Z INFO auth-service session validated user_id=u-0521 duration_ms=8
+2026-06-06T10:35:01Z INFO auth-service session validated user_id=u-0584 duration_ms=21
+2026-06-06T10:35:06Z INFO auth-service session validated user_id=u-0370 duration_ms=26
+2026-06-06T10:35:10Z INFO auth-service healthcheck ok pool_active=13 pool_max=50
+2026-06-06T10:35:14Z INFO auth-service session validated user_id=u-0420 duration_ms=21
+2026-06-06T10:35:19Z INFO auth-service session validated user_id=u-0778 duration_ms=17
+2026-06-06T10:35:24Z INFO auth-service session validated user_id=u-0714 duration_ms=24
+2026-06-06T10:35:34Z INFO auth-service healthcheck ok pool_active=12 pool_max=50
+2026-06-06T10:35:35Z INFO auth-service session validated user_id=u-0580 duration_ms=8
+2026-06-06T10:35:42Z INFO auth-service session validated user_id=u-0063 duration_ms=13
+2026-06-06T10:35:51Z INFO auth-service session validated user_id=u-0226 duration_ms=25
+2026-06-06T10:35:54Z INFO auth-service healthcheck ok pool_active=23 pool_max=50
+2026-06-06T10:35:58Z INFO auth-service session validated user_id=u-0650 duration_ms=27
+2026-06-06T10:36:06Z INFO auth-service session validated user_id=u-0174 duration_ms=16
+2026-06-06T10:36:14Z INFO auth-service healthcheck ok pool_active=23 pool_max=50
+2026-06-06T10:36:16Z INFO auth-service session validated user_id=u-0439 duration_ms=10
+2026-06-06T10:36:24Z INFO auth-service session validated user_id=u-0512 duration_ms=13
+2026-06-06T10:36:33Z INFO auth-service healthcheck ok pool_active=7 pool_max=50
+2026-06-06T10:36:35Z INFO auth-service session validated user_id=u-0726 duration_ms=16
+2026-06-06T10:36:45Z INFO auth-service session validated user_id=u-0070 duration_ms=6
+2026-06-06T10:36:52Z INFO auth-service session validated user_id=u-0025 duration_ms=11
+2026-06-06T10:36:53Z INFO auth-service healthcheck ok pool_active=22 pool_max=50
+2026-06-06T10:37:02Z INFO auth-service session validated user_id=u-0524 duration_ms=26
+2026-06-06T10:37:13Z INFO auth-service session validated user_id=u-0111 duration_ms=23
+2026-06-06T10:37:17Z INFO auth-service healthcheck ok pool_active=24 pool_max=50
+2026-06-06T10:37:21Z INFO auth-service session validated user_id=u-0758 duration_ms=11
+2026-06-06T10:37:31Z INFO auth-service session validated user_id=u-0601 duration_ms=9
+2026-06-06T10:37:34Z INFO auth-service healthcheck ok pool_active=11 pool_max=50
+2026-06-06T10:37:40Z INFO auth-service session validated user_id=u-0345 duration_ms=19
+2026-06-06T10:37:49Z INFO auth-service session validated user_id=u-0103 duration_ms=5
+2026-06-06T10:37:53Z INFO auth-service healthcheck ok pool_active=17 pool_max=50
+2026-06-06T10:37:57Z INFO auth-service session validated user_id=u-0865 duration_ms=23
+2026-06-06T10:38:03Z INFO auth-service session validated user_id=u-0678 duration_ms=13
+2026-06-06T10:38:08Z INFO auth-service session validated user_id=u-0181 duration_ms=14
+2026-06-06T10:38:09Z INFO auth-service healthcheck ok pool_active=12 pool_max=50
+2026-06-06T10:38:17Z INFO auth-service session validated user_id=u-0351 duration_ms=11
+2026-06-06T10:38:24Z INFO auth-service session validated user_id=u-0565 duration_ms=28
+2026-06-06T10:38:30Z INFO auth-service session validated user_id=u-0272 duration_ms=14
+2026-06-06T10:38:31Z INFO auth-service healthcheck ok pool_active=17 pool_max=50
+2026-06-06T10:38:40Z INFO auth-service session validated user_id=u-0812 duration_ms=14
+2026-06-06T10:38:48Z INFO auth-service session validated user_id=u-0597 duration_ms=23
+2026-06-06T10:38:49Z INFO auth-service healthcheck ok pool_active=14 pool_max=50
+2026-06-06T10:38:55Z INFO auth-service session validated user_id=u-0820 duration_ms=26
+2026-06-06T10:39:02Z INFO auth-service session validated user_id=u-0550 duration_ms=26
+2026-06-06T10:39:09Z INFO auth-service healthcheck ok pool_active=7 pool_max=50
+2026-06-06T10:39:13Z INFO auth-service session validated user_id=u-0304 duration_ms=24
+2026-06-06T10:39:19Z INFO auth-service session validated user_id=u-0740 duration_ms=17
+2026-06-06T10:39:26Z INFO auth-service session validated user_id=u-0028 duration_ms=12
+2026-06-06T10:39:32Z INFO auth-service healthcheck ok pool_active=13 pool_max=50
+2026-06-06T10:39:35Z INFO auth-service session validated user_id=u-0175 duration_ms=14
+2026-06-06T10:39:44Z INFO auth-service session validated user_id=u-0849 duration_ms=27
+2026-06-06T10:39:52Z INFO auth-service session validated user_id=u-0456 duration_ms=28
+2026-06-06T10:39:53Z INFO auth-service healthcheck ok pool_active=18 pool_max=50
+2026-06-06T10:40:01Z INFO auth-service session validated user_id=u-0783 duration_ms=25
+2026-06-06T10:40:09Z INFO auth-service session validated user_id=u-0007 duration_ms=17
+2026-06-06T10:40:09Z INFO auth-service healthcheck ok pool_active=11 pool_max=50
+2026-06-06T10:40:14Z INFO auth-service session validated user_id=u-0809 duration_ms=24
+2026-06-06T10:40:20Z INFO auth-service session validated user_id=u-0529 duration_ms=14
+2026-06-06T10:40:30Z INFO auth-service session validated user_id=u-0012 duration_ms=25
+2026-06-06T10:40:32Z INFO auth-service healthcheck ok pool_active=24 pool_max=50
+2026-06-06T10:40:38Z INFO auth-service session validated user_id=u-0570 duration_ms=9
+2026-06-06T10:40:48Z INFO auth-service session validated user_id=u-0541 duration_ms=11
+2026-06-06T10:40:50Z INFO auth-service healthcheck ok pool_active=24 pool_max=50
+2026-06-06T10:40:55Z INFO auth-service session validated user_id=u-0474 duration_ms=15
+2026-06-06T10:41:03Z INFO auth-service session validated user_id=u-0445 duration_ms=15
+2026-06-06T10:41:08Z INFO auth-service session validated user_id=u-0477 duration_ms=22
+2026-06-06T10:41:12Z INFO auth-service healthcheck ok pool_active=16 pool_max=50
+2026-06-06T10:41:16Z INFO auth-service session validated user_id=u-0263 duration_ms=14
+2026-06-06T10:41:22Z INFO auth-service session validated user_id=u-0534 duration_ms=14
+2026-06-06T10:41:30Z INFO auth-service session validated user_id=u-0688 duration_ms=24
+2026-06-06T10:41:34Z INFO auth-service healthcheck ok pool_active=21 pool_max=50
+2026-06-06T10:41:41Z INFO auth-service session validated user_id=u-0062 duration_ms=27
+2026-06-06T10:41:51Z INFO auth-service session validated user_id=u-0322 duration_ms=9
+2026-06-06T10:41:51Z INFO auth-service healthcheck ok pool_active=17 pool_max=50
+2026-06-06T10:42:00Z INFO auth-service session validated user_id=u-0652 duration_ms=18
+2026-06-06T10:42:06Z INFO auth-service session validated user_id=u-0144 duration_ms=7
+2026-06-06T10:42:15Z INFO auth-service healthcheck ok pool_active=7 pool_max=50
+2026-06-06T10:42:17Z INFO auth-service session validated user_id=u-0137 duration_ms=24
+2026-06-06T10:42:25Z INFO auth-service session validated user_id=u-0279 duration_ms=15
+2026-06-06T10:42:33Z INFO auth-service session validated user_id=u-0393 duration_ms=6
+2026-06-06T10:42:37Z INFO auth-service healthcheck ok pool_active=10 pool_max=50
+2026-06-06T10:42:40Z INFO auth-service session validated user_id=u-0643 duration_ms=26
+2026-06-06T10:42:46Z INFO auth-service session validated user_id=u-0443 duration_ms=10
+2026-06-06T10:42:51Z INFO auth-service session validated user_id=u-0185 duration_ms=27
+2026-06-06T10:42:57Z INFO auth-service session validated user_id=u-0520 duration_ms=17
+2026-06-06T10:43:01Z INFO auth-service healthcheck ok pool_active=22 pool_max=50
+2026-06-06T10:43:03Z INFO auth-service session validated user_id=u-0158 duration_ms=8
+2026-06-06T10:43:09Z INFO auth-service session validated user_id=u-0215 duration_ms=8
+2026-06-06T10:43:17Z INFO auth-service healthcheck ok pool_active=21 pool_max=50
+2026-06-06T10:43:19Z INFO auth-service session validated user_id=u-0349 duration_ms=22
+2026-06-06T10:43:28Z INFO auth-service session validated user_id=u-0458 duration_ms=28
+2026-06-06T10:43:35Z INFO auth-service healthcheck ok pool_active=15 pool_max=50
+2026-06-06T10:43:38Z INFO auth-service session validated user_id=u-0439 duration_ms=5
+2026-06-06T10:43:47Z INFO auth-service session validated user_id=u-0010 duration_ms=4
+2026-06-06T10:43:55Z INFO auth-service healthcheck ok pool_active=24 pool_max=50
+2026-06-06T10:43:57Z INFO auth-service session validated user_id=u-0848 duration_ms=4
+2026-06-06T10:44:07Z INFO auth-service session validated user_id=u-0353 duration_ms=5
+2026-06-06T10:44:13Z INFO auth-service session validated user_id=u-0054 duration_ms=18
+2026-06-06T10:44:18Z INFO auth-service healthcheck ok pool_active=20 pool_max=50
+2026-06-06T10:44:24Z INFO auth-service session validated user_id=u-0020 duration_ms=27
+2026-06-06T10:44:33Z INFO auth-service session validated user_id=u-0891 duration_ms=23
+2026-06-06T10:44:38Z INFO auth-service healthcheck ok pool_active=6 pool_max=50
+2026-06-06T10:44:39Z INFO auth-service session validated user_id=u-0860 duration_ms=9
+2026-06-06T10:44:46Z INFO auth-service session validated user_id=u-0214 duration_ms=27
+2026-06-06T10:44:53Z INFO auth-service session validated user_id=u-0141 duration_ms=17
+2026-06-06T10:44:58Z INFO auth-service healthcheck ok pool_active=21 pool_max=50
+2026-06-06T10:45:02Z INFO auth-service session validated user_id=u-0289 duration_ms=28
+2026-06-06T10:45:11Z INFO auth-service session validated user_id=u-0770 duration_ms=27
+2026-06-06T10:45:15Z INFO auth-service healthcheck ok pool_active=21 pool_max=50
+2026-06-06T10:45:22Z INFO auth-service session validated user_id=u-0408 duration_ms=16
+2026-06-06T10:45:28Z INFO auth-service session validated user_id=u-0840 duration_ms=18
+2026-06-06T10:45:33Z INFO auth-service session validated user_id=u-0093 duration_ms=18
+2026-06-06T10:45:34Z INFO auth-service healthcheck ok pool_active=11 pool_max=50
+2026-06-06T10:45:41Z INFO auth-service session validated user_id=u-0770 duration_ms=28
+2026-06-06T10:45:47Z INFO auth-service session validated user_id=u-0409 duration_ms=23
+2026-06-06T10:45:54Z INFO auth-service healthcheck ok pool_active=20 pool_max=50
+2026-06-06T10:45:56Z INFO auth-service session validated user_id=u-0167 duration_ms=27
+2026-06-06T10:46:06Z INFO auth-service session validated user_id=u-0424 duration_ms=28
+2026-06-06T10:46:13Z INFO auth-service session validated user_id=u-0776 duration_ms=24
+2026-06-06T10:46:17Z INFO auth-service healthcheck ok pool_active=9 pool_max=50
+2026-06-06T10:46:21Z INFO auth-service session validated user_id=u-0789 duration_ms=23
+2026-06-06T10:46:27Z INFO auth-service session validated user_id=u-0576 duration_ms=19
+2026-06-06T10:46:37Z INFO auth-service session validated user_id=u-0710 duration_ms=14
+2026-06-06T10:46:38Z INFO auth-service healthcheck ok pool_active=10 pool_max=50
+2026-06-06T10:46:48Z INFO auth-service session validated user_id=u-0286 duration_ms=16
+2026-06-06T10:46:56Z INFO auth-service healthcheck ok pool_active=23 pool_max=50
+2026-06-06T10:46:56Z INFO auth-service session validated user_id=u-0439 duration_ms=22
+2026-06-06T10:47:03Z INFO auth-service session validated user_id=u-0083 duration_ms=8
+2026-06-06T10:47:09Z INFO auth-service session validated user_id=u-0273 duration_ms=15
+2026-06-06T10:47:13Z INFO auth-service healthcheck ok pool_active=14 pool_max=50
+2026-06-06T10:47:17Z INFO auth-service session validated user_id=u-0152 duration_ms=21
+2026-06-06T10:47:24Z INFO auth-service session validated user_id=u-0251 duration_ms=28
+2026-06-06T10:47:31Z INFO auth-service session validated user_id=u-0293 duration_ms=27
+2026-06-06T10:47:33Z INFO auth-service healthcheck ok pool_active=17 pool_max=50
+2026-06-06T10:47:38Z INFO auth-service session validated user_id=u-0040 duration_ms=4
+2026-06-06T10:47:48Z INFO auth-service session validated user_id=u-0818 duration_ms=13
+2026-06-06T10:47:55Z INFO auth-service healthcheck ok pool_active=13 pool_max=50
+2026-06-06T10:47:57Z INFO auth-service session validated user_id=u-0711 duration_ms=28
+2026-06-06T10:48:05Z INFO auth-service session validated user_id=u-0324 duration_ms=11
+2026-06-06T10:48:12Z INFO auth-service healthcheck ok pool_active=12 pool_max=50
+2026-06-06T10:48:16Z INFO auth-service session validated user_id=u-0639 duration_ms=5
+2026-06-06T10:48:22Z INFO auth-service session validated user_id=u-0142 duration_ms=15
+2026-06-06T10:48:31Z INFO auth-service session validated user_id=u-0264 duration_ms=17
+2026-06-06T10:48:33Z INFO auth-service healthcheck ok pool_active=16 pool_max=50
+2026-06-06T10:48:41Z INFO auth-service session validated user_id=u-0352 duration_ms=27
+2026-06-06T10:48:52Z INFO auth-service session validated user_id=u-0518 duration_ms=21
+2026-06-06T10:48:55Z INFO auth-service healthcheck ok pool_active=13 pool_max=50
+2026-06-06T10:48:59Z INFO auth-service session validated user_id=u-0584 duration_ms=7
+2026-06-06T10:49:05Z INFO auth-service session validated user_id=u-0626 duration_ms=27
+2026-06-06T10:49:14Z INFO auth-service session validated user_id=u-0880 duration_ms=7
+2026-06-06T10:49:17Z INFO auth-service healthcheck ok pool_active=17 pool_max=50
+2026-06-06T10:49:21Z INFO auth-service session validated user_id=u-0172 duration_ms=9
+2026-06-06T10:49:29Z INFO auth-service session validated user_id=u-0049 duration_ms=17
+2026-06-06T10:49:37Z INFO auth-service session validated user_id=u-0381 duration_ms=13
+2026-06-06T10:49:40Z INFO auth-service healthcheck ok pool_active=24 pool_max=50
+2026-06-06T10:49:42Z INFO auth-service session validated user_id=u-0261 duration_ms=18
+2026-06-06T10:49:49Z INFO auth-service session validated user_id=u-0358 duration_ms=20
+2026-06-06T10:49:55Z INFO auth-service session validated user_id=u-0062 duration_ms=12
+2026-06-06T10:50:03Z INFO auth-service healthcheck ok pool_active=21 pool_max=50
+2026-06-06T10:50:03Z INFO auth-service session validated user_id=u-0845 duration_ms=12
+2026-06-06T10:50:12Z INFO auth-service session validated user_id=u-0120 duration_ms=25
+2026-06-06T10:50:20Z INFO auth-service healthcheck ok pool_active=6 pool_max=50
+2026-06-06T10:50:22Z INFO auth-service session validated user_id=u-0842 duration_ms=13
+2026-06-06T10:50:32Z INFO auth-service session validated user_id=u-0254 duration_ms=21
+2026-06-06T10:50:39Z INFO auth-service session validated user_id=u-0744 duration_ms=10
+2026-06-06T10:50:43Z INFO auth-service healthcheck ok pool_active=19 pool_max=50
+2026-06-06T10:50:45Z INFO auth-service session validated user_id=u-0139 duration_ms=13
+2026-06-06T10:50:53Z INFO auth-service session validated user_id=u-0567 duration_ms=9
+2026-06-06T10:50:59Z INFO auth-service session validated user_id=u-0304 duration_ms=20
+2026-06-06T10:51:01Z INFO auth-service healthcheck ok pool_active=12 pool_max=50
+2026-06-06T10:51:05Z INFO auth-service session validated user_id=u-0651 duration_ms=15
+2026-06-06T10:51:11Z INFO auth-service session validated user_id=u-0416 duration_ms=28
+2026-06-06T10:51:17Z INFO auth-service session validated user_id=u-0159 duration_ms=11
+2026-06-06T10:51:24Z INFO auth-service healthcheck ok pool_active=14 pool_max=50
+2026-06-06T10:51:26Z INFO auth-service session validated user_id=u-0233 duration_ms=18
+2026-06-06T10:51:37Z INFO auth-service session validated user_id=u-0665 duration_ms=25
+2026-06-06T10:51:41Z INFO auth-service healthcheck ok pool_active=10 pool_max=50
+2026-06-06T10:51:48Z INFO auth-service session validated user_id=u-0224 duration_ms=4
+2026-06-06T10:51:58Z INFO auth-service session validated user_id=u-0674 duration_ms=27
+2026-06-06T10:51:59Z INFO auth-service healthcheck ok pool_active=16 pool_max=50
+2026-06-06T10:52:06Z INFO auth-service session validated user_id=u-0716 duration_ms=14
+2026-06-06T10:52:17Z INFO auth-service session validated user_id=u-0620 duration_ms=12
+2026-06-06T10:52:17Z INFO auth-service healthcheck ok pool_active=19 pool_max=50
+2026-06-06T10:52:25Z INFO auth-service session validated user_id=u-0897 duration_ms=18
+2026-06-06T10:52:34Z INFO auth-service session validated user_id=u-0306 duration_ms=22
+2026-06-06T10:52:37Z INFO auth-service healthcheck ok pool_active=9 pool_max=50
+2026-06-06T10:52:42Z INFO auth-service session validated user_id=u-0869 duration_ms=9
+2026-06-06T10:52:51Z INFO auth-service session validated user_id=u-0543 duration_ms=19
+2026-06-06T10:52:59Z INFO auth-service healthcheck ok pool_active=24 pool_max=50
+2026-06-06T10:53:00Z INFO auth-service session validated user_id=u-0435 duration_ms=19
+2026-06-06T10:53:06Z INFO auth-service session validated user_id=u-0899 duration_ms=11
+2026-06-06T10:53:16Z INFO auth-service session validated user_id=u-0404 duration_ms=11
+2026-06-06T10:53:20Z INFO auth-service healthcheck ok pool_active=18 pool_max=50
+2026-06-06T10:53:24Z INFO auth-service session validated user_id=u-0717 duration_ms=11
+2026-06-06T10:53:31Z INFO auth-service session validated user_id=u-0097 duration_ms=11
+2026-06-06T10:53:36Z INFO auth-service session validated user_id=u-0622 duration_ms=25
+2026-06-06T10:53:43Z INFO auth-service session validated user_id=u-0557 duration_ms=10
+2026-06-06T10:53:43Z INFO auth-service healthcheck ok pool_active=6 pool_max=50
+2026-06-06T10:53:52Z INFO auth-service session validated user_id=u-0141 duration_ms=24
+2026-06-06T10:54:00Z INFO auth-service session validated user_id=u-0508 duration_ms=4
+2026-06-06T10:54:01Z INFO auth-service healthcheck ok pool_active=14 pool_max=50
+2026-06-06T10:54:10Z INFO auth-service session validated user_id=u-0088 duration_ms=15
+2026-06-06T10:54:20Z INFO auth-service session validated user_id=u-0254 duration_ms=9
+2026-06-06T10:54:21Z INFO auth-service healthcheck ok pool_active=10 pool_max=50
+2026-06-06T10:54:28Z INFO auth-service session validated user_id=u-0507 duration_ms=27
+2026-06-06T10:54:37Z INFO auth-service healthcheck ok pool_active=21 pool_max=50
+2026-06-06T10:54:39Z INFO auth-service session validated user_id=u-0795 duration_ms=21
+2026-06-06T10:54:47Z INFO auth-service session validated user_id=u-0530 duration_ms=10
+2026-06-06T10:54:53Z INFO auth-service session validated user_id=u-0448 duration_ms=23
+2026-06-06T10:54:58Z INFO auth-service session validated user_id=u-0747 duration_ms=26
+2026-06-06T10:54:58Z INFO auth-service healthcheck ok pool_active=15 pool_max=50
+2026-06-06T10:55:09Z INFO auth-service session validated user_id=u-0801 duration_ms=11
+2026-06-06T10:55:16Z INFO auth-service healthcheck ok pool_active=23 pool_max=50
+2026-06-06T10:55:19Z INFO auth-service session validated user_id=u-0489 duration_ms=24
+2026-06-06T10:55:27Z INFO auth-service session validated user_id=u-0280 duration_ms=16
+2026-06-06T10:55:32Z INFO auth-service session validated user_id=u-0081 duration_ms=28
+2026-06-06T10:55:35Z INFO auth-service healthcheck ok pool_active=15 pool_max=50
+2026-06-06T10:55:39Z INFO auth-service session validated user_id=u-0593 duration_ms=12
+2026-06-06T10:55:46Z INFO auth-service session validated user_id=u-0243 duration_ms=15
+2026-06-06T10:55:56Z INFO auth-service session validated user_id=u-0127 duration_ms=22
+2026-06-06T10:55:59Z INFO auth-service healthcheck ok pool_active=21 pool_max=50
+2026-06-06T10:56:03Z INFO auth-service session validated user_id=u-0472 duration_ms=18
+2026-06-06T10:56:08Z INFO auth-service session validated user_id=u-0680 duration_ms=11
+2026-06-06T10:56:14Z INFO auth-service session validated user_id=u-0772 duration_ms=22
+2026-06-06T10:56:19Z INFO auth-service healthcheck ok pool_active=13 pool_max=50
+2026-06-06T10:56:25Z INFO auth-service session validated user_id=u-0616 duration_ms=10
+2026-06-06T10:56:33Z INFO auth-service session validated user_id=u-0380 duration_ms=19
+2026-06-06T10:56:37Z INFO auth-service healthcheck ok pool_active=7 pool_max=50
+2026-06-06T10:56:42Z INFO auth-service session validated user_id=u-0178 duration_ms=28
+2026-06-06T10:56:48Z INFO auth-service session validated user_id=u-0155 duration_ms=8
+2026-06-06T10:56:55Z INFO auth-service session validated user_id=u-0816 duration_ms=28
+2026-06-06T10:56:57Z INFO auth-service healthcheck ok pool_active=14 pool_max=50
+2026-06-06T10:57:04Z INFO auth-service session validated user_id=u-0692 duration_ms=13
+2026-06-06T10:57:11Z INFO auth-service session validated user_id=u-0703 duration_ms=15
+2026-06-06T10:57:17Z INFO auth-service session validated user_id=u-0731 duration_ms=16
+2026-06-06T10:57:20Z INFO auth-service healthcheck ok pool_active=10 pool_max=50
+2026-06-06T10:57:26Z INFO auth-service session validated user_id=u-0001 duration_ms=14
+2026-06-06T10:57:31Z INFO auth-service session validated user_id=u-0745 duration_ms=4
+2026-06-06T10:57:41Z INFO auth-service healthcheck ok pool_active=22 pool_max=50
+2026-06-06T10:57:41Z INFO auth-service session validated user_id=u-0769 duration_ms=23
+2026-06-06T10:57:50Z INFO auth-service session validated user_id=u-0159 duration_ms=13
+2026-06-06T10:57:56Z INFO auth-service session validated user_id=u-0193 duration_ms=27
+2026-06-06T10:57:59Z INFO auth-service healthcheck ok pool_active=23 pool_max=50
+2026-06-06T10:58:04Z INFO auth-service session validated user_id=u-0479 duration_ms=22
+2026-06-06T10:58:10Z INFO auth-service session validated user_id=u-0540 duration_ms=11
+2026-06-06T10:58:16Z INFO auth-service healthcheck ok pool_active=19 pool_max=50
+2026-06-06T10:58:19Z INFO auth-service session validated user_id=u-0083 duration_ms=12
+2026-06-06T10:58:25Z INFO auth-service session validated user_id=u-0858 duration_ms=16
+2026-06-06T10:58:36Z INFO auth-service session validated user_id=u-0397 duration_ms=20
+2026-06-06T10:58:39Z INFO auth-service healthcheck ok pool_active=11 pool_max=50
+2026-06-06T10:58:46Z INFO auth-service session validated user_id=u-0169 duration_ms=4
+2026-06-06T10:58:55Z INFO auth-service session validated user_id=u-0041 duration_ms=20
+2026-06-06T10:59:01Z INFO auth-service session validated user_id=u-0474 duration_ms=11
+2026-06-06T10:59:02Z INFO auth-service healthcheck ok pool_active=23 pool_max=50
+2026-06-06T10:59:07Z INFO auth-service session validated user_id=u-0851 duration_ms=5
+2026-06-06T10:59:17Z INFO auth-service session validated user_id=u-0868 duration_ms=9
+2026-06-06T10:59:25Z INFO auth-service session validated user_id=u-0652 duration_ms=28
+2026-06-06T10:59:26Z INFO auth-service healthcheck ok pool_active=14 pool_max=50
+2026-06-06T10:59:30Z INFO auth-service session validated user_id=u-0141 duration_ms=22
+2026-06-06T10:59:35Z INFO auth-service session validated user_id=u-0108 duration_ms=17
+2026-06-06T10:59:42Z INFO auth-service healthcheck ok pool_active=22 pool_max=50
+2026-06-06T10:59:43Z INFO auth-service session validated user_id=u-0853 duration_ms=6
+2026-06-06T10:59:53Z INFO auth-service session validated user_id=u-0640 duration_ms=21

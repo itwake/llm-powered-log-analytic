@@ -118,6 +118,10 @@ New to the codebase? A reasonable reading order:
    evaluation, deployment, and redaction guarantees.
 6. [CONTRIBUTING.md](CONTRIBUTING.md) — the conventions to know before changing code.
 
+Preparing a presentation? [docs/demo-guide.md](docs/demo-guide.md) is a product walkthrough
+deck over the bundled deterministic incident in `demo/logs/`, with real screenshots. It is
+Slidev-compatible: `npx slidev docs/demo-guide.md` turns it into an online presentation.
+
 ## Repository Status
 
 This repository is the staged foundation for the final product. Implemented today:

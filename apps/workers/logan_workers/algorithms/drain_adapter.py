@@ -77,6 +77,13 @@ class StableDrainAdapter:
         re.I,
     )
     HEX_RE = re.compile(r"\b0x[0-9a-f]+\b", re.I)
+    # Full timestamps must be masked as one token: partial numeric masking leaves
+    # letter-glued fragments like `06t10` and `33z` that differ per line and
+    # explode one message shape into hundreds of templates.
+    TIMESTAMP_RE = re.compile(
+        r"\b\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:z|[+-]\d{2}:?\d{2})?\b",
+        re.I,
+    )
     NUMBER_RE = re.compile(r"(?<![A-Za-z])\b\d+(?:\.\d+)?\b")
     KEY_VALUE_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_-]*=)([A-Za-z0-9_.:/-]+)")
     REQUEST_RE = re.compile(
@@ -90,6 +97,7 @@ class StableDrainAdapter:
 
     def to_template(self, normalized_message: str) -> str:
         text = normalized_message
+        text = self.TIMESTAMP_RE.sub("<*>", text)
         text = self.UUID_RE.sub("<*>", text)
         text = self.HEX_RE.sub("<*>", text)
         text = self.REQUEST_RE.sub("<*>", text)

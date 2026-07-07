@@ -20,3 +20,4 @@ artifacts/
 *.log
 !.gitkeep
 !tests/fixtures/logs/**/*.log
+!demo/logs/*.log

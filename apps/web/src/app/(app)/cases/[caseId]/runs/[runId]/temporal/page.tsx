@@ -30,6 +30,7 @@ import { CanvasRenderer } from "echarts/renderers";
 import Link from "@/components/Link";
 import { reportsApi, TemporalResponse, TemporalSeries } from "@/lib/api";
 import { apiErrorMessage, formatShortTime } from "@/lib/format";
+import { SIGNAL_COLORS } from "@/lib/signals";
 import { Button, Card, EmptyState } from "@/components/ui";
 
 echarts.use([
@@ -208,6 +209,8 @@ export default function TemporalPage() {
       type: "bar",
       stack: "logs",
       barMaxWidth: 48,
+      // Golden signals keep one semantic color everywhere (error is always red).
+      ...(SIGNAL_COLORS[series.name] ? { itemStyle: { color: SIGNAL_COLORS[series.name] } } : {}),
       emphasis: {
         focus: "series",
       },

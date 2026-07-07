@@ -28,6 +28,24 @@ export function formatShortTime(value: string | null | undefined): string {
   }).format(date);
 }
 
+/** Clock time with seconds in UTC, matching the timestamps inside log lines. */
+export function formatUtcClockTime(value: string | null | undefined): string {
+  if (!value) {
+    return "n/a";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  }).format(date);
+}
+
 export function formatPercent(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return "n/a";

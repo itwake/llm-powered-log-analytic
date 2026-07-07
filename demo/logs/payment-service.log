@@ -1,0 +1,416 @@
+2026-06-06T10:00:00Z INFO payment-service payment authorized order_id=ord-2635 amount_cents=247304 currency=USD
+2026-06-06T10:00:11Z INFO payment-service payment authorized order_id=ord-7556 amount_cents=148557 currency=USD
+2026-06-06T10:00:24Z INFO payment-service payment authorized order_id=ord-3260 amount_cents=127446 currency=USD
+2026-06-06T10:00:33Z INFO payment-service payment authorized order_id=ord-6243 amount_cents=86528 currency=USD
+2026-06-06T10:00:45Z INFO payment-service payment authorized order_id=ord-3025 amount_cents=52663 currency=USD
+2026-06-06T10:00:52Z INFO payment-service payment authorized order_id=ord-8192 amount_cents=77449 currency=USD
+2026-06-06T10:01:01Z INFO payment-service payment authorized order_id=ord-8517 amount_cents=2648 currency=USD
+2026-06-06T10:01:13Z INFO payment-service payment authorized order_id=ord-2691 amount_cents=21902 currency=USD
+2026-06-06T10:01:23Z INFO payment-service payment authorized order_id=ord-9278 amount_cents=116776 currency=USD
+2026-06-06T10:01:35Z INFO payment-service payment authorized order_id=ord-8408 amount_cents=210682 currency=USD
+2026-06-06T10:01:45Z INFO payment-service payment authorized order_id=ord-5909 amount_cents=169212 currency=USD
+2026-06-06T10:01:54Z INFO payment-service payment authorized order_id=ord-7502 amount_cents=67896 currency=USD
+2026-06-06T10:02:01Z INFO payment-service payment authorized order_id=ord-9343 amount_cents=245584 currency=USD
+2026-06-06T10:02:12Z INFO payment-service payment authorized order_id=ord-7739 amount_cents=241860 currency=USD
+2026-06-06T10:02:23Z INFO payment-service payment authorized order_id=ord-5429 amount_cents=98253 currency=USD
+2026-06-06T10:02:34Z INFO payment-service payment authorized order_id=ord-3864 amount_cents=172061 currency=USD
+2026-06-06T10:02:40Z INFO payment-service payment authorized order_id=ord-5534 amount_cents=189327 currency=USD
+2026-06-06T10:02:49Z INFO payment-service payment authorized order_id=ord-2703 amount_cents=10906 currency=USD
+2026-06-06T10:03:02Z INFO payment-service payment authorized order_id=ord-7433 amount_cents=119386 currency=USD
+2026-06-06T10:03:10Z INFO payment-service payment authorized order_id=ord-4228 amount_cents=137081 currency=USD
+2026-06-06T10:03:18Z INFO payment-service payment authorized order_id=ord-8496 amount_cents=175762 currency=USD
+2026-06-06T10:03:24Z INFO payment-service payment authorized order_id=ord-2311 amount_cents=236093 currency=USD
+2026-06-06T10:03:36Z INFO payment-service payment authorized order_id=ord-6169 amount_cents=155549 currency=USD
+2026-06-06T10:03:48Z INFO payment-service payment authorized order_id=ord-5392 amount_cents=244582 currency=USD
+2026-06-06T10:03:55Z INFO payment-service payment authorized order_id=ord-3270 amount_cents=232249 currency=USD
+2026-06-06T10:04:07Z INFO payment-service payment authorized order_id=ord-2381 amount_cents=125524 currency=USD
+2026-06-06T10:04:17Z INFO payment-service payment authorized order_id=ord-5068 amount_cents=24935 currency=USD
+2026-06-06T10:04:28Z INFO payment-service payment authorized order_id=ord-3491 amount_cents=189332 currency=USD
+2026-06-06T10:04:41Z INFO payment-service payment authorized order_id=ord-6375 amount_cents=169254 currency=USD
+2026-06-06T10:04:47Z INFO payment-service payment authorized order_id=ord-6434 amount_cents=192773 currency=USD
+2026-06-06T10:04:57Z INFO payment-service payment authorized order_id=ord-2157 amount_cents=98904 currency=USD
+2026-06-06T10:05:10Z INFO payment-service payment authorized order_id=ord-6286 amount_cents=229549 currency=USD
+2026-06-06T10:05:18Z INFO payment-service payment authorized order_id=ord-4214 amount_cents=14107 currency=USD
+2026-06-06T10:05:29Z INFO payment-service payment authorized order_id=ord-2374 amount_cents=185564 currency=USD
+2026-06-06T10:05:41Z INFO payment-service payment authorized order_id=ord-7247 amount_cents=212370 currency=USD
+2026-06-06T10:05:52Z INFO payment-service payment authorized order_id=ord-9011 amount_cents=249008 currency=USD
+2026-06-06T10:06:05Z INFO payment-service payment authorized order_id=ord-3241 amount_cents=129839 currency=USD
+2026-06-06T10:06:15Z INFO payment-service payment authorized order_id=ord-8737 amount_cents=12943 currency=USD
+2026-06-06T10:06:23Z INFO payment-service payment authorized order_id=ord-6013 amount_cents=187365 currency=USD
+2026-06-06T10:06:32Z INFO payment-service payment authorized order_id=ord-8981 amount_cents=110125 currency=USD
+2026-06-06T10:06:44Z INFO payment-service payment authorized order_id=ord-6254 amount_cents=114350 currency=USD
+2026-06-06T10:06:53Z INFO payment-service payment authorized order_id=ord-5023 amount_cents=211175 currency=USD
+2026-06-06T10:07:05Z INFO payment-service payment authorized order_id=ord-4385 amount_cents=42521 currency=USD
+2026-06-06T10:07:11Z INFO payment-service payment authorized order_id=ord-2394 amount_cents=1491 currency=USD
+2026-06-06T10:07:20Z INFO payment-service payment authorized order_id=ord-2372 amount_cents=53340 currency=USD
+2026-06-06T10:07:27Z INFO payment-service payment authorized order_id=ord-2219 amount_cents=241313 currency=USD
+2026-06-06T10:07:36Z INFO payment-service payment authorized order_id=ord-3601 amount_cents=247369 currency=USD
+2026-06-06T10:07:49Z INFO payment-service payment authorized order_id=ord-8088 amount_cents=52757 currency=USD
+2026-06-06T10:08:03Z INFO payment-service payment authorized order_id=ord-2310 amount_cents=213672 currency=USD
+2026-06-06T10:08:12Z INFO payment-service payment authorized order_id=ord-5734 amount_cents=55622 currency=USD
+2026-06-06T10:08:24Z INFO payment-service payment authorized order_id=ord-6320 amount_cents=126465 currency=USD
+2026-06-06T10:08:36Z INFO payment-service payment authorized order_id=ord-4406 amount_cents=178116 currency=USD
+2026-06-06T10:08:42Z INFO payment-service payment authorized order_id=ord-3190 amount_cents=170513 currency=USD
+2026-06-06T10:08:53Z INFO payment-service payment authorized order_id=ord-9185 amount_cents=171274 currency=USD
+2026-06-06T10:09:06Z INFO payment-service payment authorized order_id=ord-8475 amount_cents=17286 currency=USD
+2026-06-06T10:09:17Z INFO payment-service payment authorized order_id=ord-5775 amount_cents=217939 currency=USD
+2026-06-06T10:09:26Z INFO payment-service payment authorized order_id=ord-6011 amount_cents=15128 currency=USD
+2026-06-06T10:09:39Z INFO payment-service payment authorized order_id=ord-6391 amount_cents=190072 currency=USD
+2026-06-06T10:09:52Z INFO payment-service payment authorized order_id=ord-4380 amount_cents=34816 currency=USD
+2026-06-06T10:10:06Z INFO payment-service payment authorized order_id=ord-8268 amount_cents=59867 currency=USD
+2026-06-06T10:10:16Z INFO payment-service payment authorized order_id=ord-8630 amount_cents=54454 currency=USD
+2026-06-06T10:10:29Z INFO payment-service payment authorized order_id=ord-3518 amount_cents=128292 currency=USD
+2026-06-06T10:10:40Z INFO payment-service payment authorized order_id=ord-4722 amount_cents=204237 currency=USD
+2026-06-06T10:10:50Z INFO payment-service payment authorized order_id=ord-8134 amount_cents=121061 currency=USD
+2026-06-06T10:10:58Z INFO payment-service payment authorized order_id=ord-5837 amount_cents=118889 currency=USD
+2026-06-06T10:11:00Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4463
+2026-06-06T10:11:00Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-4415
+2026-06-06T10:11:06Z INFO payment-service payment authorized order_id=ord-9769 amount_cents=130643 currency=USD
+2026-06-06T10:11:10Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7532
+2026-06-06T10:11:25Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8317
+2026-06-06T10:11:34Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-2606
+2026-06-06T10:11:35Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6089
+2026-06-06T10:11:48Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9594
+2026-06-06T10:11:56Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9999
+2026-06-06T10:12:05Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8123
+2026-06-06T10:12:11Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-7920
+2026-06-06T10:12:13Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2309
+2026-06-06T10:12:27Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7938
+2026-06-06T10:12:34Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-2612
+2026-06-06T10:12:42Z ERROR payment-service payment processing failed order_id=ord-8538 unhandled exception
+    at com.logan.payment.AuthClient.call(AuthClient.java:87)
+    at com.logan.payment.PaymentProcessor.authorize(PaymentProcessor.java:142)
+    at com.logan.payment.api.ChargeController.charge(ChargeController.java:58)
+    Caused by: java.net.SocketTimeoutException: connect timed out
+    at java.base/java.net.Socket.connect(Socket.java:751)
+    at com.logan.payment.AuthClient.open(AuthClient.java:41)
+2026-06-06T10:12:43Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3495
+2026-06-06T10:12:51Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4211
+2026-06-06T10:13:02Z INFO payment-service payment authorized order_id=ord-7980 amount_cents=67721 currency=USD
+2026-06-06T10:13:06Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7096
+2026-06-06T10:13:11Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-7765
+2026-06-06T10:13:18Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-5781
+2026-06-06T10:13:30Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2176
+2026-06-06T10:13:43Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-8783
+2026-06-06T10:13:46Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9761
+2026-06-06T10:14:01Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9129
+2026-06-06T10:14:14Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-1397
+2026-06-06T10:14:14Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3047
+2026-06-06T10:14:17Z INFO payment-service payment authorized order_id=ord-9001 amount_cents=123931 currency=USD
+2026-06-06T10:14:24Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4638
+2026-06-06T10:14:38Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1980
+2026-06-06T10:14:44Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-7795
+2026-06-06T10:14:51Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-5817
+2026-06-06T10:15:06Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6991
+2026-06-06T10:15:16Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-8874
+2026-06-06T10:15:16Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8020
+2026-06-06T10:15:24Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9687
+2026-06-06T10:15:32Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7235
+2026-06-06T10:15:46Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-5059
+2026-06-06T10:15:47Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1539
+2026-06-06T10:16:02Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2980
+2026-06-06T10:16:11Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-6348
+2026-06-06T10:16:16Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-5413
+2026-06-06T10:16:28Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9973
+2026-06-06T10:16:39Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3238
+2026-06-06T10:16:49Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-7283
+2026-06-06T10:16:49Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2117
+2026-06-06T10:17:03Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4384
+2026-06-06T10:17:14Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1300
+2026-06-06T10:17:17Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-6973
+2026-06-06T10:17:23Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8412
+2026-06-06T10:17:37Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2036
+2026-06-06T10:17:43Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-5346
+2026-06-06T10:17:51Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1102
+2026-06-06T10:18:00Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1696
+2026-06-06T10:18:08Z INFO payment-service payment authorized order_id=ord-7582 amount_cents=221047 currency=USD
+2026-06-06T10:18:12Z ERROR payment-service payment processing failed order_id=ord-7133 unhandled exception
+    at com.logan.payment.AuthClient.call(AuthClient.java:87)
+    at com.logan.payment.PaymentProcessor.authorize(PaymentProcessor.java:142)
+    at com.logan.payment.api.ChargeController.charge(ChargeController.java:58)
+    Caused by: java.net.SocketTimeoutException: connect timed out
+    at java.base/java.net.Socket.connect(Socket.java:751)
+    at com.logan.payment.AuthClient.open(AuthClient.java:41)
+2026-06-06T10:18:14Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-7800
+2026-06-06T10:18:16Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3307
+2026-06-06T10:18:26Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4137
+2026-06-06T10:18:38Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6098
+2026-06-06T10:18:50Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-9258
+2026-06-06T10:18:54Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4602
+2026-06-06T10:19:10Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8285
+2026-06-06T10:19:21Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7160
+2026-06-06T10:19:24Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-1145
+2026-06-06T10:19:29Z INFO payment-service payment authorized order_id=ord-6586 amount_cents=163421 currency=USD
+2026-06-06T10:19:32Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-5517
+2026-06-06T10:19:42Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9021
+2026-06-06T10:19:56Z INFO payment-service payment authorized order_id=ord-8662 amount_cents=14571 currency=USD
+2026-06-06T10:19:56Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6618
+2026-06-06T10:19:57Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-8461
+2026-06-06T10:20:06Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6731
+2026-06-06T10:20:16Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9829
+2026-06-06T10:20:29Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1334
+2026-06-06T10:20:32Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-1565
+2026-06-06T10:20:38Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9989
+2026-06-06T10:20:54Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6650
+2026-06-06T10:21:05Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9444
+2026-06-06T10:21:07Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-7059
+2026-06-06T10:21:18Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4759
+2026-06-06T10:21:28Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1228
+2026-06-06T10:21:39Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-5186
+2026-06-06T10:21:43Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-3247
+2026-06-06T10:21:52Z INFO payment-service payment authorized order_id=ord-8544 amount_cents=213652 currency=USD
+2026-06-06T10:21:53Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7719
+2026-06-06T10:22:04Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8010
+2026-06-06T10:22:07Z INFO payment-service payment authorized order_id=ord-4082 amount_cents=191221 currency=USD
+2026-06-06T10:22:16Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8214
+2026-06-06T10:22:21Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-4546
+2026-06-06T10:22:26Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3045
+2026-06-06T10:22:36Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8559
+2026-06-06T10:22:46Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-3426
+2026-06-06T10:22:47Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6174
+2026-06-06T10:22:58Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3585
+2026-06-06T10:23:03Z INFO payment-service payment authorized order_id=ord-8017 amount_cents=237353 currency=USD
+2026-06-06T10:23:13Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6707
+2026-06-06T10:23:18Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-4596
+2026-06-06T10:23:22Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8690
+2026-06-06T10:23:34Z INFO payment-service payment authorized order_id=ord-7286 amount_cents=167348 currency=USD
+2026-06-06T10:23:34Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2387
+2026-06-06T10:23:44Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9895
+2026-06-06T10:23:48Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-9838
+2026-06-06T10:23:56Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-5907
+2026-06-06T10:24:10Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3175
+2026-06-06T10:24:20Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6201
+2026-06-06T10:24:21Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-6561
+2026-06-06T10:24:31Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1118
+2026-06-06T10:24:44Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7047
+2026-06-06T10:24:53Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6960
+2026-06-06T10:24:54Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-4813
+2026-06-06T10:25:09Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8082
+2026-06-06T10:25:17Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2376
+2026-06-06T10:25:28Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-7510
+2026-06-06T10:25:29Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8437
+2026-06-06T10:25:44Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9895
+2026-06-06T10:25:55Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4528
+2026-06-06T10:26:02Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-9688
+2026-06-06T10:26:09Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9160
+2026-06-06T10:26:19Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2880
+2026-06-06T10:26:28Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-1087
+2026-06-06T10:26:35Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7185
+2026-06-06T10:26:47Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7390
+2026-06-06T10:26:56Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-5361
+2026-06-06T10:26:56Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8731
+2026-06-06T10:27:05Z INFO payment-service payment authorized order_id=ord-8314 amount_cents=156866 currency=USD
+2026-06-06T10:27:11Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2099
+2026-06-06T10:27:18Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-1024
+2026-06-06T10:27:22Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3401
+2026-06-06T10:27:30Z ERROR payment-service payment processing failed order_id=ord-2779 unhandled exception
+    at com.logan.payment.AuthClient.call(AuthClient.java:87)
+    at com.logan.payment.PaymentProcessor.authorize(PaymentProcessor.java:142)
+    at com.logan.payment.api.ChargeController.charge(ChargeController.java:58)
+    Caused by: java.net.SocketTimeoutException: connect timed out
+    at java.base/java.net.Socket.connect(Socket.java:751)
+    at com.logan.payment.AuthClient.open(AuthClient.java:41)
+2026-06-06T10:27:35Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4444
+2026-06-06T10:27:47Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3980
+2026-06-06T10:27:50Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-2995
+2026-06-06T10:27:59Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-6173
+2026-06-06T10:28:12Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2333
+2026-06-06T10:28:17Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-7789
+2026-06-06T10:28:23Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7747
+2026-06-06T10:28:34Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-5350
+2026-06-06T10:28:45Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-4764
+2026-06-06T10:28:48Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-5889
+2026-06-06T10:28:57Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8122
+2026-06-06T10:29:05Z INFO payment-service payment authorized order_id=ord-7471 amount_cents=8875 currency=USD
+2026-06-06T10:29:11Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9155
+2026-06-06T10:29:20Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-1700
+2026-06-06T10:29:21Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7434
+2026-06-06T10:29:34Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3923
+2026-06-06T10:29:40Z INFO payment-service payment authorized order_id=ord-5230 amount_cents=74962 currency=USD
+2026-06-06T10:29:44Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3712
+2026-06-06T10:29:49Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-2108
+2026-06-06T10:29:53Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1795
+2026-06-06T10:30:04Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-3917
+2026-06-06T10:30:12Z INFO payment-service payment authorized order_id=ord-9637 amount_cents=88402 currency=USD
+2026-06-06T10:30:14Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-8891
+2026-06-06T10:30:19Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-2480
+2026-06-06T10:30:30Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2584
+2026-06-06T10:30:38Z INFO payment-service payment authorized order_id=ord-8266 amount_cents=143295 currency=USD
+2026-06-06T10:30:39Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-5739
+2026-06-06T10:30:53Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9954
+2026-06-06T10:30:56Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-1270
+2026-06-06T10:31:05Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4598
+2026-06-06T10:31:16Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-7867
+2026-06-06T10:31:24Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-1076
+2026-06-06T10:31:26Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1286
+2026-06-06T10:31:39Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4320
+2026-06-06T10:31:50Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2391
+2026-06-06T10:31:57Z WARN payment-service retry scheduled for auth-service attempt=1 request_id=req-8462
+2026-06-06T10:32:05Z INFO payment-service payment authorized order_id=ord-9569 amount_cents=154386 currency=USD
+2026-06-06T10:32:05Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9358
+2026-06-06T10:32:18Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-2397
+2026-06-06T10:32:33Z WARN payment-service retry scheduled for auth-service attempt=2 request_id=req-8209
+2026-06-06T10:32:34Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-1375
+2026-06-06T10:32:44Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-9999
+2026-06-06T10:32:55Z INFO payment-service payment authorized order_id=ord-6890 amount_cents=11839 currency=USD
+2026-06-06T10:32:59Z WARN payment-service retry scheduled for auth-service attempt=3 request_id=req-1249
+2026-06-06T10:32:59Z ERROR payment-service timeout calling auth-service after 30000ms request_id=req-4232
+2026-06-06T10:33:08Z INFO payment-service payment authorized order_id=ord-3239 amount_cents=199568 currency=USD
+2026-06-06T10:33:20Z INFO payment-service payment authorized order_id=ord-7985 amount_cents=172960 currency=USD
+2026-06-06T10:33:32Z INFO payment-service payment authorized order_id=ord-4310 amount_cents=170386 currency=USD
+2026-06-06T10:33:46Z INFO payment-service payment authorized order_id=ord-2457 amount_cents=106604 currency=USD
+2026-06-06T10:33:54Z INFO payment-service payment authorized order_id=ord-3183 amount_cents=178167 currency=USD
+2026-06-06T10:34:02Z INFO payment-service payment authorized order_id=ord-9079 amount_cents=145506 currency=USD
+2026-06-06T10:34:15Z INFO payment-service payment authorized order_id=ord-8592 amount_cents=8570 currency=USD
+2026-06-06T10:34:22Z INFO payment-service payment authorized order_id=ord-8782 amount_cents=23906 currency=USD
+2026-06-06T10:34:33Z INFO payment-service payment authorized order_id=ord-7567 amount_cents=47299 currency=USD
+2026-06-06T10:34:47Z INFO payment-service payment authorized order_id=ord-7701 amount_cents=167763 currency=USD
+2026-06-06T10:34:59Z INFO payment-service payment authorized order_id=ord-2656 amount_cents=81040 currency=USD
+2026-06-06T10:35:09Z INFO payment-service payment authorized order_id=ord-6769 amount_cents=185391 currency=USD
+2026-06-06T10:35:15Z INFO payment-service payment authorized order_id=ord-2128 amount_cents=76693 currency=USD
+2026-06-06T10:35:22Z INFO payment-service payment authorized order_id=ord-8210 amount_cents=168471 currency=USD
+2026-06-06T10:35:34Z INFO payment-service payment authorized order_id=ord-4365 amount_cents=77430 currency=USD
+2026-06-06T10:35:47Z INFO payment-service payment authorized order_id=ord-7349 amount_cents=48586 currency=USD
+2026-06-06T10:35:58Z INFO payment-service payment authorized order_id=ord-9453 amount_cents=122944 currency=USD
+2026-06-06T10:36:05Z INFO payment-service payment authorized order_id=ord-6854 amount_cents=79582 currency=USD
+2026-06-06T10:36:16Z INFO payment-service payment authorized order_id=ord-6543 amount_cents=249863 currency=USD
+2026-06-06T10:36:25Z INFO payment-service payment authorized order_id=ord-6436 amount_cents=66899 currency=USD
+2026-06-06T10:36:34Z INFO payment-service payment authorized order_id=ord-2268 amount_cents=230018 currency=USD
+2026-06-06T10:36:42Z INFO payment-service payment authorized order_id=ord-6820 amount_cents=151869 currency=USD
+2026-06-06T10:36:48Z INFO payment-service payment authorized order_id=ord-3315 amount_cents=148953 currency=USD
+2026-06-06T10:37:01Z INFO payment-service payment authorized order_id=ord-8784 amount_cents=88258 currency=USD
+2026-06-06T10:37:11Z INFO payment-service payment authorized order_id=ord-7074 amount_cents=5548 currency=USD
+2026-06-06T10:37:25Z INFO payment-service payment authorized order_id=ord-4094 amount_cents=128949 currency=USD
+2026-06-06T10:37:39Z INFO payment-service payment authorized order_id=ord-9410 amount_cents=136657 currency=USD
+2026-06-06T10:37:48Z INFO payment-service payment authorized order_id=ord-3802 amount_cents=170744 currency=USD
+2026-06-06T10:38:02Z INFO payment-service payment authorized order_id=ord-8215 amount_cents=138326 currency=USD
+2026-06-06T10:38:11Z INFO payment-service payment authorized order_id=ord-2633 amount_cents=160884 currency=USD
+2026-06-06T10:38:24Z INFO payment-service payment authorized order_id=ord-4423 amount_cents=187000 currency=USD
+2026-06-06T10:38:36Z INFO payment-service payment authorized order_id=ord-4515 amount_cents=143864 currency=USD
+2026-06-06T10:38:48Z INFO payment-service payment authorized order_id=ord-3895 amount_cents=99930 currency=USD
+2026-06-06T10:38:57Z INFO payment-service payment authorized order_id=ord-9388 amount_cents=90316 currency=USD
+2026-06-06T10:39:11Z INFO payment-service payment authorized order_id=ord-2572 amount_cents=157352 currency=USD
+2026-06-06T10:39:18Z INFO payment-service payment authorized order_id=ord-9448 amount_cents=168611 currency=USD
+2026-06-06T10:39:25Z INFO payment-service payment authorized order_id=ord-4189 amount_cents=39172 currency=USD
+2026-06-06T10:39:33Z INFO payment-service payment authorized order_id=ord-8210 amount_cents=107339 currency=USD
+2026-06-06T10:39:41Z INFO payment-service payment authorized order_id=ord-3184 amount_cents=234074 currency=USD
+2026-06-06T10:39:47Z INFO payment-service payment authorized order_id=ord-7137 amount_cents=113126 currency=USD
+2026-06-06T10:39:58Z INFO payment-service payment authorized order_id=ord-9210 amount_cents=226486 currency=USD
+2026-06-06T10:40:12Z INFO payment-service payment authorized order_id=ord-5734 amount_cents=24313 currency=USD
+2026-06-06T10:40:20Z INFO payment-service payment authorized order_id=ord-9345 amount_cents=46887 currency=USD
+2026-06-06T10:40:30Z INFO payment-service payment authorized order_id=ord-7349 amount_cents=2333 currency=USD
+2026-06-06T10:40:38Z INFO payment-service payment authorized order_id=ord-4189 amount_cents=221970 currency=USD
+2026-06-06T10:40:50Z INFO payment-service payment authorized order_id=ord-7350 amount_cents=147869 currency=USD
+2026-06-06T10:41:04Z INFO payment-service payment authorized order_id=ord-6474 amount_cents=9220 currency=USD
+2026-06-06T10:41:15Z INFO payment-service payment authorized order_id=ord-5253 amount_cents=126616 currency=USD
+2026-06-06T10:41:26Z INFO payment-service payment authorized order_id=ord-4781 amount_cents=96390 currency=USD
+2026-06-06T10:41:33Z INFO payment-service payment authorized order_id=ord-5428 amount_cents=116401 currency=USD
+2026-06-06T10:41:44Z INFO payment-service payment authorized order_id=ord-8806 amount_cents=182330 currency=USD
+2026-06-06T10:41:57Z INFO payment-service payment authorized order_id=ord-6442 amount_cents=60486 currency=USD
+2026-06-06T10:42:08Z INFO payment-service payment authorized order_id=ord-4600 amount_cents=201389 currency=USD
+2026-06-06T10:42:22Z INFO payment-service payment authorized order_id=ord-7894 amount_cents=152781 currency=USD
+2026-06-06T10:42:33Z INFO payment-service payment authorized order_id=ord-8988 amount_cents=114617 currency=USD
+2026-06-06T10:42:41Z INFO payment-service payment authorized order_id=ord-2470 amount_cents=206448 currency=USD
+2026-06-06T10:42:47Z INFO payment-service payment authorized order_id=ord-2261 amount_cents=204553 currency=USD
+2026-06-06T10:42:53Z INFO payment-service payment authorized order_id=ord-8569 amount_cents=131226 currency=USD
+2026-06-06T10:43:05Z INFO payment-service payment authorized order_id=ord-2910 amount_cents=104706 currency=USD
+2026-06-06T10:43:14Z INFO payment-service payment authorized order_id=ord-9206 amount_cents=132175 currency=USD
+2026-06-06T10:43:24Z INFO payment-service payment authorized order_id=ord-2500 amount_cents=183462 currency=USD
+2026-06-06T10:43:32Z INFO payment-service payment authorized order_id=ord-3861 amount_cents=64733 currency=USD
+2026-06-06T10:43:39Z INFO payment-service payment authorized order_id=ord-5559 amount_cents=4864 currency=USD
+2026-06-06T10:43:50Z INFO payment-service payment authorized order_id=ord-2246 amount_cents=187772 currency=USD
+2026-06-06T10:44:01Z INFO payment-service payment authorized order_id=ord-5304 amount_cents=218542 currency=USD
+2026-06-06T10:44:12Z INFO payment-service payment authorized order_id=ord-8296 amount_cents=66604 currency=USD
+2026-06-06T10:44:19Z INFO payment-service payment authorized order_id=ord-4390 amount_cents=86120 currency=USD
+2026-06-06T10:44:27Z INFO payment-service payment authorized order_id=ord-5709 amount_cents=221479 currency=USD
+2026-06-06T10:44:33Z INFO payment-service payment authorized order_id=ord-8264 amount_cents=245044 currency=USD
+2026-06-06T10:44:41Z INFO payment-service payment authorized order_id=ord-6523 amount_cents=111690 currency=USD
+2026-06-06T10:44:49Z INFO payment-service payment authorized order_id=ord-7375 amount_cents=127598 currency=USD
+2026-06-06T10:44:57Z INFO payment-service payment authorized order_id=ord-3052 amount_cents=238880 currency=USD
+2026-06-06T10:45:07Z INFO payment-service payment authorized order_id=ord-9470 amount_cents=94729 currency=USD
+2026-06-06T10:45:21Z INFO payment-service payment authorized order_id=ord-7382 amount_cents=177033 currency=USD
+2026-06-06T10:45:34Z INFO payment-service payment authorized order_id=ord-5422 amount_cents=55029 currency=USD
+2026-06-06T10:45:43Z INFO payment-service payment authorized order_id=ord-7959 amount_cents=235862 currency=USD
+2026-06-06T10:45:56Z INFO payment-service payment authorized order_id=ord-2178 amount_cents=219237 currency=USD
+2026-06-06T10:46:09Z INFO payment-service payment authorized order_id=ord-5480 amount_cents=160120 currency=USD
+2026-06-06T10:46:20Z INFO payment-service payment authorized order_id=ord-6626 amount_cents=23954 currency=USD
+2026-06-06T10:46:29Z INFO payment-service payment authorized order_id=ord-7202 amount_cents=130593 currency=USD
+2026-06-06T10:46:42Z INFO payment-service payment authorized order_id=ord-9675 amount_cents=22278 currency=USD
+2026-06-06T10:46:55Z INFO payment-service payment authorized order_id=ord-8841 amount_cents=243954 currency=USD
+2026-06-06T10:47:04Z INFO payment-service payment authorized order_id=ord-2032 amount_cents=15363 currency=USD
+2026-06-06T10:47:17Z INFO payment-service payment authorized order_id=ord-7113 amount_cents=122207 currency=USD
+2026-06-06T10:47:31Z INFO payment-service payment authorized order_id=ord-6274 amount_cents=68646 currency=USD
+2026-06-06T10:47:44Z INFO payment-service payment authorized order_id=ord-7440 amount_cents=145232 currency=USD
+2026-06-06T10:47:58Z INFO payment-service payment authorized order_id=ord-8463 amount_cents=203298 currency=USD
+2026-06-06T10:48:05Z INFO payment-service payment authorized order_id=ord-5725 amount_cents=67836 currency=USD
+2026-06-06T10:48:15Z INFO payment-service payment authorized order_id=ord-3137 amount_cents=119548 currency=USD
+2026-06-06T10:48:28Z INFO payment-service payment authorized order_id=ord-3591 amount_cents=111737 currency=USD
+2026-06-06T10:48:42Z INFO payment-service payment authorized order_id=ord-3787 amount_cents=167107 currency=USD
+2026-06-06T10:48:52Z INFO payment-service payment authorized order_id=ord-4297 amount_cents=121404 currency=USD
+2026-06-06T10:48:59Z INFO payment-service payment authorized order_id=ord-5344 amount_cents=231611 currency=USD
+2026-06-06T10:49:06Z INFO payment-service payment authorized order_id=ord-5473 amount_cents=66249 currency=USD
+2026-06-06T10:49:19Z INFO payment-service payment authorized order_id=ord-7036 amount_cents=220346 currency=USD
+2026-06-06T10:49:27Z INFO payment-service payment authorized order_id=ord-6850 amount_cents=233325 currency=USD
+2026-06-06T10:49:40Z INFO payment-service payment authorized order_id=ord-4338 amount_cents=17487 currency=USD
+2026-06-06T10:49:50Z INFO payment-service payment authorized order_id=ord-7493 amount_cents=168382 currency=USD
+2026-06-06T10:50:03Z INFO payment-service payment authorized order_id=ord-3934 amount_cents=204167 currency=USD
+2026-06-06T10:50:14Z INFO payment-service payment authorized order_id=ord-9372 amount_cents=138016 currency=USD
+2026-06-06T10:50:21Z INFO payment-service payment authorized order_id=ord-4986 amount_cents=223622 currency=USD
+2026-06-06T10:50:31Z INFO payment-service payment authorized order_id=ord-2125 amount_cents=231589 currency=USD
+2026-06-06T10:50:42Z INFO payment-service payment authorized order_id=ord-2798 amount_cents=188815 currency=USD
+2026-06-06T10:50:53Z INFO payment-service payment authorized order_id=ord-8555 amount_cents=25173 currency=USD
+2026-06-06T10:51:05Z INFO payment-service payment authorized order_id=ord-7055 amount_cents=85102 currency=USD
+2026-06-06T10:51:13Z INFO payment-service payment authorized order_id=ord-3178 amount_cents=8832 currency=USD
+2026-06-06T10:51:25Z INFO payment-service payment authorized order_id=ord-6216 amount_cents=55827 currency=USD
+2026-06-06T10:51:33Z INFO payment-service payment authorized order_id=ord-3735 amount_cents=75348 currency=USD
+2026-06-06T10:51:41Z INFO payment-service payment authorized order_id=ord-2936 amount_cents=218680 currency=USD
+2026-06-06T10:51:52Z INFO payment-service payment authorized order_id=ord-5774 amount_cents=196793 currency=USD
+2026-06-06T10:52:04Z INFO payment-service payment authorized order_id=ord-7834 amount_cents=243890 currency=USD
+2026-06-06T10:52:18Z INFO payment-service payment authorized order_id=ord-4404 amount_cents=30086 currency=USD
+2026-06-06T10:52:32Z INFO payment-service payment authorized order_id=ord-5364 amount_cents=169845 currency=USD
+2026-06-06T10:52:39Z INFO payment-service payment authorized order_id=ord-9424 amount_cents=102548 currency=USD
+2026-06-06T10:52:50Z INFO payment-service payment authorized order_id=ord-3037 amount_cents=111905 currency=USD
+2026-06-06T10:52:57Z INFO payment-service payment authorized order_id=ord-3246 amount_cents=208577 currency=USD
+2026-06-06T10:53:04Z INFO payment-service payment authorized order_id=ord-8204 amount_cents=235474 currency=USD
+2026-06-06T10:53:11Z INFO payment-service payment authorized order_id=ord-5974 amount_cents=84824 currency=USD
+2026-06-06T10:53:24Z INFO payment-service payment authorized order_id=ord-2525 amount_cents=83407 currency=USD
+2026-06-06T10:53:35Z INFO payment-service payment authorized order_id=ord-6157 amount_cents=223581 currency=USD
+2026-06-06T10:53:44Z INFO payment-service payment authorized order_id=ord-3661 amount_cents=173327 currency=USD
+2026-06-06T10:53:58Z INFO payment-service payment authorized order_id=ord-5333 amount_cents=124092 currency=USD
+2026-06-06T10:54:06Z INFO payment-service payment authorized order_id=ord-5107 amount_cents=32463 currency=USD
+2026-06-06T10:54:13Z INFO payment-service payment authorized order_id=ord-3294 amount_cents=201221 currency=USD
+2026-06-06T10:54:23Z INFO payment-service payment authorized order_id=ord-8079 amount_cents=208453 currency=USD
+2026-06-06T10:54:30Z INFO payment-service payment authorized order_id=ord-5977 amount_cents=7580 currency=USD
+2026-06-06T10:54:44Z INFO payment-service payment authorized order_id=ord-3902 amount_cents=29278 currency=USD
+2026-06-06T10:54:52Z INFO payment-service payment authorized order_id=ord-6013 amount_cents=43632 currency=USD
+2026-06-06T10:55:02Z INFO payment-service payment authorized order_id=ord-8121 amount_cents=179066 currency=USD
+2026-06-06T10:55:15Z INFO payment-service payment authorized order_id=ord-9108 amount_cents=66654 currency=USD
+2026-06-06T10:55:27Z INFO payment-service payment authorized order_id=ord-4495 amount_cents=229767 currency=USD
+2026-06-06T10:55:40Z INFO payment-service payment authorized order_id=ord-5137 amount_cents=189036 currency=USD
+2026-06-06T10:55:52Z INFO payment-service payment authorized order_id=ord-4772 amount_cents=112101 currency=USD
+2026-06-06T10:56:05Z INFO payment-service payment authorized order_id=ord-3901 amount_cents=244231 currency=USD
+2026-06-06T10:56:17Z INFO payment-service payment authorized order_id=ord-2091 amount_cents=136510 currency=USD
+2026-06-06T10:56:26Z INFO payment-service payment authorized order_id=ord-8030 amount_cents=245374 currency=USD
+2026-06-06T10:56:34Z INFO payment-service payment authorized order_id=ord-8661 amount_cents=156688 currency=USD
+2026-06-06T10:56:44Z INFO payment-service payment authorized order_id=ord-4955 amount_cents=249731 currency=USD
+2026-06-06T10:56:50Z INFO payment-service payment authorized order_id=ord-3964 amount_cents=43505 currency=USD
+2026-06-06T10:56:57Z INFO payment-service payment authorized order_id=ord-8711 amount_cents=133533 currency=USD
+2026-06-06T10:57:07Z INFO payment-service payment authorized order_id=ord-4883 amount_cents=40597 currency=USD
+2026-06-06T10:57:20Z INFO payment-service payment authorized order_id=ord-6799 amount_cents=34919 currency=USD
+2026-06-06T10:57:30Z INFO payment-service payment authorized order_id=ord-9669 amount_cents=119533 currency=USD
+2026-06-06T10:57:37Z INFO payment-service payment authorized order_id=ord-2481 amount_cents=192351 currency=USD
+2026-06-06T10:57:46Z INFO payment-service payment authorized order_id=ord-5830 amount_cents=81339 currency=USD
+2026-06-06T10:58:00Z INFO payment-service payment authorized order_id=ord-3418 amount_cents=51036 currency=USD
+2026-06-06T10:58:13Z INFO payment-service payment authorized order_id=ord-3671 amount_cents=165122 currency=USD
+2026-06-06T10:58:25Z INFO payment-service payment authorized order_id=ord-4337 amount_cents=36464 currency=USD
+2026-06-06T10:58:32Z INFO payment-service payment authorized order_id=ord-5446 amount_cents=207383 currency=USD
+2026-06-06T10:58:41Z INFO payment-service payment authorized order_id=ord-6190 amount_cents=171585 currency=USD
+2026-06-06T10:58:47Z INFO payment-service payment authorized order_id=ord-3639 amount_cents=51158 currency=USD
+2026-06-06T10:58:53Z INFO payment-service payment authorized order_id=ord-7799 amount_cents=202978 currency=USD
+2026-06-06T10:59:06Z INFO payment-service payment authorized order_id=ord-8798 amount_cents=132226 currency=USD
+2026-06-06T10:59:14Z INFO payment-service payment authorized order_id=ord-2837 amount_cents=73961 currency=USD
+2026-06-06T10:59:20Z INFO payment-service payment authorized order_id=ord-2279 amount_cents=89682 currency=USD
+2026-06-06T10:59:29Z INFO payment-service payment authorized order_id=ord-5640 amount_cents=115962 currency=USD
+2026-06-06T10:59:36Z INFO payment-service payment authorized order_id=ord-3508 amount_cents=22250 currency=USD
+2026-06-06T10:59:47Z INFO payment-service payment authorized order_id=ord-8202 amount_cents=233855 currency=USD
+2026-06-06T10:59:58Z INFO payment-service payment authorized order_id=ord-7661 amount_cents=242800 currency=USD
