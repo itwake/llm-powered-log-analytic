@@ -38,7 +38,8 @@ The evaluator runs `AnalyzeCasePipeline` with `MockAIPlatformAnnotationGateway`,
 require Docker, Temporal, AI Platform credentials, or external network access. It emits
 thresholded metrics for review-load reduction, golden-signal macro F1, fault-category micro and
 macro F1, entity precision/recall/F1, root-cause hit@k, useful causal-edge recall, and summary
-rubric quality.
+rubric quality. For how these metrics underpin the LLM reliability story and how outputs stay
+traceable to evidence, see [`reliability-and-explainability.md`](reliability-and-explainability.md).
 
 Benchmark reports are intentionally compact. They include counts, metric details, label pattern
 ids, canonical expected regex patterns, template ids, edge ids, and summary rubric term coverage.

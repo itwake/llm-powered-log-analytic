@@ -44,6 +44,9 @@ URL query parameters such as `token`, `password`, `secret`, `api_key`, and `acce
 
 Causal graph edges are candidates, not facts. Summaries must use cautious language such as `candidate cause`, `likely`, `evidence suggests`, and `needs validation`.
 
+For how the model's reliability is measured and its outputs are made traceable to evidence, see
+[`reliability-and-explainability.md`](reliability-and-explainability.md).
+
 ## Access Control
 
 The API enforces organization isolation and RBAC on every case route. Registered users join the

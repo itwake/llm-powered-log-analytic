@@ -116,7 +116,9 @@ New to the codebase? A reasonable reading order:
    runtime surfaces and the metadata tables.
 5. [docs/operations.md](docs/operations.md) and [docs/security.md](docs/security.md) — benchmark
    evaluation, deployment, and redaction guarantees.
-6. [CONTRIBUTING.md](CONTRIBUTING.md) — the conventions to know before changing code.
+6. [docs/reliability-and-explainability.md](docs/reliability-and-explainability.md) — how the LLM's
+   reliability is measured and its outputs are made traceable.
+7. [CONTRIBUTING.md](CONTRIBUTING.md) — the conventions to know before changing code.
 
 Preparing a presentation? [docs/demo-guide.md](docs/demo-guide.md) is a product walkthrough
 deck over the bundled deterministic incident in `demo/logs/`, with real screenshots. It is
