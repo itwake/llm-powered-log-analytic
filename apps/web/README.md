@@ -71,6 +71,37 @@ playwright.config.ts           # boots FastAPI + `next dev` as webServers, with 
 tests/e2e/logan.spec.ts        # the browser E2E that drives the whole web + API stack
 ```
 
+## Routing model — App Router & route groups
+
+Two things called "app" live here, and **neither shows up in the URL** — which is exactly why they're easy to miss:
+
+- **`src/app/`** is the Next.js **App Router root** (a framework-fixed folder name), not a business module. It is the base of the route tree, not a URL segment.
+- **`src/app/(app)/`** is a **route group**. In the App Router, a folder wrapped in parentheses organizes routes and shares a layout **without contributing a URL segment**. So pages under `(app)/` render at the bare path — `src/app/(app)/cases/page.tsx` serves `/cases`, **not** `/app/cases`. You never see `app` in the address bar; you only see its *effect*.
+
+Its purpose is to wrap every **authenticated** page in one shared shell while keeping public pages bare:
+
+| File | URL | Chrome |
+| --- | --- | --- |
+| `src/app/(app)/cases/page.tsx` | `/cases` | `<Shell>` (sidebar + header) |
+| `src/app/(app)/cases/[caseId]/page.tsx` | `/cases/<caseId>` | `<Shell>` |
+| `src/app/(app)/cases/[caseId]/runs/[runId]/summary/page.tsx` | `/cases/<caseId>/runs/<runId>/summary` | `<Shell>` |
+| `src/app/(app)/admin/page.tsx` | `/admin` | `<Shell>` |
+| `src/app/(app)/settings/ai-platform/page.tsx` | `/settings/ai-platform` | `<Shell>` |
+| `src/app/page.tsx` | `/` | none — server `redirect('/cases')` |
+| `src/app/login/page.tsx` | `/login` | none — SSO redirect page |
+| `src/app/register/page.tsx` · `src/app/healthz/route.ts` | `/register` · `/healthz` | none |
+
+Layouts nest top-down, each wrapping the level below:
+
+```
+src/app/layout.tsx          # root: <html><body><Providers> (MUI cache + theme) — wraps EVERY page
+└─ src/app/(app)/layout.tsx # <Shell> (sidebar + header + client auth guard) — wraps only (app)/ pages
+   └─ cases / admin / settings/…        # authenticated pages, inside the shell
+src/app/login · register · page.tsx     # OUTSIDE (app): root layout only, no Shell
+```
+
+Takeaway: `(app)` is a pure code-organization device that lets all signed-in pages share the `<Shell>` chrome (`src/components/Shell.tsx`) without a `/app` prefix leaking into the URL. The sidebar/header you see on every case, admin, and settings page *is* that route group at work — the folder name itself is intentionally invisible.
+
 ## How it fits
 
 The web app talks to **`apps/api` only**, and only over HTTP from the browser. There is **no shared package, no shared code, and no server-to-server call** — no relationship to `apps/workers` except through the API and two mirrored constants.
