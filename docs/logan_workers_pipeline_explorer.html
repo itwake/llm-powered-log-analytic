@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LogAn Workers Pipeline Explorer</title>
+  <style>
+    :root {
+      --bg: #06101d;
+      --bg-2: #091827;
+      --panel: rgba(12, 28, 45, 0.88);
+      --panel-strong: rgba(13, 32, 52, 0.98);
+      --line: rgba(148, 163, 184, 0.18);
+      --line-strong: rgba(94, 234, 212, 0.34);
+      --text: #e8f0fb;
+      --muted: #94a9c2;
+      --cyan: #2dd4bf;
+      --cyan-2: #22d3ee;
+      --purple: #a78bfa;
+      --blue: #60a5fa;
+      --amber: #fbbf24;
+      --orange: #fb923c;
+      --red: #fb7185;
+      --green: #4ade80;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+      --radius: 18px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% -5%, rgba(45, 212, 191, 0.15), transparent 30%),
+        radial-gradient(circle at 95% 15%, rgba(167, 139, 250, 0.14), transparent 28%),
+        linear-gradient(145deg, #050c16 0%, var(--bg) 42%, #071524 100%);
+      font-family: var(--sans);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.22;
+      background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 38px 38px;
+      mask-image: linear-gradient(to bottom, black, transparent 92%);
+    }
+
+    button, select { font: inherit; }
+
+    .app {
+      width: min(1920px, 100%);
+      margin: 0 auto;
+      padding: 22px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .glass {
+      background: linear-gradient(145deg, rgba(16, 35, 56, .92), rgba(8, 22, 37, .84));
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      border-radius: 24px;
+      padding: 22px 24px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .topbar::after {
+      content: "";
+      position: absolute;
+      width: 380px;
+      height: 380px;
+      right: -140px;
+      top: -210px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(45,212,191,.22), transparent 64%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      color: var(--cyan);
+      text-transform: uppercase;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .16em;
+    }
+
+    h1 {
+      margin: 7px 0 8px;
+      font-size: clamp(28px, 4vw, 48px);
+      line-height: 1.02;
+      letter-spacing: -.04em;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      max-width: 920px;
+      line-height: 1.65;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      position: relative;
+      z-index: 1;
+    }
+
+    .btn, .select {
+      border: 1px solid var(--line);
+      color: var(--text);
+      background: rgba(10, 26, 43, .88);
+      border-radius: 12px;
+      padding: 10px 13px;
+      cursor: pointer;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+
+    .btn:hover, .select:hover {
+      transform: translateY(-1px);
+      border-color: rgba(94,234,212,.45);
+      background: rgba(18, 45, 69, .92);
+    }
+
+    .btn.primary {
+      color: #041014;
+      border-color: transparent;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--cyan), var(--cyan-2));
+      box-shadow: 0 12px 30px rgba(45,212,191,.22);
+    }
+
+    .btn.danger { color: #ffe3e8; border-color: rgba(251,113,133,.34); }
+
+    .dataset-note {
+      margin-top: 12px;
+      padding: 10px 13px;
+      border-radius: 12px;
+      color: #b8c8d9;
+      background: rgba(59,130,246,.08);
+      border: 1px solid rgba(96,165,250,.18);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    .metric {
+      border-radius: 16px;
+      padding: 15px 16px;
+      border: 1px solid var(--line);
+      background: rgba(9, 24, 39, .72);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .metric::after {
+      content: "";
+      position: absolute;
+      width: 70px;
+      height: 70px;
+      right: -22px;
+      bottom: -28px;
+      border-radius: 50%;
+      background: var(--metric-color, var(--cyan));
+      opacity: .13;
+    }
+
+    .metric-label { color: var(--muted); font-size: 12px; }
+    .metric-value { font-size: 26px; font-weight: 900; margin-top: 3px; }
+    .metric-help { color: #6f89a4; font-size: 11px; margin-top: 2px; }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 370px;
+      gap: 15px;
+      align-items: stretch;
+    }
+
+    .rail, .inspector, .stage-shell {
+      border-radius: var(--radius);
+      min-height: 780px;
+    }
+
+    .rail {
+      padding: 18px 14px;
+      position: sticky;
+      top: 14px;
+      height: calc(100vh - 28px);
+      min-height: 760px;
+      overflow-y: auto;
+    }
+
+    .rail-head {
+      padding: 0 7px 12px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 12px;
+    }
+
+    .rail-head strong { display: block; font-size: 15px; }
+    .rail-head span { color: var(--muted); font-size: 12px; }
+
+    .step-list { position: relative; padding: 6px 0; }
+
+    .step-list::before {
+      content: "";
+      position: absolute;
+      left: 28px;
+      top: 24px;
+      bottom: 24px;
+      width: 2px;
+      background: linear-gradient(to bottom, rgba(45,212,191,.48), rgba(167,139,250,.22), rgba(148,163,184,.08));
+    }
+
+    .flow-orb {
+      position: absolute;
+      left: 21px;
+      top: 19px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fff, var(--cyan) 38%, #0f766e 72%);
+      box-shadow: 0 0 0 5px rgba(45,212,191,.12), 0 0 28px rgba(45,212,191,.72);
+      z-index: 3;
+      transition: transform .55s cubic-bezier(.2,.8,.2,1);
+      animation: orbPulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes orbPulse {
+      50% { box-shadow: 0 0 0 9px rgba(45,212,191,.05), 0 0 36px rgba(45,212,191,.78); }
+    }
+
+    .step-btn {
+      width: 100%;
+      border: 0;
+      color: var(--text);
+      background: transparent;
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: 42px minmax(0,1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 8px;
+      border-radius: 13px;
+      text-align: left;
+      position: relative;
+      z-index: 2;
+      margin: 2px 0;
+      transition: background .18s ease, transform .18s ease;
+    }
+
+    .step-btn:hover { background: rgba(45,212,191,.07); transform: translateX(2px); }
+    .step-btn.active { background: linear-gradient(90deg, rgba(45,212,191,.16), rgba(96,165,250,.06)); }
+    .step-btn.done .step-index { background: rgba(74,222,128,.14); color: var(--green); border-color: rgba(74,222,128,.35); }
+
+    .step-index {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 900;
+      color: var(--muted);
+      background: #0a1828;
+      border: 1px solid var(--line);
+    }
+
+    .step-btn.active .step-index {
+      color: #031312;
+      background: var(--cyan);
+      border-color: transparent;
+      box-shadow: 0 0 22px rgba(45,212,191,.35);
+    }
+
+    .step-name { font-size: 13px; font-weight: 800; }
+    .step-file { color: #728aa4; font-size: 10px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .step-state { color: var(--muted); font-size: 11px; }
+    .step-btn.active .step-state { color: var(--cyan); }
+
+    .stage-shell {
+      overflow: hidden;
+      position: relative;
+      min-width: 0;
+    }
+
+    .stage-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 19px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(7, 21, 36, .58);
+    }
+
+    .stage-number { color: var(--cyan); font-size: 12px; font-weight: 900; }
+    .stage-title { font-size: 23px; font-weight: 900; margin-top: 2px; letter-spacing: -.025em; }
+    .stage-summary { color: var(--muted); margin-top: 4px; line-height: 1.48; font-size: 13px; }
+
+    .stage-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+    .stage-body {
+      padding: 16px;
+      transition: opacity .2s ease, transform .2s ease;
+    }
+
+    .stage-body.swapping { opacity: 0; transform: translateY(8px); }
+
+    .io-grid {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) 32px minmax(0,1fr);
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .flow-arrow {
+      display: grid;
+      place-items: center;
+      color: var(--cyan);
+      font-size: 26px;
+      position: relative;
+    }
+
+    .flow-arrow::after {
+      content: "";
+      position: absolute;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 20px var(--cyan);
+      animation: arrowMove 1.5s ease-in-out infinite;
+    }
+
+    @keyframes arrowMove {
+      0%,100% { transform: translateX(-7px); opacity: .25; }
+      50% { transform: translateX(7px); opacity: 1; }
+    }
+
+    .io-panel {
+      min-width: 0;
+      border-radius: 15px;
+      border: 1px solid var(--line);
+      background: rgba(4, 15, 27, .76);
+      overflow: hidden;
+    }
+
+    .io-panel.output { border-color: rgba(45,212,191,.25); box-shadow: inset 0 0 40px rgba(45,212,191,.025); }
+
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 13px;
+      border-bottom: 1px solid var(--line);
+      color: #c4d2e2;
+      font-size: 12px;
+      font-weight: 850;
+      background: rgba(255,255,255,.018);
+    }
+
+    .panel-badge {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(96,165,250,.1);
+      color: #a8cfff;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .panel-content {
+      height: 430px;
+      overflow: auto;
+      padding: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.55;
+      scrollbar-color: rgba(94,234,212,.3) transparent;
+    }
+
+    .log-group { margin-bottom: 12px; }
+    .log-group-title { color: var(--purple); font-weight: 850; margin-bottom: 5px; }
+
+    .logline {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 1px solid transparent;
+      color: #cbd8e7;
+      background: rgba(255,255,255,.018);
+      padding: 7px 9px;
+      border-radius: 8px;
+      margin: 4px 0;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    button.logline { cursor: pointer; }
+    button.logline:hover { border-color: rgba(45,212,191,.28); background: rgba(45,212,191,.05); }
+    .logline.focused { border-color: rgba(251,191,36,.45); background: rgba(251,191,36,.07); box-shadow: inset 3px 0 0 var(--amber); }
+
+    .tok-ts { color: #7dd3fc; }
+    .tok-level-error { color: var(--red); font-weight: 900; }
+    .tok-level-warn { color: var(--amber); font-weight: 900; }
+    .tok-level-info { color: var(--green); font-weight: 900; }
+    .tok-service { color: var(--purple); font-weight: 850; }
+    .tok-dynamic { color: #fdba74; }
+    .tok-mask { color: var(--cyan); font-weight: 900; }
+
+    .json {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: #cbd8e7;
+    }
+
+    .diff-card, .explain-card, .trace-card, .graph-card, .chart-card {
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: rgba(7, 20, 34, .66);
+    }
+
+    .diff-card {
+      margin-top: 12px;
+      padding: 12px 13px;
+      display: grid;
+      grid-template-columns: auto minmax(0,1fr);
+      gap: 10px;
+      align-items: start;
+    }
+
+    .diff-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      color: #05201b;
+      background: var(--cyan);
+      font-weight: 950;
+    }
+
+    .diff-title { font-size: 13px; font-weight: 900; }
+    .diff-text { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: 3px; }
+
+    .template-card, .annotation-card, .sample-card, .export-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      margin-bottom: 8px;
+      background: rgba(255,255,255,.018);
+      transition: border-color .16s ease, transform .16s ease;
+    }
+
+    .template-card.selected, .annotation-card.selected {
+      border-color: rgba(45,212,191,.5);
+      box-shadow: 0 0 0 1px rgba(45,212,191,.09), 0 12px 30px rgba(0,0,0,.18);
+      transform: translateY(-1px);
+    }
+
+    .card-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+    .card-title { color: #dbe8f5; font-weight: 850; }
+    .card-sub { color: var(--muted); font-size: 10px; margin-top: 4px; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 4px 7px;
+      color: #bcd0e3;
+      background: rgba(148,163,184,.08);
+      border: 1px solid rgba(148,163,184,.12);
+      font-size: 9.5px;
+      font-family: var(--sans);
+    }
+
+    .chip.error { color: #fecdd3; background: rgba(251,113,133,.09); border-color: rgba(251,113,133,.2); }
+    .chip.availability { color: #bfdbfe; background: rgba(96,165,250,.09); border-color: rgba(96,165,250,.2); }
+    .chip.saturation { color: #fde68a; background: rgba(251,191,36,.09); border-color: rgba(251,191,36,.2); }
+    .chip.information { color: #bbf7d0; background: rgba(74,222,128,.08); border-color: rgba(74,222,128,.18); }
+
+    .bar-chart {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(95px, 1fr));
+      gap: 20px;
+      height: 300px;
+      align-items: end;
+      padding: 32px 18px 20px;
+      background:
+        linear-gradient(to top, rgba(148,163,184,.07) 1px, transparent 1px);
+      background-size: 100% 20%;
+      border-radius: 12px;
+    }
+
+    .bar-group { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
+    .bar-stack { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 5px; }
+    .bar {
+      width: 18%;
+      min-width: 12px;
+      border-radius: 6px 6px 2px 2px;
+      transform-origin: bottom;
+      animation: growBar .7s cubic-bezier(.2,.8,.2,1) both;
+      position: relative;
+      box-shadow: 0 0 18px rgba(255,255,255,.05);
+    }
+    @keyframes growBar { from { transform: scaleY(.02); opacity: .2; } to { transform: scaleY(1); opacity: 1; } }
+    .bar:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 7px);
+      transform: translateX(-50%);
+      background: #020a12;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 5px 7px;
+      white-space: nowrap;
+      color: var(--text);
+      font-size: 9px;
+      z-index: 4;
+    }
+    .bar-label { text-align: center; color: var(--muted); font-size: 10px; margin-top: 8px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 0 0; color: var(--muted); font-size: 10px; }
+    .legend i { width: 8px; height: 8px; border-radius: 3px; display: inline-block; margin-right: 5px; }
+
+    .causal-svg {
+      width: 100%;
+      min-width: 650px;
+      height: 325px;
+      display: block;
+      background: radial-gradient(circle at center, rgba(45,212,191,.04), transparent 54%);
+      border-radius: 12px;
+    }
+
+    .edge-line {
+      stroke: rgba(45,212,191,.64);
+      stroke-width: 2.4;
+      stroke-dasharray: 7 7;
+      animation: edgeFlow 1.2s linear infinite;
+      filter: drop-shadow(0 0 5px rgba(45,212,191,.35));
+    }
+    @keyframes edgeFlow { to { stroke-dashoffset: -28; } }
+    .edge-label { fill: #8ddbd1; font-size: 10px; font-family: var(--mono); }
+    .node { cursor: pointer; }
+    .node circle { fill: #0c2238; stroke: rgba(148,163,184,.38); stroke-width: 2; transition: all .18s ease; }
+    .node:hover circle, .node.selected circle { stroke: var(--cyan); stroke-width: 3; filter: drop-shadow(0 0 12px rgba(45,212,191,.45)); }
+    .node.root circle { stroke: var(--amber); }
+    .node text { fill: #d9e7f5; font-size: 10px; font-family: var(--sans); pointer-events: none; }
+    .node .node-sub { fill: #8299b3; font-size: 8px; }
+
+    .inspector {
+      padding: 16px;
+      position: sticky;
+      top: 14px;
+      height: calc(100vh - 28px);
+      min-height: 760px;
+      overflow-y: auto;
+    }
+
+    .inspector-section {
+      padding: 13px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .inspector-section:last-child { border-bottom: 0; }
+    .section-kicker { color: var(--cyan); font-size: 10px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+    .section-title { font-size: 14px; font-weight: 900; margin: 4px 0 8px; }
+    .section-text { color: var(--muted); font-size: 12px; line-height: 1.62; }
+
+    .path-box {
+      font-family: var(--mono);
+      font-size: 10px;
+      line-height: 1.6;
+      color: #b7c9db;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 9px;
+      background: rgba(0,0,0,.18);
+      overflow-wrap: anywhere;
+    }
+
+    .event-row {
+      display: grid;
+      grid-template-columns: 12px minmax(0,1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 0;
+      color: #b9cada;
+      font-size: 11px;
+    }
+    .event-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 12px rgba(45,212,191,.45); }
+    .event-dot.done { background: var(--green); }
+    .event-time { color: #6e87a1; font-family: var(--mono); font-size: 9px; }
+
+    .mini-json {
+      max-height: 180px;
+      overflow: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: #a9bed1;
+      font: 9.5px/1.55 var(--mono);
+      background: rgba(0,0,0,.18);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 9px;
+    }
+
+    .progress-track {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(148,163,184,.12);
+      overflow: hidden;
+      margin-top: 9px;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--cyan), var(--purple));
+      transition: width .45s cubic-bezier(.2,.8,.2,1);
+      box-shadow: 0 0 18px rgba(45,212,191,.34);
+    }
+
+    .trace-card {
+      margin-top: 15px;
+      overflow: hidden;
+    }
+
+    .trace-head {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .trace-head strong { display: block; }
+    .trace-head span { color: var(--muted); font-size: 11px; }
+    .trace-body {
+      display: grid;
+      grid-template-columns: 220px minmax(0,1fr);
+      gap: 12px;
+      padding: 14px;
+    }
+    .trace-meta { border-right: 1px solid var(--line); padding-right: 12px; }
+    .trace-meta dt { color: var(--muted); font-size: 10px; }
+    .trace-meta dd { margin: 2px 0 9px; font-size: 11px; font-family: var(--mono); overflow-wrap: anywhere; }
+    .trace-content { font: 11px/1.65 var(--mono); color: #c7d7e7; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+    .footer {
+      margin: 16px 0 4px;
+      color: #7189a3;
+      font-size: 11px;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .pulse-ring {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-right: 6px;
+      box-shadow: 0 0 0 0 rgba(74,222,128,.45);
+      animation: livePulse 1.6s infinite;
+    }
+    @keyframes livePulse { 70% { box-shadow: 0 0 0 8px rgba(74,222,128,0); } 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); } }
+
+    @media (max-width: 1320px) {
+      .workspace { grid-template-columns: 250px minmax(0,1fr); }
+      .inspector { grid-column: 1 / -1; position: relative; top: auto; height: auto; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+      .inspector-section { border-bottom: 0; border-right: 1px solid var(--line); padding-right: 14px; }
+      .inspector-section:nth-child(3n) { border-right: 0; }
+    }
+
+    @media (max-width: 920px) {
+      .app { padding: 10px; }
+      .topbar { grid-template-columns: 1fr; }
+      .header-actions { justify-content: flex-start; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .workspace { grid-template-columns: 1fr; }
+      .rail { position: relative; top: auto; height: auto; min-height: 0; }
+      .step-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+      .step-list::before, .flow-orb { display: none; }
+      .io-grid { grid-template-columns: 1fr; }
+      .flow-arrow { height: 30px; transform: rotate(90deg); }
+      .panel-content { height: 340px; }
+      .trace-body { grid-template-columns: 1fr; }
+      .trace-meta { border-right: 0; border-bottom: 1px solid var(--line); }
+      .inspector { display: block; }
+      .inspector-section { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar glass">
+      <div>
+        <div class="eyebrow">Interactive · Explainable · Observable</div>
+        <h1>LogAn Workers Pipeline Explorer</h1>
+        <p class="subtitle">从 9 行原始微服务日志出发，逐步观察它们如何被读取、合并、脱敏、模板化、抽样、标注、聚合，并最终形成候选因果图与可追溯的事故摘要。</p>
+        <div class="dataset-note">演示输入来自仓库的 <code>tests/fixtures/logs/checkout_incident/</code>。处理顺序、数据模型、文件路径和算法结构与代码一致；界面中的耗时及部分因果置信度是为了可视化而设置的演示观察值，不是生产性能基准。</div>
+      </div>
+      <div class="header-actions">
+        <button class="btn" id="prevBtn">← 上一步</button>
+        <button class="btn primary" id="playBtn">▶ 自动播放</button>
+        <button class="btn" id="nextBtn">下一步 →</button>
+        <select class="select" id="speedSelect" aria-label="播放速度">
+          <option value="2800">0.75×</option>
+          <option value="2100" selected>1×</option>
+          <option value="1300">1.5×</option>
+          <option value="850">2×</option>
+        </select>
+        <button class="btn" id="copyBtn">复制当前输出</button>
+        <button class="btn danger" id="resetBtn">重置</button>
+      </div>
+    </header>
+
+    <section class="metrics" id="metrics"></section>
+
+    <section class="workspace">
+      <aside class="rail glass">
+        <div class="rail-head">
+          <strong>11 步分析流水线</strong>
+          <span id="railStatus">Step 1 / 11</span>
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        </div>
+        <div class="step-list" id="stepList">
+          <div class="flow-orb" id="flowOrb"></div>
+        </div>
+      </aside>
+
+      <section class="stage-shell glass">
+        <div class="stage-head">
+          <div>
+            <div class="stage-number" id="stageNumber">STEP 01 / 11</div>
+            <div class="stage-title" id="stageTitle"></div>
+            <div class="stage-summary" id="stageSummary"></div>
+          </div>
+          <div class="stage-actions">
+            <select class="select" id="templateSelect" aria-label="选择模板"></select>
+            <select class="select" id="traceSelect" aria-label="选择追踪日志"></select>
+          </div>
+        </div>
+        <div class="stage-body" id="stageBody">
+          <div class="io-grid">
+            <article class="io-panel">
+              <div class="panel-head"><span id="inputTitle">输入</span><span class="panel-badge" id="inputBadge"></span></div>
+              <div class="panel-content" id="inputPanel"></div>
+            </article>
+            <div class="flow-arrow">→</div>
+            <article class="io-panel output">
+              <div class="panel-head"><span id="outputTitle">输出</span><span class="panel-badge" id="outputBadge"></span></div>
+              <div class="panel-content" id="outputPanel"></div>
+            </article>
+          </div>
+          <div class="diff-card">
+            <div class="diff-icon">Δ</div>
+            <div><div class="diff-title" id="diffTitle"></div><div class="diff-text" id="diffText"></div></div>
+          </div>
+          <section class="trace-card">
+            <div class="trace-head">
+              <div><strong>单条 Evidence 生命周期</strong><span>始终能追溯回 file_path、line_number、log_id 与 timestamp</span></div>
+              <span class="chip"><span class="pulse-ring"></span>实时联动当前步骤</span>
+            </div>
+            <div class="trace-body">
+              <dl class="trace-meta" id="traceMeta"></dl>
+              <div class="trace-content" id="traceContent"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="inspector glass">
+        <section class="inspector-section">
+          <div class="section-kicker">Explainability</div>
+          <div class="section-title">这一阶段为什么存在</div>
+          <div class="section-text" id="whyText"></div>
+        </section>
+        <section class="inspector-section">
+          <div class="section-kicker">Code path</div>
+          <div class="section-title">精确代码位置</div>
+          <div class="path-box" id="codePath"></div>
+          <div class="path-box" id="codeSnippet" style="margin-top:8px"></div>
+        </section>
+        <section class="inspector-section">
+          <div class="section-kicker">Observability</div>
+          <div class="section-title">Job Events 与指标</div>
+          <div id="eventTimeline"></div>
+          <div class="mini-json" id="metadataBox"></div>
+        </section>
+        <section class="inspector-section">
+          <div class="section-kicker">Contract</div>
+          <div class="section-title">输入 / 输出数据类型</div>
+          <div class="section-text" id="contractText"></div>
+        </section>
+      </aside>
+    </section>
+
+    <div class="footer">本文件为纯静态、单文件 HTML；不依赖网络、CDN 或外部 JavaScript 库，可直接双击打开。</div>
+  </main>
+
+<script>
+(() => {
+  const logs = [
+    { id:'auth-1', file:'auth.log', line:1, ts:'2026-06-06T10:11:30Z', level:'WARN', service:'auth-service', message:'db connection pool exhausted active=50 max=50', template:'T1', order:1 },
+    { id:'auth-2', file:'auth.log', line:2, ts:'2026-06-06T10:11:45Z', level:'ERROR', service:'auth-service', message:'failed to acquire db connection timeout_ms=5000', template:'T2', order:2 },
+    { id:'auth-3', file:'auth.log', line:3, ts:'2026-06-06T10:12:45Z', level:'ERROR', service:'auth-service', message:'failed to acquire db connection timeout_ms=5000', template:'T2', order:3 },
+    { id:'gateway-1', file:'gateway.log', line:1, ts:'2026-06-06T10:12:00Z', level:'INFO', service:'gateway', message:'request_id=req-1 POST /checkout started', template:'T5', order:4 },
+    { id:'gateway-2', file:'gateway.log', line:2, ts:'2026-06-06T10:12:31Z', level:'ERROR', service:'gateway', message:'request_id=req-1 POST /checkout failed status=500 duration_ms=31000', template:'T6', order:5 },
+    { id:'gateway-3', file:'gateway.log', line:3, ts:'2026-06-06T10:13:31Z', level:'ERROR', service:'gateway', message:'request_id=req-2 POST /checkout failed status=500 duration_ms=30500', template:'T6', order:6 },
+    { id:'payment-1', file:'payment.log', line:1, ts:'2026-06-06T10:11:50Z', level:'WARN', service:'payment-service', message:'connection pool usage high active=95 max=100', template:'T3', order:7 },
+    { id:'payment-2', file:'payment.log', line:2, ts:'2026-06-06T10:12:01Z', level:'ERROR', service:'payment-service', message:'timeout calling auth-service after 30000ms request_id=req-1', template:'T4', order:8 },
+    { id:'payment-3', file:'payment.log', line:3, ts:'2026-06-06T10:13:01Z', level:'ERROR', service:'payment-service', message:'timeout calling auth-service after 30000ms request_id=req-2', template:'T4', order:9 }
+  ];
+
+  const templates = {
+    T1: { name:'Auth 连接池耗尽', text:'<*> warn auth-service db connection pool exhausted active=<*> max=<*>', count:1, golden:'saturation', faults:['resource','database'], entities:{service:['auth-service'],database:['db']}, severity:.88, confidence:.92 },
+    T2: { name:'Auth 获取 DB 连接失败', text:'<*> error auth-service failed to acquire db connection timeout_ms=<*>', count:2, golden:'availability', faults:['database','timeout','resource'], entities:{service:['auth-service'],database:['db'],duration_ms:['5000']}, severity:.82, confidence:.88 },
+    T3: { name:'Payment 连接池使用率高', text:'<*> warn payment-service connection pool usage high active=<*> max=<*>', count:1, golden:'saturation', faults:['resource','database'], entities:{service:['payment-service']}, severity:.88, confidence:.92 },
+    T4: { name:'Payment 调用 Auth 超时', text:'<*> error payment-service timeout calling auth-service after <*>ms request_id=<*>', count:2, golden:'availability', faults:['dependency','timeout'], entities:{source_service:['payment-service'],target_service:['auth-service'],duration_ms:['30000']}, severity:.86, confidence:.91 },
+    T5: { name:'Gateway Checkout 开始', text:'<*> info gateway request_id=<*> post <*> started', count:1, golden:'information', faults:[], entities:{}, severity:.10, confidence:.75 },
+    T6: { name:'Gateway Checkout 500', text:'<*> error gateway request_id=<*> post <*> failed status=<*> duration_ms=<*>', count:2, golden:'error', faults:['application'], entities:{service:['gateway'],status_code:['500'],url_path:['/checkout']}, severity:.84, confidence:.89 }
+  };
+
+  const chronological = [...logs].sort((a,b) => a.ts.localeCompare(b.ts));
+  const edgeData = [
+    { source:'T1', target:'T2', confidence:.82, lag:15, method:'temporal_precedence+lift+pgem' },
+    { source:'T2', target:'T4', confidence:.78, lag:16, method:'temporal_precedence+service_entity+pgem' },
+    { source:'T4', target:'T6', confidence:.81, lag:30, method:'temporal_precedence+service_entity+lift' }
+  ];
+
+  const stageDefs = [
+    { id:'ingest_paths', title:'读取输入路径与归档文件', file:'activities/ingestion.py', fn:'ingest_paths(paths)', summary:'递归发现日志文件，解包 gzip/zip/tar，并为每个文件和物理行建立稳定身份、Hash 与顺序。', why:'后续分析必须先获得可追溯的物理证据。此阶段保留原始文件名、行号、SHA256 和 ingestion_order，使任何结论都能回到源文件。', inType:'list[str | Path]', outType:'list[IngestedFile] → list[RawPhysicalLine]', duration:12, metadata:{files:3,raw_lines:9}, snippet:'files = ingest_paths(paths)' },
+    { id:'merge_entries', title:'合并多行日志为逻辑事件', file:'activities/preprocessing.py + algorithms/multiline.py', fn:'merge_entries(files)', summary:'将 Stack Trace、Traceback 与 continuation 行合成一个 LogEntry，同时保留所有原始 line_numbers。', why:'异常堆栈如果按物理行处理，会把一个错误切碎成很多无意义事件。逻辑合并后，模型和模板器看到的是完整上下文。', inType:'list[IngestedFile]', outType:'list[LogEntry]', duration:4, metadata:{raw_entries:9,raw_lines:9}, snippet:'entries.extend(merge_physical_lines(file.lines))' },
+    { id:'preprocess_redact', title:'解析、排序、归一化与脱敏', file:'activities/preprocessing.py + algorithms/parsers.py + redactors.py', fn:'preprocess_entries(...)', summary:'提取 timestamp、level、service、request_id 等字段，在任何模型输入产生之前屏蔽 Token、邮箱、IP、UUID 与其他敏感值。', why:'这是隐私和数据质量的边界。时间戳让跨服务排序成为可能；脱敏保证后续代表样本与摘要证据包不会泄漏敏感信息。', inType:'list[LogEntry]', outType:'list[NormalizedLogLine]', duration:9, metadata:{normalized_lines:9}, snippet:'redacted = redactor.redact(parsed["message"])' },
+    { id:'drain_templating', title:'Drain 风格模板聚类', file:'activities/templating.py + algorithms/drain_adapter.py', fn:'run_drain_templating(...)', summary:'把 request_id、数字、路径和其他高基数变量替换为 <*>，将结构相同的日志压缩成模板。', why:'模板化是整个系统的压缩枢纽：9 行原始日志变为 6 个模板。之后大部分推理针对模板而非逐行执行，从而降低模型调用量。', inType:'list[NormalizedLogLine]', outType:'tuple[list[NormalizedLogLine], list[LogTemplate]]', duration:15, metadata:{normalized_lines:9,templates:6}, snippet:'adapter.cluster(case_id, analysis_run_id, logs)' },
+    { id:'representative_sampling', title:'选择模板代表样本', file:'activities/sampling.py + algorithms/representative_sampling.py', fn:'select_samples(...)', summary:'按模板选择最早、最高级别、堆栈、常见与稀有参数组合，并按 log_id 去重。', why:'只把少量、脱敏、可解释的代表行发送给模型。每个样本都记录 sample_reason 和 EvidenceRef，便于审计为什么选择它。', inType:'logs + templates', outType:'list[RepresentativeSample]', duration:7, metadata:{samples:6}, snippet:'select_representative_samples(..., max_samples_per_template=3)' },
+    { id:'ai_platform_annotation', title:'模板级 Golden Signal 标注', file:'activities/inference.py + prompts/annotation_prompt.md', fn:'annotate_templates(...)', summary:'为每个模板构造“模板上下文 + 脱敏代表行”Payload，调用模型 Gateway，输出 Golden Signal、故障类别、实体、严重度与置信度。', why:'这一步把非结构化模板转换为后续可筛选、可聚合、可建图的语义信号。本地 Mock Gateway 是确定性规则；生产可注入真实 Gateway。', inType:'templates + samples + case_context', outType:'list[TemplateAnnotation] + model_inputs', duration:380, metadata:{annotations:6,annotation_templates_total:6,annotation_templates_selected:6,annotation_budget:64}, snippet:'parsed = TemplateAnnotationResult.model_validate(raw)' },
+    { id:'broadcast_annotations', title:'把模板标注广播回每一行', file:'activities/broadcasting.py', fn:'broadcast_annotations(logs, annotations)', summary:'根据 template_id 将 Golden Signal、Fault Category、实体和置信度复制到同一模板的所有日志行。', why:'未被抽样的日志也应继承模板语义。广播后，Tabular Logs 能逐行展示分类，同时保留每一行自己的 request_id、trace_id 和 thread_id。', inType:'NormalizedLogLine[] + TemplateAnnotation[]', outType:'enriched NormalizedLogLine[]', duration:2, metadata:{annotated_lines:9}, snippet:'line.golden_signal = annotation.golden_signal' },
+    { id:'temporal_aggregation', title:'构建时间窗口信号', file:'activities/temporal_aggregation.py', fn:'build_time_window_aggregates(...)', summary:'把日志按固定时间窗口、模板、服务、Golden Signal 与 Fault Category 分桶计数。', why:'单条日志难以观察故障演化；窗口聚合将离散事件转换为趋势，直接驱动 Temporal View，并为滞后相关与 Granger 序列提供基础。', inType:'enriched NormalizedLogLine[]', outType:'list[WindowAggregate]', duration:5, metadata:{windows:17}, snippet:'buckets[(window, template, service, signal, category)] += 1' },
+    { id:'causal_graph', title:'推断候选因果图与根因排名', file:'activities/causal.py + algorithms/causal_*.py + pagerank.py', fn:'infer_causal_graph(...)', summary:'仅对 offending templates 建图，融合时间先后、Lift、滞后相关、PGEM、Granger、服务实体关系和严重度。', why:'相关性不等于因果性，因此所有边都标记 candidate_cause 与 needs_validation。算法给出证据分数与限制条件，而不是宣称最终根因。', inType:'templates + enriched logs', outType:'CausalGraph(nodes, edges, root_cause_candidates)', duration:42, metadata:{nodes:5,edges:3}, snippet:'if confidence >= 0.35: edges.append(CausalEdge(...))' },
+    { id:'causal_summary', title:'生成证据约束的因果摘要', file:'activities/summary.py + prompts/causal_summary_prompt.md', fn:'render_causal_summary(...)', summary:'从 Top Nodes、Edges 与脱敏 Evidence 构造安全证据包，要求每个因果声明引用 evidence_refs，并强制使用谨慎措辞。', why:'工程师需要可阅读的诊断叙述，但 LLM 不应自由发挥。证据包、Schema 校验、引用校验、二次脱敏和确定性 Fallback 共同约束输出。', inType:'CausalGraph + templates + enriched logs', outType:'CausalSummary', duration:230, metadata:{next_actions:2,evidence_refs:5,summary_source:'llm'}, snippet:'if invalid_output: return _fallback_summary(...)' },
+    { id:'export_artifacts', title:'生成 Markdown / HTML / JSON 报告', file:'activities/export.py', fn:'export_analysis(result, export_type)', summary:'把因果摘要与结构化结果封装为三种可交付格式，并完成 Pipeline Progress。', why:'分析结果需要进入工单、客户沟通、审计与系统集成。导出层将同一 AnalysisResult 转换为不同消费格式。', inType:'AnalysisResult without exports', outType:'dict[str, ExportArtifact] + final AnalysisResult', duration:8, metadata:{exports:3,export_types:['html','json','markdown']}, snippet:'for export_type in ("markdown", "html", "json")' }
+  ];
+
+  const metricsData = [
+    ['原始物理行','9','3 个日志文件','var(--blue)'],
+    ['逻辑事件','9','示例中无多行堆栈','var(--purple)'],
+    ['Drain 模板','6','压缩 33.3%','var(--cyan)'],
+    ['代表样本','6','模型只看脱敏样本','var(--amber)'],
+    ['异常模板','5','排除 information','var(--red)'],
+    ['候选因果边','3','全部 needs validation','var(--green)']
+  ];
+
+  let activeStage = 0;
+  let selectedTemplate = 'T6';
+  let selectedTrace = 'gateway-2';
+  let timer = null;
+
+  const $ = id => document.getElementById(id);
+  const escapeHtml = value => String(value).replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+  const pretty = value => escapeHtml(JSON.stringify(value, null, 2));
+  const rawText = log => `${log.ts} ${log.level} ${log.service} ${log.message}`;
+  const levelClass = level => level === 'ERROR' ? 'tok-level-error' : level === 'WARN' ? 'tok-level-warn' : 'tok-level-info';
+  const signalChip = signal => `<span class="chip ${signal}">${escapeHtml(signal)}</span>`;
+  const faultChips = faults => faults.map(f => `<span class="chip">${escapeHtml(f)}</span>`).join('');
+  const traceLog = () => logs.find(l => l.id === selectedTrace) || logs[4];
+
+  function highlightedLog(log) {
+    return `<span class="tok-ts">${escapeHtml(log.ts)}</span> <span class="${levelClass(log.level)}">${escapeHtml(log.level)}</span> <span class="tok-service">${escapeHtml(log.service)}</span> ${escapeHtml(log.message).replace(/(&lt;\*&gt;|req-[12]|\d{3,})/g,'<span class="tok-dynamic">$1</span>')}`;
+  }
+
+  function renderMetrics() {
+    $('metrics').innerHTML = metricsData.map(([label,value,help,color]) => `
+      <article class="metric" style="--metric-color:${color}">
+        <div class="metric-label">${label}</div><div class="metric-value">${value}</div><div class="metric-help">${help}</div>
+      </article>`).join('');
+  }
+
+  function renderSelectors() {
+    $('templateSelect').innerHTML = Object.entries(templates).map(([id,t]) => `<option value="${id}">${id} · ${escapeHtml(t.name)}</option>`).join('');
+    $('templateSelect').value = selectedTemplate;
+    $('traceSelect').innerHTML = chronological.map(l => `<option value="${l.id}">${l.ts.slice(11,19)} · ${l.service} · ${l.level}</option>`).join('');
+    $('traceSelect').value = selectedTrace;
+  }
+
+  function renderRail() {
+    $('stepList').innerHTML = '<div class="flow-orb" id="flowOrb"></div>' + stageDefs.map((s,i) => `
+      <button class="step-btn ${i===activeStage?'active':''} ${i<activeStage?'done':''}" data-step="${i}">
+        <span class="step-index">${i<activeStage?'✓':String(i+1).padStart(2,'0')}</span>
+        <span><span class="step-name">${escapeHtml(s.title)}</span><span class="step-file">${escapeHtml(s.file)}</span></span>
+        <span class="step-state">${i===activeStage?'RUN':i<activeStage?'DONE':'WAIT'}</span>
+      </button>`).join('');
+    document.querySelectorAll('.step-btn').forEach(btn => btn.addEventListener('click', () => setStage(Number(btn.dataset.step))));
+    requestAnimationFrame(positionOrb);
+  }
+
+  function positionOrb() {
+    const orb = $('flowOrb');
+    const active = document.querySelector('.step-btn.active');
+    if (!orb || !active || window.innerWidth <= 920) return;
+    const list = $('stepList').getBoundingClientRect();
+    const rect = active.getBoundingClientRect();
+    const y = rect.top - list.top + rect.height / 2 - 27;
+    orb.style.transform = `translateY(${y}px)`;
+  }
+
+  function groupRawLogs() {
+    return ['auth.log','gateway.log','payment.log'].map(file => {
+      const rows = logs.filter(l => l.file === file);
+      return `<div class="log-group"><div class="log-group-title">📄 ${file}</div>${rows.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${highlightedLog(l)}</button>`).join('')}</div>`;
+    }).join('');
+  }
+
+  function normalizedObject(log) {
+    const requestMatch = log.message.match(/request_id=([^\s]+)/);
+    return {
+      log_id: log.id,
+      file_path: log.file,
+      line_number: log.line,
+      timestamp: log.ts,
+      timestamp_quality: 'parsed',
+      level: log.level,
+      service: log.service,
+      parsed_fields: requestMatch ? {request_id:requestMatch[1],redaction_counts:{}} : {redaction_counts:{}},
+      message: log.message,
+      normalized_message: rawText(log).toLowerCase(),
+      redacted_message: log.message
+    };
+  }
+
+  function renderInput(stage) {
+    const t = templates[selectedTemplate];
+    const selectedLogs = chronological.filter(l => l.template === selectedTemplate);
+    switch(stage.id) {
+      case 'ingest_paths':
+        return `<pre class="json">${pretty([
+          'tests/fixtures/logs/checkout_incident/auth.log',
+          'tests/fixtures/logs/checkout_incident/payment.log',
+          'tests/fixtures/logs/checkout_incident/gateway.log'
+        ])}</pre><div style="height:8px"></div>${groupRawLogs()}`;
+      case 'merge_entries':
+        return groupRawLogs() + `<div class="template-card"><div class="card-title">物理行输入</div><div class="card-sub">9 RawPhysicalLine；每行已有 file_id、line_number、sha256 与 ingestion_order。</div></div>`;
+      case 'preprocess_redact':
+        return logs.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${escapeHtml(JSON.stringify({log_id:l.id,file_path:l.file,line_numbers:[l.line],raw_message:rawText(l)}))}</button>`).join('');
+      case 'drain_templating':
+        return chronological.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}"><span class="tok-service">${l.service}</span> · ${escapeHtml(rawText(l).toLowerCase())}</button>`).join('');
+      case 'representative_sampling':
+        return Object.entries(templates).map(([id,item]) => `<div class="template-card ${id===selectedTemplate?'selected':''}"><div class="card-row"><span class="card-title">${id} · ${escapeHtml(item.name)}</span><span class="panel-badge">${item.count} 行</span></div><div class="card-sub">${escapeHtml(item.text)}</div></div>`).join('');
+      case 'ai_platform_annotation': {
+        const sample = selectedLogs[0];
+        const payload = {
+          case_context:{title:'Checkout API intermittent 500 errors',product:'commerce-platform',environment:'production'},
+          template_context:{template_id:selectedTemplate,template_text:t.text,occurrence_count:t.count,services:[sample.service],files:[sample.file]},
+          representative_lines:[{sample_reason:'earliest',timestamp:sample.ts,level:sample.level,service:sample.service,message:sample.message,evidence_ref:{log_id:sample.id,file_path:sample.file,line_number:sample.line}}]
+        };
+        return `<pre class="json">${pretty(payload)}</pre>`;
+      }
+      case 'broadcast_annotations':
+        return Object.entries(templates).map(([id,item]) => `<div class="annotation-card ${id===selectedTemplate?'selected':''}"><div class="card-row"><span class="card-title">${id} TemplateAnnotation</span>${signalChip(item.golden)}</div><div class="chips">${faultChips(item.faults)}<span class="chip">confidence ${item.confidence}</span></div></div>`).join('');
+      case 'temporal_aggregation':
+        return chronological.map(l => {
+          const ann = templates[l.template];
+          return `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${highlightedLog(l)}<br>↳ ${signalChip(ann.golden)} ${faultChips(ann.faults)}</button>`;
+        }).join('');
+      case 'causal_graph': {
+        const series = {
+          T1:[1,0,0], T2:[1,1,0], T3:[1,0,0], T4:[0,1,1], T6:[0,1,1]
+        };
+        return `<div class="card-title">60 秒计数序列</div><pre class="json">${pretty(series)}</pre><div class="chips"><span class="chip">max_lag=600s</span><span class="chip">time_bin=60s</span><span class="chip">5 offending templates</span></div>`;
+      }
+      case 'causal_summary': {
+        const packet = {
+          case_context:{title:'Checkout API intermittent 500 errors',product:'commerce-platform',environment:'production'},
+          root_cause_candidates:[{template_id:'T1',template_text:templates.T1.text,confidence:.86}],
+          causal_edges:edgeData.map(e => ({source:e.source,target:e.target,method:e.method,confidence:e.confidence,needs_validation:true})),
+          evidence_lines:['auth-1','auth-2','payment-2','gateway-2','gateway-3'].map(id => { const l=logs.find(x=>x.id===id); return {log_id:l.id,file_path:l.file,line_number:l.line,time:l.ts,service:l.service,redacted_message:l.message}; })
+        };
+        return `<pre class="json">${pretty(packet)}</pre>`;
+      }
+      case 'export_artifacts':
+        return `<pre class="json">${pretty({
+          case_id:'case-checkout', analysis_run_id:'run-001', files:3, raw_entries:9, normalized_logs:9, templates:6, samples:6, annotations:6, temporal_rows:17, causal_nodes:5, causal_edges:3, summary_source:'llm'
+        })}</pre>`;
+    }
+  }
+
+  function causalGraphSvg() {
+    const positions = {T1:[90,90],T2:[275,90],T3:[275,245],T4:[480,165],T6:[690,165]};
+    const label = id => templates[id].name.replace('连接池','池').replace('Checkout','CO');
+    const lines = edgeData.map(e => {
+      const [x1,y1]=positions[e.source], [x2,y2]=positions[e.target];
+      const mx=(x1+x2)/2, my=(y1+y2)/2-8;
+      return `<line class="edge-line" x1="${x1+43}" y1="${y1}" x2="${x2-43}" y2="${y2}" marker-end="url(#arrow)"/><text class="edge-label" x="${mx}" y="${my}" text-anchor="middle">${e.confidence.toFixed(2)} · ${e.lag}s</text>`;
+    }).join('');
+    const nodes = Object.entries(positions).map(([id,[x,y]]) => `<g class="node ${id==='T1'?'root':''} ${id===selectedTemplate?'selected':''}" data-template="${id}"><circle cx="${x}" cy="${y}" r="43"/><text x="${x}" y="${y-4}" text-anchor="middle">${id}</text><text class="node-sub" x="${x}" y="${y+12}" text-anchor="middle">${escapeHtml(label(id).slice(0,15))}</text></g>`).join('');
+    return `<svg class="causal-svg" viewBox="0 0 780 330" role="img" aria-label="候选因果图"><defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#2dd4bf"/></marker></defs>${lines}${nodes}</svg>`;
+  }
+
+  function temporalChart() {
+    const rows = [
+      {label:'10:11', information:0, saturation:2, availability:1, error:0},
+      {label:'10:12', information:1, saturation:0, availability:2, error:1},
+      {label:'10:13', information:0, saturation:0, availability:1, error:1}
+    ];
+    const colors = {information:'#4ade80',saturation:'#fbbf24',availability:'#60a5fa',error:'#fb7185'};
+    return `<div class="bar-chart">${rows.map((r,idx)=>`<div class="bar-group"><div class="bar-stack">${Object.keys(colors).map(key=>`<div class="bar" data-tip="${key}: ${r[key]}" style="height:${Math.max(4,r[key]*32)}%;background:${colors[key]};animation-delay:${idx*.08}s"></div>`).join('')}</div><div class="bar-label">${r.label}:00</div></div>`).join('')}</div><div class="legend">${Object.entries(colors).map(([k,c])=>`<span><i style="background:${c}"></i>${k}</span>`).join('')}</div>`;
+  }
+
+  function renderOutput(stage) {
+    const t = templates[selectedTemplate];
+    const selectedLogs = chronological.filter(l => l.template === selectedTemplate);
+    switch(stage.id) {
+      case 'ingest_paths': {
+        const sample = traceLog();
+        return `<pre class="json">${pretty({
+          files:[
+            {file_id:'uuid5(auth.log)',original_filename:'auth.log',detected_format:'log',size_bytes:'…',sha256:'…',lines:3},
+            {file_id:'uuid5(gateway.log)',original_filename:'gateway.log',detected_format:'log',size_bytes:'…',sha256:'…',lines:3},
+            {file_id:'uuid5(payment.log)',original_filename:'payment.log',detected_format:'log',size_bytes:'…',sha256:'…',lines:3}
+          ],
+          selected_raw_line:{raw_line_id:`uuid5(${sample.file}:${sample.line})`,file_path:sample.file,line_number:sample.line,raw_text:rawText(sample),sha256:'sha256(raw_text)',ingestion_order:sample.order}
+        })}</pre>`;
+      }
+      case 'merge_entries':
+        return logs.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${escapeHtml(JSON.stringify({log_id:l.id,file_path:l.file,line_number:l.line,line_numbers:[l.line],raw_message:rawText(l),raw_line_ids:[`raw-${l.id}`]}))}</button>`).join('') + `<div class="template-card"><div class="card-title">本次示例：9 → 9</div><div class="card-sub">没有 Stack Trace，因此每个物理行恰好对应一个逻辑 LogEntry。</div></div>`;
+      case 'preprocess_redact':
+        return chronological.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${escapeHtml(JSON.stringify(normalizedObject(l)))}</button>`).join('') + `<div class="template-card"><div class="card-title">附加隐私规则演示（不属于本次 9 行输入）</div><div class="card-sub"><span class="tok-level-error">BEFORE</span> email=alice@example.com ip=192.168.1.10 Authorization=Bearer abc.def.ghi password=hunter2<br><span class="tok-mask">AFTER</span> email=&lt;EMAIL&gt; ip=&lt;IP&gt; Authorization=&lt;TOKEN&gt; password=&lt;SECRET&gt;</div></div>`;
+      case 'drain_templating':
+        return Object.entries(templates).map(([id,item]) => `<div class="template-card ${id===selectedTemplate?'selected':''}" data-template-card="${id}"><div class="card-row"><span class="card-title">${id} · ${escapeHtml(item.name)}</span><span class="panel-badge">${item.count} occurrence</span></div><div class="card-sub"><span class="tok-mask">${escapeHtml(item.text)}</span></div><div class="chips"><span class="chip">template_id = uuid5(run + key)</span><span class="chip">first/last seen</span></div></div>`).join('');
+      case 'representative_sampling':
+        return Object.entries(templates).map(([id,item]) => { const sample=chronological.find(l=>l.template===id); return `<div class="sample-card"><div class="card-row"><span class="card-title">${id} RepresentativeSample</span><span class="chip">earliest</span></div><div class="card-sub">${escapeHtml(sample.ts)} · ${escapeHtml(sample.service)} · ${escapeHtml(sample.message)}</div><div class="chips"><span class="chip">sample_rank 0</span><span class="chip">evidence ${sample.file}:${sample.line}</span></div></div>`; }).join('');
+      case 'ai_platform_annotation':
+        return `<div class="annotation-card selected"><div class="card-row"><span class="card-title">${selectedTemplate} · ${escapeHtml(t.name)}</span>${signalChip(t.golden)}</div><pre class="json" style="margin-top:9px">${pretty({golden_signal:t.golden,fault_categories:t.faults,entities:t.entities,severity_score:t.severity,confidence:t.confidence,rationale:annotationRationale(selectedTemplate)})}</pre></div><div class="template-card"><div class="card-title">Schema 防护</div><div class="card-sub">若模型 JSON 无法通过 TemplateAnnotationResult 校验，则降级为 golden_signal=unknown、confidence=0，而不是让脏输出污染后续流程。</div></div>`;
+      case 'broadcast_annotations':
+        return chronological.map(l => { const ann=templates[l.template]; return `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${highlightedLog(l)}<br>↳ ${signalChip(ann.golden)} ${faultChips(ann.faults)} <span class="chip">confidence ${ann.confidence}</span></button>`; }).join('');
+      case 'temporal_aggregation':
+        return temporalChart() + `<div class="template-card"><div class="card-title">17 条 WindowAggregate</div><div class="card-sub">只有 3 个时间窗口，但每个模板 × 服务 × Signal × Fault Category 组合会形成独立聚合行。</div></div>`;
+      case 'causal_graph':
+        return causalGraphSvg() + `<div class="chips"><span class="chip saturation">T1 Root candidate</span><span class="chip">PageRank + early + outgoing + severity</span><span class="chip">所有边 needs_validation=true</span></div>`;
+      case 'causal_summary':
+        return `<div style="font-family:var(--sans);line-height:1.65"><h3 style="margin-top:0">Incident Diagnosis Summary</h3><p><strong>候选根因：</strong>证据表明 <code>auth-service</code> 的数据库连接池耗尽可能是较早的贡献信号，并在获取数据库连接失败之后，领先于 <code>payment-service</code> 调用超时以及 Gateway 500 症状。</p><p><strong>候选链：</strong><br>Auth pool exhausted → Auth DB acquire failure → Payment timeout → Gateway 500。</p><p><strong>不确定性：</strong>该结果需要结合指标、Trace、部署变更和时钟偏差继续验证，不能视为已经证明的最终 RCA。</p><p><strong>下一步：</strong>检查 Auth DB Pool 指标、连接等待时长、Payment 到 Auth 的 Trace，以及 10:11:30 前后的变更。</p><div class="chips"><span class="chip">evidence_refs: auth-1</span><span class="chip">auth-2</span><span class="chip">payment-2</span><span class="chip">gateway-2</span></div></div>`;
+      case 'export_artifacts':
+        return ['markdown','html','json'].map(type => `<div class="export-card"><div class="card-row"><span class="card-title">${type.toUpperCase()} ExportArtifact</span><span class="chip">uuid5(run + ${type})</span></div><div class="card-sub">memory://exports/run-001/export.${type}</div><div class="chips"><span class="chip">redacted</span><span class="chip">traceable</span><span class="chip">ready</span></div></div>`).join('') + `<pre class="json">${pretty({progress:{current_step:'completed',files_total:3,raw_lines:9,templates:6,representative_samples:6,annotated_templates:6,windows:17,nodes:5,edges:3,exports:3}})}</pre>`;
+    }
+  }
+
+  function annotationRationale(id) {
+    return ({T1:'Connection pool exhaustion indicates resource saturation.',T2:'The service could not acquire a database connection.',T3:'Pool usage high indicates resource pressure.',T4:'A service timed out while calling a dependency.',T5:'Routine informational request-start event.',T6:'Checkout requests failed with server errors.'})[id];
+  }
+
+  function titles(stage) {
+    const map = {
+      ingest_paths:['文件路径与原始字节/文本','IngestedFile 与 RawPhysicalLine','3 paths','3 files · 9 lines'],
+      merge_entries:['RawPhysicalLine','LogEntry','9 physical','9 logical'],
+      preprocess_redact:['LogEntry','NormalizedLogLine','9 entries','9 normalized'],
+      drain_templating:['Normalized messages','LogTemplate clusters','9 lines','6 templates'],
+      representative_sampling:['模板分组','RepresentativeSample','6 clusters','6 samples'],
+      ai_platform_annotation:['模型 Payload','TemplateAnnotation','1 selected payload','6 annotations'],
+      broadcast_annotations:['模板级标注','逐行 enriched logs','6 annotations','9 annotated lines'],
+      temporal_aggregation:['带语义的日志行','WindowAggregate + Temporal View','9 lines','17 aggregate rows'],
+      causal_graph:['模板时间序列与实体关系','Candidate Causal Graph','5 series','5 nodes · 3 edges'],
+      causal_summary:['安全 Evidence Packet','CausalSummary','5 refs · 3 edges','RCA + actions'],
+      export_artifacts:['AnalysisResult','ExportArtifact','1 result','3 exports']
+    };
+    return map[stage.id];
+  }
+
+  function diff(stage) {
+    const map = {
+      ingest_paths:['建立证据身份','文本尚未被解析，但每个文件与物理行现在拥有可审计的 ID、Hash、顺序和来源。'],
+      merge_entries:['物理行 → 逻辑事件','示例日志都是单行，因此数量不变；如果是 Java Stack Trace，多行会合成一个 LogEntry 并保留全部行号。'],
+      preprocess_redact:['无结构文本 → 安全结构化记录','新增 timestamp、level、service、request_id 等字段；敏感值先被屏蔽，之后才允许进入模板与模型阶段。'],
+      drain_templating:['9 行 → 6 个结构模式','动态值统一为 <*>，同结构日志被压缩到同一 template_id。'],
+      representative_sampling:['模板组 → 少量可解释样本','每个模板只保留必要代表，模型调用规模从逐行降为逐模板。'],
+      ai_platform_annotation:['文本模板 → 语义标签','模板现在具有 Golden Signal、故障类别、实体、严重度、置信度和 rationale。'],
+      broadcast_annotations:['模板语义 → 每一条 Evidence','所有同模板日志继承语义，同时保留自己独有的 request_id / trace_id。'],
+      temporal_aggregation:['离散事件 → 时间演化趋势','现在可以观察 10:11 的资源压力如何领先于 10:12/10:13 的超时和 500。'],
+      causal_graph:['相关事件 → 带证据的候选链','融合多个统计与结构信号；边被明确标记为候选，需要外部 Telemetry 验证。'],
+      causal_summary:['结构化图 → 人可读 RCA','叙述必须引用提供的 evidence_refs；模型不可用或输出无效时自动使用确定性 Fallback。'],
+      export_artifacts:['分析内存对象 → 可交付报告','同一结果可进入 Markdown、HTML、JSON、工单、客户更新或其他系统。']
+    };
+    return map[stage.id];
+  }
+
+  function traceState(stage) {
+    const l = traceLog();
+    const t = templates[l.template];
+    const base = {file:l.file,line:l.line,log_id:l.id,timestamp:l.ts,template:l.template};
+    const states = {
+      ingest_paths:`RawPhysicalLine\nraw_text = ${rawText(l)}\nsha256 = sha256(raw_text)\ningestion_order = ${l.order}`,
+      merge_entries:`LogEntry\nline_numbers = [${l.line}]\nraw_message = ${rawText(l)}\nraw_line_ids = [raw-${l.id}]`,
+      preprocess_redact:`NormalizedLogLine\ntimestamp = ${l.ts} (parsed)\nlevel = ${l.level}\nservice = ${l.service}\nredacted_message = ${l.message}\nparsed_fields = ${JSON.stringify(l.message.includes('request_id')?{request_id:(l.message.match(/request_id=([^\s]+)/)||[])[1]}:{})}`,
+      drain_templating:`template_id = ${l.template}\ntemplate_text = ${t.text}\noccurrence_count = ${t.count}`,
+      representative_sampling:`RepresentativeSample\nsample_reason = earliest\nsample_rank = 0\nmessage = ${l.message}\nevidence_ref = ${l.file}:${l.line}`,
+      ai_platform_annotation:`TemplateAnnotation\ngolden_signal = ${t.golden}\nfault_categories = ${JSON.stringify(t.faults)}\nentities = ${JSON.stringify(t.entities)}\nseverity = ${t.severity}\nconfidence = ${t.confidence}`,
+      broadcast_annotations:`Enriched NormalizedLogLine\n${l.id} now inherits template ${l.template}\ngolden_signal = ${t.golden}\nfault_categories = ${JSON.stringify(t.faults)}\nrequest/trace/thread entities remain line-specific`,
+      temporal_aggregation:`WindowAggregate contribution\nwindow_start = ${l.ts.slice(0,16)}:00Z\nservice = ${l.service}\ngolden_signal = ${t.golden}\ncount += 1`,
+      causal_graph:`Evidence role\nnode = ${l.template} (${t.name})\n${l.template==='T6'?'This is a downstream symptom node.\nIncoming candidate edge: T4 → T6.':'This template participates in candidate causal ranking.'}\nneeds_validation = true`,
+      causal_summary:`EvidenceRef cited by summary\nlog_id = ${l.id}\nfile_path = ${l.file}\nline_number = ${l.line}\nclaim must reference this id before it is accepted`,
+      export_artifacts:`Export traceability\nJSON/Markdown/HTML keeps the redacted finding and evidence reference:\n${l.file}:${l.line} · ${l.id}`
+    };
+    return {base,text:states[stage.id]};
+  }
+
+  function bindDynamicElements() {
+    document.querySelectorAll('[data-log]').forEach(el => el.addEventListener('click', () => {
+      selectedTrace = el.dataset.log;
+      $('traceSelect').value = selectedTrace;
+      renderStage(false);
+    }));
+    document.querySelectorAll('[data-template-card]').forEach(el => el.addEventListener('click', () => {
+      selectedTemplate = el.dataset.templateCard;
+      $('templateSelect').value = selectedTemplate;
+      renderStage(false);
+    }));
+    document.querySelectorAll('.node[data-template]').forEach(el => el.addEventListener('click', () => {
+      selectedTemplate = el.dataset.template;
+      $('templateSelect').value = selectedTemplate;
+      renderStage(false);
+    }));
+  }
+
+  function renderInspector(stage) {
+    $('whyText').textContent = stage.why;
+    $('codePath').innerHTML = `<strong>${escapeHtml(stage.file)}</strong><br>${escapeHtml(stage.fn)}`;
+    $('codeSnippet').textContent = stage.snippet;
+    $('contractText').innerHTML = `<strong>输入：</strong><code>${escapeHtml(stage.inType)}</code><br><strong>输出：</strong><code>${escapeHtml(stage.outType)}</code>`;
+    $('eventTimeline').innerHTML = `
+      <div class="event-row"><span class="event-dot"></span><span>${stage.id} · started</span><span class="event-time">+0ms</span></div>
+      <div class="event-row"><span class="event-dot done"></span><span>${stage.id} · completed</span><span class="event-time">+${stage.duration}ms demo</span></div>
+      <div class="event-row"><span class="event-dot done"></span><span>Prometheus step duration observed</span><span class="event-time">count-only</span></div>`;
+    $('metadataBox').textContent = JSON.stringify({step_name:stage.id,event_type:'completed',status:'completed',attempt:1,idempotency_key:`${stage.id}:attempt:1`,metadata:stage.metadata},null,2);
+  }
+
+  function renderTrace(stage) {
+    const {base,text} = traceState(stage);
+    $('traceMeta').innerHTML = `<dt>Selected log</dt><dd>${escapeHtml(base.log_id)}</dd><dt>Source</dt><dd>${escapeHtml(base.file)}:${base.line}</dd><dt>Timestamp</dt><dd>${escapeHtml(base.timestamp)}</dd><dt>Current template</dt><dd>${escapeHtml(base.template)}</dd>`;
+    $('traceContent').textContent = text;
+  }
+
+  function renderStage(animate=true) {
+    const stage = stageDefs[activeStage];
+    const body = $('stageBody');
+    if (animate) body.classList.add('swapping');
+    window.setTimeout(() => {
+      $('stageNumber').textContent = `STEP ${String(activeStage+1).padStart(2,'0')} / ${stageDefs.length}`;
+      $('stageTitle').textContent = stage.title;
+      $('stageSummary').textContent = stage.summary;
+      const [it,ot,ib,ob] = titles(stage);
+      $('inputTitle').textContent = it; $('outputTitle').textContent = ot; $('inputBadge').textContent = ib; $('outputBadge').textContent = ob;
+      $('inputPanel').innerHTML = renderInput(stage);
+      $('outputPanel').innerHTML = renderOutput(stage);
+      const [dt,dx] = diff(stage); $('diffTitle').textContent = dt; $('diffText').textContent = dx;
+      renderInspector(stage);
+      renderTrace(stage);
+      renderRail();
+      $('railStatus').textContent = `Step ${activeStage+1} / ${stageDefs.length}`;
+      $('progressFill').style.width = `${((activeStage+1)/stageDefs.length)*100}%`;
+      bindDynamicElements();
+      body.classList.remove('swapping');
+    }, animate ? 160 : 0);
+  }
+
+  function setStage(index) {
+    activeStage = Math.max(0, Math.min(stageDefs.length-1,index));
+    renderStage(true);
+  }
+
+  function nextStage() {
+    if (activeStage >= stageDefs.length-1) { stopPlay(); return; }
+    setStage(activeStage+1);
+  }
+  function prevStage() { setStage(activeStage-1); }
+
+  function startPlay() {
+    if (timer) { stopPlay(); return; }
+    $('playBtn').textContent = '⏸ 暂停';
+    if (activeStage >= stageDefs.length-1) setStage(0);
+    timer = window.setInterval(nextStage, Number($('speedSelect').value));
+  }
+  function stopPlay() { if (timer) window.clearInterval(timer); timer=null; $('playBtn').textContent='▶ 自动播放'; }
+
+  $('prevBtn').addEventListener('click', () => { stopPlay(); prevStage(); });
+  $('nextBtn').addEventListener('click', () => { stopPlay(); nextStage(); });
+  $('playBtn').addEventListener('click', startPlay);
+  $('speedSelect').addEventListener('change', () => { if (timer) { stopPlay(); startPlay(); } });
+  $('resetBtn').addEventListener('click', () => { stopPlay(); activeStage=0; selectedTemplate='T6'; selectedTrace='gateway-2'; renderSelectors(); renderStage(true); });
+  $('templateSelect').addEventListener('change', e => { selectedTemplate=e.target.value; renderStage(false); });
+  $('traceSelect').addEventListener('change', e => { selectedTrace=e.target.value; renderStage(false); });
+  $('copyBtn').addEventListener('click', async () => {
+    const text = $('outputPanel').innerText;
+    try { await navigator.clipboard.writeText(text); $('copyBtn').textContent='✓ 已复制'; setTimeout(()=>$('copyBtn').textContent='复制当前输出',1200); }
+    catch { window.prompt('复制以下内容：', text); }
+  });
+  window.addEventListener('resize', positionOrb);
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') { stopPlay(); nextStage(); }
+    if (e.key === 'ArrowLeft') { stopPlay(); prevStage(); }
+    if (e.key === ' ') { e.preventDefault(); startPlay(); }
+  });
+
+  renderMetrics();
+  renderSelectors();
+  renderStage(false);
+})();
+</script>
+</body>
+</html>
