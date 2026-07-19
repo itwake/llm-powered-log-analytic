@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -304,6 +304,19 @@
     .step-file { color: #728aa4; font-size: 10px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .step-state { color: var(--muted); font-size: 11px; }
     .step-btn.active .step-state { color: var(--cyan); }
+
+    .llm-tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 5px;
+      border-radius: 6px;
+      font-size: 8.5px;
+      font-weight: 900;
+      letter-spacing: .05em;
+      color: #041014;
+      background: linear-gradient(135deg, var(--purple), var(--cyan-2));
+      vertical-align: 1px;
+    }
 
     .stage-shell {
       overflow: hidden;
@@ -729,23 +742,24 @@
   <main class="app">
     <header class="topbar glass">
       <div>
-        <div class="eyebrow">Interactive · Explainable · Observable</div>
+        <div class="eyebrow" id="eyebrow"></div>
         <h1>LogAn Workers Pipeline Explorer</h1>
-        <p class="subtitle">从 9 行原始微服务日志出发，逐步观察它们如何被读取、合并、脱敏、模板化、抽样、标注、聚合，并最终形成候选因果图与可追溯的事故摘要。</p>
-        <div class="dataset-note">演示输入来自仓库的 <code>tests/fixtures/logs/checkout_incident/</code>。处理顺序、数据模型、文件路径和算法结构与代码一致；界面中的耗时及部分因果置信度是为了可视化而设置的演示观察值，不是生产性能基准。</div>
+        <p class="subtitle" id="subtitle"></p>
+        <div class="dataset-note" id="datasetNote"></div>
       </div>
       <div class="header-actions">
-        <button class="btn" id="prevBtn">← 上一步</button>
-        <button class="btn primary" id="playBtn">▶ 自动播放</button>
-        <button class="btn" id="nextBtn">下一步 →</button>
-        <select class="select" id="speedSelect" aria-label="播放速度">
+        <button class="btn" id="langBtn" aria-label="Switch language"></button>
+        <button class="btn" id="prevBtn"></button>
+        <button class="btn primary" id="playBtn"></button>
+        <button class="btn" id="nextBtn"></button>
+        <select class="select" id="speedSelect">
           <option value="2800">0.75×</option>
           <option value="2100" selected>1×</option>
           <option value="1300">1.5×</option>
           <option value="850">2×</option>
         </select>
-        <button class="btn" id="copyBtn">复制当前输出</button>
-        <button class="btn danger" id="resetBtn">重置</button>
+        <button class="btn" id="copyBtn"></button>
+        <button class="btn danger" id="resetBtn"></button>
       </div>
     </header>
 
@@ -754,7 +768,7 @@
     <section class="workspace">
       <aside class="rail glass">
         <div class="rail-head">
-          <strong>11 步分析流水线</strong>
+          <strong id="railTitle"></strong>
           <span id="railStatus">Step 1 / 11</span>
           <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
         </div>
@@ -771,19 +785,19 @@
             <div class="stage-summary" id="stageSummary"></div>
           </div>
           <div class="stage-actions">
-            <select class="select" id="templateSelect" aria-label="选择模板"></select>
-            <select class="select" id="traceSelect" aria-label="选择追踪日志"></select>
+            <select class="select" id="templateSelect"></select>
+            <select class="select" id="traceSelect"></select>
           </div>
         </div>
         <div class="stage-body" id="stageBody">
           <div class="io-grid">
             <article class="io-panel">
-              <div class="panel-head"><span id="inputTitle">输入</span><span class="panel-badge" id="inputBadge"></span></div>
+              <div class="panel-head"><span id="inputTitle"></span><span class="panel-badge" id="inputBadge"></span></div>
               <div class="panel-content" id="inputPanel"></div>
             </article>
             <div class="flow-arrow">→</div>
             <article class="io-panel output">
-              <div class="panel-head"><span id="outputTitle">输出</span><span class="panel-badge" id="outputBadge"></span></div>
+              <div class="panel-head"><span id="outputTitle"></span><span class="panel-badge" id="outputBadge"></span></div>
               <div class="panel-content" id="outputPanel"></div>
             </article>
           </div>
@@ -793,8 +807,8 @@
           </div>
           <section class="trace-card">
             <div class="trace-head">
-              <div><strong>单条 Evidence 生命周期</strong><span>始终能追溯回 file_path、line_number、log_id 与 timestamp</span></div>
-              <span class="chip"><span class="pulse-ring"></span>实时联动当前步骤</span>
+              <div><strong id="traceTitle"></strong><span id="traceSub"></span></div>
+              <span class="chip"><span class="pulse-ring"></span><span id="traceLive"></span></span>
             </div>
             <div class="trace-body">
               <dl class="trace-meta" id="traceMeta"></dl>
@@ -807,34 +821,88 @@
       <aside class="inspector glass">
         <section class="inspector-section">
           <div class="section-kicker">Explainability</div>
-          <div class="section-title">这一阶段为什么存在</div>
+          <div class="section-title" id="whyTitle"></div>
           <div class="section-text" id="whyText"></div>
         </section>
         <section class="inspector-section">
           <div class="section-kicker">Code path</div>
-          <div class="section-title">精确代码位置</div>
+          <div class="section-title" id="codeTitle"></div>
           <div class="path-box" id="codePath"></div>
           <div class="path-box" id="codeSnippet" style="margin-top:8px"></div>
         </section>
         <section class="inspector-section">
           <div class="section-kicker">Observability</div>
-          <div class="section-title">Job Events 与指标</div>
+          <div class="section-title" id="obsTitle"></div>
           <div id="eventTimeline"></div>
           <div class="mini-json" id="metadataBox"></div>
         </section>
         <section class="inspector-section">
           <div class="section-kicker">Contract</div>
-          <div class="section-title">输入 / 输出数据类型</div>
+          <div class="section-title" id="contractTitle"></div>
           <div class="section-text" id="contractText"></div>
         </section>
       </aside>
     </section>
 
-    <div class="footer">本文件为纯静态、单文件 HTML；不依赖网络、CDN 或外部 JavaScript 库，可直接双击打开。</div>
+    <div class="footer" id="footerNote"></div>
   </main>
 
 <script>
 (() => {
+  let lang = 'en';
+  try { const saved = localStorage.getItem('logan:explorer-lang'); if (saved === 'zh' || saved === 'en') lang = saved; } catch {}
+
+  const L = value => (value && typeof value === 'object' && 'en' in value) ? value[lang] : value;
+
+  const UI = {
+    eyebrow: { en:'Interactive · Explainable · Observable', zh:'交互 · 可解释 · 可观测' },
+    subtitle: {
+      en:'Start from 9 raw microservice log lines and watch, step by step, how they are ingested, merged, redacted, templated, sampled, annotated, aggregated, and finally shaped into a candidate causal graph and a traceable incident summary.',
+      zh:'从 9 行原始微服务日志出发，逐步观察它们如何被读取、合并、脱敏、模板化、抽样、标注、聚合，并最终形成候选因果图与可追溯的事故摘要。'
+    },
+    datasetNote: {
+      en:'The demo input comes from the repository fixture <code>tests/fixtures/logs/checkout_incident/</code>. The step order, data models, file paths, and algorithm structure match the code; the durations and some causal confidences shown are illustrative demo values, not production benchmarks.',
+      zh:'演示输入来自仓库的 <code>tests/fixtures/logs/checkout_incident/</code>。处理顺序、数据模型、文件路径和算法结构与代码一致；界面中的耗时及部分因果置信度是为了可视化而设置的演示观察值，不是生产性能基准。'
+    },
+    prev: { en:'← Previous', zh:'← 上一步' },
+    next: { en:'Next →', zh:'下一步 →' },
+    play: { en:'▶ Auto play', zh:'▶ 自动播放' },
+    pause: { en:'⏸ Pause', zh:'⏸ 暂停' },
+    copy: { en:'Copy current output', zh:'复制当前输出' },
+    copied: { en:'✓ Copied', zh:'✓ 已复制' },
+    copyPrompt: { en:'Copy the text below:', zh:'复制以下内容：' },
+    reset: { en:'Reset', zh:'重置' },
+    langBtn: { en:'中文', zh:'EN' },
+    speedAria: { en:'Playback speed', zh:'播放速度' },
+    templateAria: { en:'Select template', zh:'选择模板' },
+    traceAria: { en:'Select traced log', zh:'选择追踪日志' },
+    railTitle: { en:'11-step analysis pipeline', zh:'11 步分析流水线' },
+    llmStep: { en:'LLM STEP', zh:'LLM 步骤' },
+    stepOf: { en:(i,n)=>`Step ${i} / ${n}`, zh:(i,n)=>`第 ${i} / ${n} 步` },
+    traceTitle: { en:'Single-evidence lifecycle', zh:'单条 Evidence 生命周期' },
+    traceSub: { en:'Always traceable back to file_path, line_number, log_id, and timestamp', zh:'始终能追溯回 file_path、line_number、log_id 与 timestamp' },
+    traceLive: { en:'Live-linked to current step', zh:'实时联动当前步骤' },
+    whyTitle: { en:'Why this stage exists', zh:'这一阶段为什么存在' },
+    codeTitle: { en:'Exact code location', zh:'精确代码位置' },
+    obsTitle: { en:'Job events & metrics', zh:'Job Events 与指标' },
+    contractTitle: { en:'Input / output data types', zh:'输入 / 输出数据类型' },
+    contractIn: { en:'Input:', zh:'输入：' },
+    contractOut: { en:'Output:', zh:'输出：' },
+    promObserved: { en:'Prometheus step duration observed', zh:'Prometheus 记录步骤耗时' },
+    demoMs: { en:'ms demo', zh:'ms 演示值' },
+    footer: {
+      en:'A fully static, single-file HTML page — no network, CDN, or external JavaScript libraries. Double-click to open.',
+      zh:'本文件为纯静态、单文件 HTML；不依赖网络、CDN 或外部 JavaScript 库，可直接双击打开。'
+    },
+    metaSelected: { en:'Selected log', zh:'选中日志' },
+    metaSource: { en:'Source', zh:'来源' },
+    metaTimestamp: { en:'Timestamp', zh:'时间戳' },
+    metaTemplate: { en:'Current template', zh:'当前模板' },
+    linesUnit: { en:'lines', zh:'行' },
+    occurrenceUnit: { en:'occurrence', zh:'次出现' },
+    svgAria: { en:'Candidate causal graph', zh:'候选因果图' }
+  };
+
   const logs = [
     { id:'auth-1', file:'auth.log', line:1, ts:'2026-06-06T10:11:30Z', level:'WARN', service:'auth-service', message:'db connection pool exhausted active=50 max=50', template:'T1', order:1 },
     { id:'auth-2', file:'auth.log', line:2, ts:'2026-06-06T10:11:45Z', level:'ERROR', service:'auth-service', message:'failed to acquire db connection timeout_ms=5000', template:'T2', order:2 },
@@ -848,12 +916,12 @@
   ];
 
   const templates = {
-    T1: { name:'Auth 连接池耗尽', text:'<*> warn auth-service db connection pool exhausted active=<*> max=<*>', count:1, golden:'saturation', faults:['resource','database'], entities:{service:['auth-service'],database:['db']}, severity:.88, confidence:.92 },
-    T2: { name:'Auth 获取 DB 连接失败', text:'<*> error auth-service failed to acquire db connection timeout_ms=<*>', count:2, golden:'availability', faults:['database','timeout','resource'], entities:{service:['auth-service'],database:['db'],duration_ms:['5000']}, severity:.82, confidence:.88 },
-    T3: { name:'Payment 连接池使用率高', text:'<*> warn payment-service connection pool usage high active=<*> max=<*>', count:1, golden:'saturation', faults:['resource','database'], entities:{service:['payment-service']}, severity:.88, confidence:.92 },
-    T4: { name:'Payment 调用 Auth 超时', text:'<*> error payment-service timeout calling auth-service after <*>ms request_id=<*>', count:2, golden:'availability', faults:['dependency','timeout'], entities:{source_service:['payment-service'],target_service:['auth-service'],duration_ms:['30000']}, severity:.86, confidence:.91 },
-    T5: { name:'Gateway Checkout 开始', text:'<*> info gateway request_id=<*> post <*> started', count:1, golden:'information', faults:[], entities:{}, severity:.10, confidence:.75 },
-    T6: { name:'Gateway Checkout 500', text:'<*> error gateway request_id=<*> post <*> failed status=<*> duration_ms=<*>', count:2, golden:'error', faults:['application'], entities:{service:['gateway'],status_code:['500'],url_path:['/checkout']}, severity:.84, confidence:.89 }
+    T1: { name:{en:'Auth pool exhausted', zh:'Auth 连接池耗尽'}, text:'<*> warn auth-service db connection pool exhausted active=<*> max=<*>', count:1, golden:'saturation', faults:['resource','database'], entities:{service:['auth-service'],database:['db']}, severity:.88, confidence:.92 },
+    T2: { name:{en:'Auth DB acquire failure', zh:'Auth 获取 DB 连接失败'}, text:'<*> error auth-service failed to acquire db connection timeout_ms=<*>', count:2, golden:'availability', faults:['database','timeout','resource'], entities:{service:['auth-service'],database:['db'],duration_ms:['5000']}, severity:.82, confidence:.88 },
+    T3: { name:{en:'Payment pool usage high', zh:'Payment 连接池使用率高'}, text:'<*> warn payment-service connection pool usage high active=<*> max=<*>', count:1, golden:'saturation', faults:['resource','database'], entities:{service:['payment-service']}, severity:.88, confidence:.92 },
+    T4: { name:{en:'Payment→Auth timeout', zh:'Payment 调用 Auth 超时'}, text:'<*> error payment-service timeout calling auth-service after <*>ms request_id=<*>', count:2, golden:'availability', faults:['dependency','timeout'], entities:{source_service:['payment-service'],target_service:['auth-service'],duration_ms:['30000']}, severity:.86, confidence:.91 },
+    T5: { name:{en:'Gateway checkout started', zh:'Gateway Checkout 开始'}, text:'<*> info gateway request_id=<*> post <*> started', count:1, golden:'information', faults:[], entities:{}, severity:.10, confidence:.75 },
+    T6: { name:{en:'Gateway checkout 500', zh:'Gateway Checkout 500'}, text:'<*> error gateway request_id=<*> post <*> failed status=<*> duration_ms=<*>', count:2, golden:'error', faults:['application'], entities:{service:['gateway'],status_code:['500'],url_path:['/checkout']}, severity:.84, confidence:.89 }
   };
 
   const chronological = [...logs].sort((a,b) => a.ts.localeCompare(b.ts));
@@ -864,26 +932,59 @@
   ];
 
   const stageDefs = [
-    { id:'ingest_paths', title:'读取输入路径与归档文件', file:'activities/ingestion.py', fn:'ingest_paths(paths)', summary:'递归发现日志文件，解包 gzip/zip/tar，并为每个文件和物理行建立稳定身份、Hash 与顺序。', why:'后续分析必须先获得可追溯的物理证据。此阶段保留原始文件名、行号、SHA256 和 ingestion_order，使任何结论都能回到源文件。', inType:'list[str | Path]', outType:'list[IngestedFile] → list[RawPhysicalLine]', duration:12, metadata:{files:3,raw_lines:9}, snippet:'files = ingest_paths(paths)' },
-    { id:'merge_entries', title:'合并多行日志为逻辑事件', file:'activities/preprocessing.py + algorithms/multiline.py', fn:'merge_entries(files)', summary:'将 Stack Trace、Traceback 与 continuation 行合成一个 LogEntry，同时保留所有原始 line_numbers。', why:'异常堆栈如果按物理行处理，会把一个错误切碎成很多无意义事件。逻辑合并后，模型和模板器看到的是完整上下文。', inType:'list[IngestedFile]', outType:'list[LogEntry]', duration:4, metadata:{raw_entries:9,raw_lines:9}, snippet:'entries.extend(merge_physical_lines(file.lines))' },
-    { id:'preprocess_redact', title:'解析、排序、归一化与脱敏', file:'activities/preprocessing.py + algorithms/parsers.py + redactors.py', fn:'preprocess_entries(...)', summary:'提取 timestamp、level、service、request_id 等字段，在任何模型输入产生之前屏蔽 Token、邮箱、IP、UUID 与其他敏感值。', why:'这是隐私和数据质量的边界。时间戳让跨服务排序成为可能；脱敏保证后续代表样本与摘要证据包不会泄漏敏感信息。', inType:'list[LogEntry]', outType:'list[NormalizedLogLine]', duration:9, metadata:{normalized_lines:9}, snippet:'redacted = redactor.redact(parsed["message"])' },
-    { id:'drain_templating', title:'Drain 风格模板聚类', file:'activities/templating.py + algorithms/drain_adapter.py', fn:'run_drain_templating(...)', summary:'把 request_id、数字、路径和其他高基数变量替换为 <*>，将结构相同的日志压缩成模板。', why:'模板化是整个系统的压缩枢纽：9 行原始日志变为 6 个模板。之后大部分推理针对模板而非逐行执行，从而降低模型调用量。', inType:'list[NormalizedLogLine]', outType:'tuple[list[NormalizedLogLine], list[LogTemplate]]', duration:15, metadata:{normalized_lines:9,templates:6}, snippet:'adapter.cluster(case_id, analysis_run_id, logs)' },
-    { id:'representative_sampling', title:'选择模板代表样本', file:'activities/sampling.py + algorithms/representative_sampling.py', fn:'select_samples(...)', summary:'按模板选择最早、最高级别、堆栈、常见与稀有参数组合，并按 log_id 去重。', why:'只把少量、脱敏、可解释的代表行发送给模型。每个样本都记录 sample_reason 和 EvidenceRef，便于审计为什么选择它。', inType:'logs + templates', outType:'list[RepresentativeSample]', duration:7, metadata:{samples:6}, snippet:'select_representative_samples(..., max_samples_per_template=3)' },
-    { id:'ai_platform_annotation', title:'模板级 Golden Signal 标注', file:'activities/inference.py + prompts/annotation_prompt.md', fn:'annotate_templates(...)', summary:'为每个模板构造“模板上下文 + 脱敏代表行”Payload，调用模型 Gateway，输出 Golden Signal、故障类别、实体、严重度与置信度。', why:'这一步把非结构化模板转换为后续可筛选、可聚合、可建图的语义信号。本地 Mock Gateway 是确定性规则；生产可注入真实 Gateway。', inType:'templates + samples + case_context', outType:'list[TemplateAnnotation] + model_inputs', duration:380, metadata:{annotations:6,annotation_templates_total:6,annotation_templates_selected:6,annotation_budget:64}, snippet:'parsed = TemplateAnnotationResult.model_validate(raw)' },
-    { id:'broadcast_annotations', title:'把模板标注广播回每一行', file:'activities/broadcasting.py', fn:'broadcast_annotations(logs, annotations)', summary:'根据 template_id 将 Golden Signal、Fault Category、实体和置信度复制到同一模板的所有日志行。', why:'未被抽样的日志也应继承模板语义。广播后，Tabular Logs 能逐行展示分类，同时保留每一行自己的 request_id、trace_id 和 thread_id。', inType:'NormalizedLogLine[] + TemplateAnnotation[]', outType:'enriched NormalizedLogLine[]', duration:2, metadata:{annotated_lines:9}, snippet:'line.golden_signal = annotation.golden_signal' },
-    { id:'temporal_aggregation', title:'构建时间窗口信号', file:'activities/temporal_aggregation.py', fn:'build_time_window_aggregates(...)', summary:'把日志按固定时间窗口、模板、服务、Golden Signal 与 Fault Category 分桶计数。', why:'单条日志难以观察故障演化；窗口聚合将离散事件转换为趋势，直接驱动 Temporal View，并为滞后相关与 Granger 序列提供基础。', inType:'enriched NormalizedLogLine[]', outType:'list[WindowAggregate]', duration:5, metadata:{windows:17}, snippet:'buckets[(window, template, service, signal, category)] += 1' },
-    { id:'causal_graph', title:'推断候选因果图与根因排名', file:'activities/causal.py + algorithms/causal_*.py + pagerank.py', fn:'infer_causal_graph(...)', summary:'仅对 offending templates 建图，融合时间先后、Lift、滞后相关、PGEM、Granger、服务实体关系和严重度。', why:'相关性不等于因果性，因此所有边都标记 candidate_cause 与 needs_validation。算法给出证据分数与限制条件，而不是宣称最终根因。', inType:'templates + enriched logs', outType:'CausalGraph(nodes, edges, root_cause_candidates)', duration:42, metadata:{nodes:5,edges:3}, snippet:'if confidence >= 0.35: edges.append(CausalEdge(...))' },
-    { id:'causal_summary', title:'生成证据约束的因果摘要', file:'activities/summary.py + prompts/causal_summary_prompt.md', fn:'render_causal_summary(...)', summary:'从 Top Nodes、Edges 与脱敏 Evidence 构造安全证据包，要求每个因果声明引用 evidence_refs，并强制使用谨慎措辞。', why:'工程师需要可阅读的诊断叙述，但 LLM 不应自由发挥。证据包、Schema 校验、引用校验、二次脱敏和确定性 Fallback 共同约束输出。', inType:'CausalGraph + templates + enriched logs', outType:'CausalSummary', duration:230, metadata:{next_actions:2,evidence_refs:5,summary_source:'llm'}, snippet:'if invalid_output: return _fallback_summary(...)' },
-    { id:'export_artifacts', title:'生成 Markdown / HTML / JSON 报告', file:'activities/export.py', fn:'export_analysis(result, export_type)', summary:'把因果摘要与结构化结果封装为三种可交付格式，并完成 Pipeline Progress。', why:'分析结果需要进入工单、客户沟通、审计与系统集成。导出层将同一 AnalysisResult 转换为不同消费格式。', inType:'AnalysisResult without exports', outType:'dict[str, ExportArtifact] + final AnalysisResult', duration:8, metadata:{exports:3,export_types:['html','json','markdown']}, snippet:'for export_type in ("markdown", "html", "json")' }
+    { id:'ingest_paths', file:'activities/ingestion.py', fn:'ingest_paths(paths)', inType:'list[str | Path]', outType:'list[IngestedFile] → list[RawPhysicalLine]', duration:12, metadata:{files:3,raw_lines:9}, snippet:'files = ingest_paths(paths)',
+      title:{en:'Ingest input paths & archives', zh:'读取输入路径与归档文件'},
+      summary:{en:'Recursively discover log files, unpack gzip/zip/tar, and give every file and physical line a stable identity, hash, and order.', zh:'递归发现日志文件，解包 gzip/zip/tar，并为每个文件和物理行建立稳定身份、Hash 与顺序。'},
+      why:{en:'All later analysis needs traceable physical evidence first. This stage preserves the original filename, line number, SHA256, and ingestion_order so any conclusion can be traced back to its source file.', zh:'后续分析必须先获得可追溯的物理证据。此阶段保留原始文件名、行号、SHA256 和 ingestion_order，使任何结论都能回到源文件。'} },
+    { id:'merge_entries', file:'activities/preprocessing.py + algorithms/multiline.py', fn:'merge_entries(files)', inType:'list[IngestedFile]', outType:'list[LogEntry]', duration:4, metadata:{raw_entries:9,raw_lines:9}, snippet:'entries.extend(merge_physical_lines(file.lines))',
+      title:{en:'Merge multi-line logs into logical events', zh:'合并多行日志为逻辑事件'},
+      summary:{en:'Stack traces, tracebacks, and continuation lines are merged into one LogEntry while all original line_numbers are retained.', zh:'将 Stack Trace、Traceback 与 continuation 行合成一个 LogEntry，同时保留所有原始 line_numbers。'},
+      why:{en:'A stack trace processed line by line would shred one error into many meaningless events. After logical merging, the templater and the model see complete context.', zh:'异常堆栈如果按物理行处理，会把一个错误切碎成很多无意义事件。逻辑合并后，模型和模板器看到的是完整上下文。'} },
+    { id:'preprocess_redact', file:'activities/preprocessing.py + algorithms/parsers.py + redactors.py', fn:'preprocess_entries(...)', inType:'list[LogEntry]', outType:'list[NormalizedLogLine]', duration:9, metadata:{normalized_lines:9}, snippet:'redacted = redactor.redact(parsed["message"])',
+      title:{en:'Parse, sort, normalize & redact', zh:'解析、排序、归一化与脱敏'},
+      summary:{en:'Extract timestamp, level, service, request_id and other fields, and mask tokens, emails, IPs, UUIDs and other sensitive values before any model input exists.', zh:'提取 timestamp、level、service、request_id 等字段，在任何模型输入产生之前屏蔽 Token、邮箱、IP、UUID 与其他敏感值。'},
+      why:{en:'This is the privacy and data-quality boundary. Timestamps enable cross-service ordering; redaction guarantees that the representative samples and summary evidence packets downstream can never leak sensitive values.', zh:'这是隐私和数据质量的边界。时间戳让跨服务排序成为可能；脱敏保证后续代表样本与摘要证据包不会泄漏敏感信息。'} },
+    { id:'drain_templating', file:'activities/templating.py + algorithms/drain_adapter.py', fn:'run_drain_templating(...)', inType:'list[NormalizedLogLine]', outType:'tuple[list[NormalizedLogLine], list[LogTemplate]]', duration:15, metadata:{normalized_lines:9,templates:6}, snippet:'adapter.cluster(case_id, analysis_run_id, logs)',
+      title:{en:'Drain-style template clustering', zh:'Drain 风格模板聚类'},
+      summary:{en:'Replace request ids, numbers, paths and other high-cardinality variables with <*>, collapsing structurally identical logs into templates.', zh:'把 request_id、数字、路径和其他高基数变量替换为 <*>，将结构相同的日志压缩成模板。'},
+      why:{en:'Templating is the compression hub of the whole system: 9 raw lines become 6 templates. Most later reasoning runs per template rather than per line, which caps model-call volume.', zh:'模板化是整个系统的压缩枢纽：9 行原始日志变为 6 个模板。之后大部分推理针对模板而非逐行执行，从而降低模型调用量。'} },
+    { id:'representative_sampling', file:'activities/sampling.py + algorithms/representative_sampling.py', fn:'select_samples(...)', inType:'logs + templates', outType:'list[RepresentativeSample]', duration:7, metadata:{samples:6}, snippet:'select_representative_samples(..., max_samples_per_template=3)',
+      title:{en:'Select representative samples per template', zh:'选择模板代表样本'},
+      summary:{en:'Pick the earliest, highest-level, stack-trace, most-common and rare variable combinations per template, deduplicated by log_id.', zh:'按模板选择最早、最高级别、堆栈、常见与稀有参数组合，并按 log_id 去重。'},
+      why:{en:'Only a small, redacted, explainable set of representative lines is ever sent to the model. Every sample records its sample_reason and EvidenceRef, so you can audit why it was chosen.', zh:'只把少量、脱敏、可解释的代表行发送给模型。每个样本都记录 sample_reason 和 EvidenceRef，便于审计为什么选择它。'} },
+    { id:'ai_platform_annotation', llm:true, file:'activities/inference.py + prompts/annotation_prompt.md', fn:'annotate_templates(...)', inType:'templates + samples + case_context', outType:'list[TemplateAnnotation] + model_inputs', duration:380, metadata:{annotations:6,annotation_templates_total:6,annotation_templates_selected:6,annotation_budget:64}, snippet:'parsed = TemplateAnnotationResult.model_validate(raw)',
+      title:{en:'Template-level golden-signal annotation', zh:'模板级 Golden Signal 标注'},
+      summary:{en:'Build a "template context + redacted representative lines" payload per template, call the model gateway, and get golden signal, fault categories, entities, severity, and confidence.', zh:'为每个模板构造“模板上下文 + 脱敏代表行”Payload，调用模型 Gateway，输出 Golden Signal、故障类别、实体、严重度与置信度。'},
+      why:{en:'This step turns unstructured templates into semantic signals that can be filtered, aggregated, and graphed. The local mock gateway is a deterministic rule set; production injects the real gateway.', zh:'这一步把非结构化模板转换为后续可筛选、可聚合、可建图的语义信号。本地 Mock Gateway 是确定性规则；生产可注入真实 Gateway。'} },
+    { id:'broadcast_annotations', file:'activities/broadcasting.py', fn:'broadcast_annotations(logs, annotations)', inType:'NormalizedLogLine[] + TemplateAnnotation[]', outType:'enriched NormalizedLogLine[]', duration:2, metadata:{annotated_lines:9}, snippet:'line.golden_signal = annotation.golden_signal',
+      title:{en:'Broadcast template annotations to every line', zh:'把模板标注广播回每一行'},
+      summary:{en:'Copy golden signal, fault categories, entities, and confidence to every log line sharing the same template_id.', zh:'根据 template_id 将 Golden Signal、Fault Category、实体和置信度复制到同一模板的所有日志行。'},
+      why:{en:'Lines that were never sampled still inherit template semantics. After broadcasting, Tabular Logs can classify every row while each line keeps its own request_id, trace_id, and thread_id.', zh:'未被抽样的日志也应继承模板语义。广播后，Tabular Logs 能逐行展示分类，同时保留每一行自己的 request_id、trace_id 和 thread_id。'} },
+    { id:'temporal_aggregation', file:'activities/temporal_aggregation.py', fn:'build_time_window_aggregates(...)', inType:'enriched NormalizedLogLine[]', outType:'list[WindowAggregate]', duration:5, metadata:{windows:17}, snippet:'buckets[(window, template, service, signal, category)] += 1',
+      title:{en:'Build time-window signals', zh:'构建时间窗口信号'},
+      summary:{en:'Bucket logs into fixed time windows, counted per template, service, golden signal, and fault category.', zh:'把日志按固定时间窗口、模板、服务、Golden Signal 与 Fault Category 分桶计数。'},
+      why:{en:'Single lines rarely show how a failure evolves; window aggregation turns discrete events into trends that drive the Temporal View and feed lagged correlation and the Granger series.', zh:'单条日志难以观察故障演化；窗口聚合将离散事件转换为趋势，直接驱动 Temporal View，并为滞后相关与 Granger 序列提供基础。'} },
+    { id:'causal_graph', file:'activities/causal.py + algorithms/causal_*.py + pagerank.py', fn:'infer_causal_graph(...)', inType:'templates + enriched logs', outType:'CausalGraph(nodes, edges, root_cause_candidates)', duration:42, metadata:{nodes:5,edges:3}, snippet:'if confidence >= 0.35: edges.append(CausalEdge(...))',
+      title:{en:'Infer candidate causal graph & root-cause ranking', zh:'推断候选因果图与根因排名'},
+      summary:{en:'Graph only the offending templates, fusing temporal precedence, lift, lagged correlation, PGEM, Granger, service/entity relations and severity.', zh:'仅对 offending templates 建图，融合时间先后、Lift、滞后相关、PGEM、Granger、服务实体关系和严重度。'},
+      why:{en:'Correlation is not causation, so every edge is marked candidate_cause with needs_validation. The algorithms output evidence scores and caveats — they never proclaim a final root cause.', zh:'相关性不等于因果性，因此所有边都标记 candidate_cause 与 needs_validation。算法给出证据分数与限制条件，而不是宣称最终根因。'} },
+    { id:'causal_summary', llm:true, file:'activities/summary.py + prompts/causal_summary_prompt.md', fn:'render_causal_summary(...)', inType:'CausalGraph + templates + enriched logs', outType:'CausalSummary', duration:230, metadata:{next_actions:2,evidence_refs:5,summary_source:'llm'}, snippet:'if invalid_output: return _fallback_summary(...)',
+      title:{en:'Generate the evidence-bound causal summary', zh:'生成证据约束的因果摘要'},
+      summary:{en:'Build a safe evidence packet from top nodes, edges, and redacted evidence; every causal claim must cite evidence_refs and use cautious wording.', zh:'从 Top Nodes、Edges 与脱敏 Evidence 构造安全证据包，要求每个因果声明引用 evidence_refs，并强制使用谨慎措辞。'},
+      why:{en:'Engineers need a readable diagnosis narrative, but the LLM must not freewheel. The evidence packet, schema validation, citation checks, second-pass redaction, and the deterministic fallback jointly constrain the output.', zh:'工程师需要可阅读的诊断叙述，但 LLM 不应自由发挥。证据包、Schema 校验、引用校验、二次脱敏和确定性 Fallback 共同约束输出。'} },
+    { id:'export_artifacts', file:'activities/export.py', fn:'export_analysis(result, export_type)', inType:'AnalysisResult without exports', outType:'dict[str, ExportArtifact] + final AnalysisResult', duration:8, metadata:{exports:3,export_types:['html','json','markdown']}, snippet:'for export_type in ("markdown", "html", "json")',
+      title:{en:'Export Markdown / HTML / JSON reports', zh:'生成 Markdown / HTML / JSON 报告'},
+      summary:{en:'Package the causal summary and structured results into three deliverable formats and complete the pipeline progress.', zh:'把因果摘要与结构化结果封装为三种可交付格式，并完成 Pipeline Progress。'},
+      why:{en:'Analysis results flow into tickets, customer updates, audits, and integrations. The export layer renders the same AnalysisResult into each consumable format.', zh:'分析结果需要进入工单、客户沟通、审计与系统集成。导出层将同一 AnalysisResult 转换为不同消费格式。'} }
   ];
 
-  const metricsData = [
-    ['原始物理行','9','3 个日志文件','var(--blue)'],
-    ['逻辑事件','9','示例中无多行堆栈','var(--purple)'],
-    ['Drain 模板','6','压缩 33.3%','var(--cyan)'],
-    ['代表样本','6','模型只看脱敏样本','var(--amber)'],
-    ['异常模板','5','排除 information','var(--red)'],
-    ['候选因果边','3','全部 needs validation','var(--green)']
+  const metricsDefs = [
+    { label:{en:'Raw physical lines', zh:'原始物理行'}, value:'9', help:{en:'3 log files', zh:'3 个日志文件'}, color:'var(--blue)' },
+    { label:{en:'Logical events', zh:'逻辑事件'}, value:'9', help:{en:'no multi-line stacks in demo', zh:'示例中无多行堆栈'}, color:'var(--purple)' },
+    { label:{en:'Drain templates', zh:'Drain 模板'}, value:'6', help:{en:'33.3% compression', zh:'压缩 33.3%'}, color:'var(--cyan)' },
+    { label:{en:'Representative samples', zh:'代表样本'}, value:'6', help:{en:'model sees redacted samples only', zh:'模型只看脱敏样本'}, color:'var(--amber)' },
+    { label:{en:'Offending templates', zh:'异常模板'}, value:'5', help:{en:'information excluded', zh:'排除 information'}, color:'var(--red)' },
+    { label:{en:'Candidate causal edges', zh:'候选因果边'}, value:'3', help:{en:'all need validation', zh:'全部 needs validation'}, color:'var(--green)' }
   ];
 
   let activeStage = 0;
@@ -904,15 +1005,40 @@
     return `<span class="tok-ts">${escapeHtml(log.ts)}</span> <span class="${levelClass(log.level)}">${escapeHtml(log.level)}</span> <span class="tok-service">${escapeHtml(log.service)}</span> ${escapeHtml(log.message).replace(/(&lt;\*&gt;|req-[12]|\d{3,})/g,'<span class="tok-dynamic">$1</span>')}`;
   }
 
+  function renderChrome() {
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    $('eyebrow').textContent = L(UI.eyebrow);
+    $('subtitle').textContent = L(UI.subtitle);
+    $('datasetNote').innerHTML = L(UI.datasetNote);
+    $('langBtn').textContent = L(UI.langBtn);
+    $('prevBtn').textContent = L(UI.prev);
+    $('nextBtn').textContent = L(UI.next);
+    $('playBtn').textContent = timer ? L(UI.pause) : L(UI.play);
+    $('copyBtn').textContent = L(UI.copy);
+    $('resetBtn').textContent = L(UI.reset);
+    $('railTitle').textContent = L(UI.railTitle);
+    $('traceTitle').textContent = L(UI.traceTitle);
+    $('traceSub').textContent = L(UI.traceSub);
+    $('traceLive').textContent = L(UI.traceLive);
+    $('whyTitle').textContent = L(UI.whyTitle);
+    $('codeTitle').textContent = L(UI.codeTitle);
+    $('obsTitle').textContent = L(UI.obsTitle);
+    $('contractTitle').textContent = L(UI.contractTitle);
+    $('footerNote').textContent = L(UI.footer);
+    $('speedSelect').setAttribute('aria-label', L(UI.speedAria));
+    $('templateSelect').setAttribute('aria-label', L(UI.templateAria));
+    $('traceSelect').setAttribute('aria-label', L(UI.traceAria));
+  }
+
   function renderMetrics() {
-    $('metrics').innerHTML = metricsData.map(([label,value,help,color]) => `
-      <article class="metric" style="--metric-color:${color}">
-        <div class="metric-label">${label}</div><div class="metric-value">${value}</div><div class="metric-help">${help}</div>
+    $('metrics').innerHTML = metricsDefs.map(m => `
+      <article class="metric" style="--metric-color:${m.color}">
+        <div class="metric-label">${escapeHtml(L(m.label))}</div><div class="metric-value">${m.value}</div><div class="metric-help">${escapeHtml(L(m.help))}</div>
       </article>`).join('');
   }
 
   function renderSelectors() {
-    $('templateSelect').innerHTML = Object.entries(templates).map(([id,t]) => `<option value="${id}">${id} · ${escapeHtml(t.name)}</option>`).join('');
+    $('templateSelect').innerHTML = Object.entries(templates).map(([id,t]) => `<option value="${id}">${id} · ${escapeHtml(L(t.name))}</option>`).join('');
     $('templateSelect').value = selectedTemplate;
     $('traceSelect').innerHTML = chronological.map(l => `<option value="${l.id}">${l.ts.slice(11,19)} · ${l.service} · ${l.level}</option>`).join('');
     $('traceSelect').value = selectedTrace;
@@ -922,7 +1048,7 @@
     $('stepList').innerHTML = '<div class="flow-orb" id="flowOrb"></div>' + stageDefs.map((s,i) => `
       <button class="step-btn ${i===activeStage?'active':''} ${i<activeStage?'done':''}" data-step="${i}">
         <span class="step-index">${i<activeStage?'✓':String(i+1).padStart(2,'0')}</span>
-        <span><span class="step-name">${escapeHtml(s.title)}</span><span class="step-file">${escapeHtml(s.file)}</span></span>
+        <span><span class="step-name">${escapeHtml(L(s.title))}${s.llm?'<span class="llm-tag">LLM</span>':''}</span><span class="step-file">${escapeHtml(s.file)}</span></span>
         <span class="step-state">${i===activeStage?'RUN':i<activeStage?'DONE':'WAIT'}</span>
       </button>`).join('');
     document.querySelectorAll('.step-btn').forEach(btn => btn.addEventListener('click', () => setStage(Number(btn.dataset.step))));
@@ -974,13 +1100,13 @@
           'tests/fixtures/logs/checkout_incident/gateway.log'
         ])}</pre><div style="height:8px"></div>${groupRawLogs()}`;
       case 'merge_entries':
-        return groupRawLogs() + `<div class="template-card"><div class="card-title">物理行输入</div><div class="card-sub">9 RawPhysicalLine；每行已有 file_id、line_number、sha256 与 ingestion_order。</div></div>`;
+        return groupRawLogs() + `<div class="template-card"><div class="card-title">${lang==='en'?'Physical line input':'物理行输入'}</div><div class="card-sub">${lang==='en'?'9 RawPhysicalLine rows; each already has file_id, line_number, sha256, and ingestion_order.':'9 RawPhysicalLine；每行已有 file_id、line_number、sha256 与 ingestion_order。'}</div></div>`;
       case 'preprocess_redact':
         return logs.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${escapeHtml(JSON.stringify({log_id:l.id,file_path:l.file,line_numbers:[l.line],raw_message:rawText(l)}))}</button>`).join('');
       case 'drain_templating':
         return chronological.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}"><span class="tok-service">${l.service}</span> · ${escapeHtml(rawText(l).toLowerCase())}</button>`).join('');
       case 'representative_sampling':
-        return Object.entries(templates).map(([id,item]) => `<div class="template-card ${id===selectedTemplate?'selected':''}"><div class="card-row"><span class="card-title">${id} · ${escapeHtml(item.name)}</span><span class="panel-badge">${item.count} 行</span></div><div class="card-sub">${escapeHtml(item.text)}</div></div>`).join('');
+        return Object.entries(templates).map(([id,item]) => `<div class="template-card ${id===selectedTemplate?'selected':''}"><div class="card-row"><span class="card-title">${id} · ${escapeHtml(L(item.name))}</span><span class="panel-badge">${item.count} ${L(UI.linesUnit)}</span></div><div class="card-sub">${escapeHtml(item.text)}</div></div>`).join('');
       case 'ai_platform_annotation': {
         const sample = selectedLogs[0];
         const payload = {
@@ -1001,7 +1127,7 @@
         const series = {
           T1:[1,0,0], T2:[1,1,0], T3:[1,0,0], T4:[0,1,1], T6:[0,1,1]
         };
-        return `<div class="card-title">60 秒计数序列</div><pre class="json">${pretty(series)}</pre><div class="chips"><span class="chip">max_lag=600s</span><span class="chip">time_bin=60s</span><span class="chip">5 offending templates</span></div>`;
+        return `<div class="card-title">${lang==='en'?'60-second count series':'60 秒计数序列'}</div><pre class="json">${pretty(series)}</pre><div class="chips"><span class="chip">max_lag=600s</span><span class="chip">time_bin=60s</span><span class="chip">5 offending templates</span></div>`;
       }
       case 'causal_summary': {
         const packet = {
@@ -1021,14 +1147,16 @@
 
   function causalGraphSvg() {
     const positions = {T1:[90,90],T2:[275,90],T3:[275,245],T4:[480,165],T6:[690,165]};
-    const label = id => templates[id].name.replace('连接池','池').replace('Checkout','CO');
+    const label = id => lang==='zh'
+      ? templates[id].name.zh.replace('连接池','池').replace('Checkout','CO')
+      : templates[id].name.en.replace('exhausted','exh.').replace('failure','fail');
     const lines = edgeData.map(e => {
       const [x1,y1]=positions[e.source], [x2,y2]=positions[e.target];
       const mx=(x1+x2)/2, my=(y1+y2)/2-8;
       return `<line class="edge-line" x1="${x1+43}" y1="${y1}" x2="${x2-43}" y2="${y2}" marker-end="url(#arrow)"/><text class="edge-label" x="${mx}" y="${my}" text-anchor="middle">${e.confidence.toFixed(2)} · ${e.lag}s</text>`;
     }).join('');
-    const nodes = Object.entries(positions).map(([id,[x,y]]) => `<g class="node ${id==='T1'?'root':''} ${id===selectedTemplate?'selected':''}" data-template="${id}"><circle cx="${x}" cy="${y}" r="43"/><text x="${x}" y="${y-4}" text-anchor="middle">${id}</text><text class="node-sub" x="${x}" y="${y+12}" text-anchor="middle">${escapeHtml(label(id).slice(0,15))}</text></g>`).join('');
-    return `<svg class="causal-svg" viewBox="0 0 780 330" role="img" aria-label="候选因果图"><defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#2dd4bf"/></marker></defs>${lines}${nodes}</svg>`;
+    const nodes = Object.entries(positions).map(([id,[x,y]]) => `<g class="node ${id==='T1'?'root':''} ${id===selectedTemplate?'selected':''}" data-template="${id}"><circle cx="${x}" cy="${y}" r="43"/><text x="${x}" y="${y-4}" text-anchor="middle">${id}</text><text class="node-sub" x="${x}" y="${y+12}" text-anchor="middle">${escapeHtml(label(id).slice(0,16))}</text></g>`).join('');
+    return `<svg class="causal-svg" viewBox="0 0 780 330" role="img" aria-label="${escapeHtml(L(UI.svgAria))}"><defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#2dd4bf"/></marker></defs>${lines}${nodes}</svg>`;
   }
 
   function temporalChart() {
@@ -1041,9 +1169,16 @@
     return `<div class="bar-chart">${rows.map((r,idx)=>`<div class="bar-group"><div class="bar-stack">${Object.keys(colors).map(key=>`<div class="bar" data-tip="${key}: ${r[key]}" style="height:${Math.max(4,r[key]*32)}%;background:${colors[key]};animation-delay:${idx*.08}s"></div>`).join('')}</div><div class="bar-label">${r.label}:00</div></div>`).join('')}</div><div class="legend">${Object.entries(colors).map(([k,c])=>`<span><i style="background:${c}"></i>${k}</span>`).join('')}</div>`;
   }
 
+  function summaryNarrative() {
+    if (lang === 'zh') {
+      return `<div style="font-family:var(--sans);line-height:1.65"><h3 style="margin-top:0">Incident Diagnosis Summary</h3><p><strong>候选根因：</strong>证据表明 <code>auth-service</code> 的数据库连接池耗尽可能是较早的贡献信号，并在获取数据库连接失败之后，领先于 <code>payment-service</code> 调用超时以及 Gateway 500 症状。</p><p><strong>候选链：</strong><br>Auth pool exhausted → Auth DB acquire failure → Payment timeout → Gateway 500。</p><p><strong>不确定性：</strong>该结果需要结合指标、Trace、部署变更和时钟偏差继续验证，不能视为已经证明的最终 RCA。</p><p><strong>下一步：</strong>检查 Auth DB Pool 指标、连接等待时长、Payment 到 Auth 的 Trace，以及 10:11:30 前后的变更。</p><div class="chips"><span class="chip">evidence_refs: auth-1</span><span class="chip">auth-2</span><span class="chip">payment-2</span><span class="chip">gateway-2</span></div></div>`;
+    }
+    return `<div style="font-family:var(--sans);line-height:1.65"><h3 style="margin-top:0">Incident Diagnosis Summary</h3><p><strong>Candidate root cause:</strong> Evidence suggests that database connection-pool exhaustion in <code>auth-service</code> may be an early contributing signal, followed by failed DB-connection acquisitions and preceding the <code>payment-service</code> call timeouts and the gateway 500 symptoms.</p><p><strong>Candidate chain:</strong><br>Auth pool exhausted → Auth DB acquire failure → Payment timeout → Gateway 500.</p><p><strong>Uncertainty:</strong> This needs validation with metrics, traces, deployment changes, and clock-skew checks — it must not be treated as a proven final RCA.</p><p><strong>Next steps:</strong> Check auth DB pool metrics, connection wait times, payment→auth traces, and any changes around 10:11:30.</p><div class="chips"><span class="chip">evidence_refs: auth-1</span><span class="chip">auth-2</span><span class="chip">payment-2</span><span class="chip">gateway-2</span></div></div>`;
+  }
+
   function renderOutput(stage) {
     const t = templates[selectedTemplate];
-    const selectedLogs = chronological.filter(l => l.template === selectedTemplate);
+    const en = lang === 'en';
     switch(stage.id) {
       case 'ingest_paths': {
         const sample = traceLog();
@@ -1057,23 +1192,23 @@
         })}</pre>`;
       }
       case 'merge_entries':
-        return logs.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${escapeHtml(JSON.stringify({log_id:l.id,file_path:l.file,line_number:l.line,line_numbers:[l.line],raw_message:rawText(l),raw_line_ids:[`raw-${l.id}`]}))}</button>`).join('') + `<div class="template-card"><div class="card-title">本次示例：9 → 9</div><div class="card-sub">没有 Stack Trace，因此每个物理行恰好对应一个逻辑 LogEntry。</div></div>`;
+        return logs.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${escapeHtml(JSON.stringify({log_id:l.id,file_path:l.file,line_number:l.line,line_numbers:[l.line],raw_message:rawText(l),raw_line_ids:[`raw-${l.id}`]}))}</button>`).join('') + `<div class="template-card"><div class="card-title">${en?'This demo: 9 → 9':'本次示例：9 → 9'}</div><div class="card-sub">${en?'No stack traces here, so each physical line maps to exactly one logical LogEntry.':'没有 Stack Trace，因此每个物理行恰好对应一个逻辑 LogEntry。'}</div></div>`;
       case 'preprocess_redact':
-        return chronological.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${escapeHtml(JSON.stringify(normalizedObject(l)))}</button>`).join('') + `<div class="template-card"><div class="card-title">附加隐私规则演示（不属于本次 9 行输入）</div><div class="card-sub"><span class="tok-level-error">BEFORE</span> email=alice@example.com ip=192.168.1.10 Authorization=Bearer abc.def.ghi password=hunter2<br><span class="tok-mask">AFTER</span> email=&lt;EMAIL&gt; ip=&lt;IP&gt; Authorization=&lt;TOKEN&gt; password=&lt;SECRET&gt;</div></div>`;
+        return chronological.map(l => `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${escapeHtml(JSON.stringify(normalizedObject(l)))}</button>`).join('') + `<div class="template-card"><div class="card-title">${en?'Extra privacy-rule demo (not part of the 9 input lines)':'附加隐私规则演示（不属于本次 9 行输入）'}</div><div class="card-sub"><span class="tok-level-error">BEFORE</span> email=alice@example.com ip=192.168.1.10 Authorization=Bearer abc.def.ghi password=hunter2<br><span class="tok-mask">AFTER</span> email=&lt;EMAIL&gt; ip=&lt;IP&gt; Authorization=&lt;TOKEN&gt; password=&lt;SECRET&gt;</div></div>`;
       case 'drain_templating':
-        return Object.entries(templates).map(([id,item]) => `<div class="template-card ${id===selectedTemplate?'selected':''}" data-template-card="${id}"><div class="card-row"><span class="card-title">${id} · ${escapeHtml(item.name)}</span><span class="panel-badge">${item.count} occurrence</span></div><div class="card-sub"><span class="tok-mask">${escapeHtml(item.text)}</span></div><div class="chips"><span class="chip">template_id = uuid5(run + key)</span><span class="chip">first/last seen</span></div></div>`).join('');
+        return Object.entries(templates).map(([id,item]) => `<div class="template-card ${id===selectedTemplate?'selected':''}" data-template-card="${id}"><div class="card-row"><span class="card-title">${id} · ${escapeHtml(L(item.name))}</span><span class="panel-badge">${item.count} ${L(UI.occurrenceUnit)}</span></div><div class="card-sub"><span class="tok-mask">${escapeHtml(item.text)}</span></div><div class="chips"><span class="chip">template_id = uuid5(run + key)</span><span class="chip">first/last seen</span></div></div>`).join('');
       case 'representative_sampling':
         return Object.entries(templates).map(([id,item]) => { const sample=chronological.find(l=>l.template===id); return `<div class="sample-card"><div class="card-row"><span class="card-title">${id} RepresentativeSample</span><span class="chip">earliest</span></div><div class="card-sub">${escapeHtml(sample.ts)} · ${escapeHtml(sample.service)} · ${escapeHtml(sample.message)}</div><div class="chips"><span class="chip">sample_rank 0</span><span class="chip">evidence ${sample.file}:${sample.line}</span></div></div>`; }).join('');
       case 'ai_platform_annotation':
-        return `<div class="annotation-card selected"><div class="card-row"><span class="card-title">${selectedTemplate} · ${escapeHtml(t.name)}</span>${signalChip(t.golden)}</div><pre class="json" style="margin-top:9px">${pretty({golden_signal:t.golden,fault_categories:t.faults,entities:t.entities,severity_score:t.severity,confidence:t.confidence,rationale:annotationRationale(selectedTemplate)})}</pre></div><div class="template-card"><div class="card-title">Schema 防护</div><div class="card-sub">若模型 JSON 无法通过 TemplateAnnotationResult 校验，则降级为 golden_signal=unknown、confidence=0，而不是让脏输出污染后续流程。</div></div>`;
+        return `<div class="annotation-card selected"><div class="card-row"><span class="card-title">${selectedTemplate} · ${escapeHtml(L(t.name))}</span>${signalChip(t.golden)}</div><pre class="json" style="margin-top:9px">${pretty({golden_signal:t.golden,fault_categories:t.faults,entities:t.entities,severity_score:t.severity,confidence:t.confidence,rationale:annotationRationale(selectedTemplate)})}</pre></div><div class="template-card"><div class="card-title">${en?'Schema guard':'Schema 防护'}</div><div class="card-sub">${en?'If the model JSON fails TemplateAnnotationResult validation, it degrades to golden_signal=unknown, confidence=0 instead of letting dirty output pollute the rest of the pipeline.':'若模型 JSON 无法通过 TemplateAnnotationResult 校验，则降级为 golden_signal=unknown、confidence=0，而不是让脏输出污染后续流程。'}</div></div>`;
       case 'broadcast_annotations':
         return chronological.map(l => { const ann=templates[l.template]; return `<button class="logline ${l.id===selectedTrace?'focused':''}" data-log="${l.id}">${highlightedLog(l)}<br>↳ ${signalChip(ann.golden)} ${faultChips(ann.faults)} <span class="chip">confidence ${ann.confidence}</span></button>`; }).join('');
       case 'temporal_aggregation':
-        return temporalChart() + `<div class="template-card"><div class="card-title">17 条 WindowAggregate</div><div class="card-sub">只有 3 个时间窗口，但每个模板 × 服务 × Signal × Fault Category 组合会形成独立聚合行。</div></div>`;
+        return temporalChart() + `<div class="template-card"><div class="card-title">${en?'17 WindowAggregate rows':'17 条 WindowAggregate'}</div><div class="card-sub">${en?'Only 3 time windows, but each template × service × signal × fault-category combination becomes its own aggregate row.':'只有 3 个时间窗口，但每个模板 × 服务 × Signal × Fault Category 组合会形成独立聚合行。'}</div></div>`;
       case 'causal_graph':
-        return causalGraphSvg() + `<div class="chips"><span class="chip saturation">T1 Root candidate</span><span class="chip">PageRank + early + outgoing + severity</span><span class="chip">所有边 needs_validation=true</span></div>`;
+        return causalGraphSvg() + `<div class="chips"><span class="chip saturation">${en?'T1 root candidate':'T1 Root candidate'}</span><span class="chip">PageRank + early + outgoing + severity</span><span class="chip">${en?'all edges needs_validation=true':'所有边 needs_validation=true'}</span></div>`;
       case 'causal_summary':
-        return `<div style="font-family:var(--sans);line-height:1.65"><h3 style="margin-top:0">Incident Diagnosis Summary</h3><p><strong>候选根因：</strong>证据表明 <code>auth-service</code> 的数据库连接池耗尽可能是较早的贡献信号，并在获取数据库连接失败之后，领先于 <code>payment-service</code> 调用超时以及 Gateway 500 症状。</p><p><strong>候选链：</strong><br>Auth pool exhausted → Auth DB acquire failure → Payment timeout → Gateway 500。</p><p><strong>不确定性：</strong>该结果需要结合指标、Trace、部署变更和时钟偏差继续验证，不能视为已经证明的最终 RCA。</p><p><strong>下一步：</strong>检查 Auth DB Pool 指标、连接等待时长、Payment 到 Auth 的 Trace，以及 10:11:30 前后的变更。</p><div class="chips"><span class="chip">evidence_refs: auth-1</span><span class="chip">auth-2</span><span class="chip">payment-2</span><span class="chip">gateway-2</span></div></div>`;
+        return summaryNarrative();
       case 'export_artifacts':
         return ['markdown','html','json'].map(type => `<div class="export-card"><div class="card-row"><span class="card-title">${type.toUpperCase()} ExportArtifact</span><span class="chip">uuid5(run + ${type})</span></div><div class="card-sub">memory://exports/run-001/export.${type}</div><div class="chips"><span class="chip">redacted</span><span class="chip">traceable</span><span class="chip">ready</span></div></div>`).join('') + `<pre class="json">${pretty({progress:{current_step:'completed',files_total:3,raw_lines:9,templates:6,representative_samples:6,annotated_templates:6,windows:17,nodes:5,edges:3,exports:3}})}</pre>`;
     }
@@ -1085,41 +1220,42 @@
 
   function titles(stage) {
     const map = {
-      ingest_paths:['文件路径与原始字节/文本','IngestedFile 与 RawPhysicalLine','3 paths','3 files · 9 lines'],
+      ingest_paths:[{en:'File paths & raw bytes/text',zh:'文件路径与原始字节/文本'},{en:'IngestedFile & RawPhysicalLine',zh:'IngestedFile 与 RawPhysicalLine'},'3 paths','3 files · 9 lines'],
       merge_entries:['RawPhysicalLine','LogEntry','9 physical','9 logical'],
       preprocess_redact:['LogEntry','NormalizedLogLine','9 entries','9 normalized'],
-      drain_templating:['Normalized messages','LogTemplate clusters','9 lines','6 templates'],
-      representative_sampling:['模板分组','RepresentativeSample','6 clusters','6 samples'],
-      ai_platform_annotation:['模型 Payload','TemplateAnnotation','1 selected payload','6 annotations'],
-      broadcast_annotations:['模板级标注','逐行 enriched logs','6 annotations','9 annotated lines'],
-      temporal_aggregation:['带语义的日志行','WindowAggregate + Temporal View','9 lines','17 aggregate rows'],
-      causal_graph:['模板时间序列与实体关系','Candidate Causal Graph','5 series','5 nodes · 3 edges'],
-      causal_summary:['安全 Evidence Packet','CausalSummary','5 refs · 3 edges','RCA + actions'],
+      drain_templating:[{en:'Normalized messages',zh:'归一化消息'},{en:'LogTemplate clusters',zh:'LogTemplate 聚类'},'9 lines','6 templates'],
+      representative_sampling:[{en:'Template groups',zh:'模板分组'},'RepresentativeSample','6 clusters','6 samples'],
+      ai_platform_annotation:[{en:'Model payload',zh:'模型 Payload'},'TemplateAnnotation','1 selected payload','6 annotations'],
+      broadcast_annotations:[{en:'Template annotations',zh:'模板级标注'},{en:'Per-line enriched logs',zh:'逐行 enriched logs'},'6 annotations','9 annotated lines'],
+      temporal_aggregation:[{en:'Semantically enriched lines',zh:'带语义的日志行'},'WindowAggregate + Temporal View','9 lines','17 aggregate rows'],
+      causal_graph:[{en:'Template time series & entity links',zh:'模板时间序列与实体关系'},{en:'Candidate causal graph',zh:'Candidate Causal Graph'},'5 series','5 nodes · 3 edges'],
+      causal_summary:[{en:'Safe evidence packet',zh:'安全 Evidence Packet'},'CausalSummary','5 refs · 3 edges','RCA + actions'],
       export_artifacts:['AnalysisResult','ExportArtifact','1 result','3 exports']
     };
-    return map[stage.id];
+    return map[stage.id].map(L);
   }
 
   function diff(stage) {
     const map = {
-      ingest_paths:['建立证据身份','文本尚未被解析，但每个文件与物理行现在拥有可审计的 ID、Hash、顺序和来源。'],
-      merge_entries:['物理行 → 逻辑事件','示例日志都是单行，因此数量不变；如果是 Java Stack Trace，多行会合成一个 LogEntry 并保留全部行号。'],
-      preprocess_redact:['无结构文本 → 安全结构化记录','新增 timestamp、level、service、request_id 等字段；敏感值先被屏蔽，之后才允许进入模板与模型阶段。'],
-      drain_templating:['9 行 → 6 个结构模式','动态值统一为 <*>，同结构日志被压缩到同一 template_id。'],
-      representative_sampling:['模板组 → 少量可解释样本','每个模板只保留必要代表，模型调用规模从逐行降为逐模板。'],
-      ai_platform_annotation:['文本模板 → 语义标签','模板现在具有 Golden Signal、故障类别、实体、严重度、置信度和 rationale。'],
-      broadcast_annotations:['模板语义 → 每一条 Evidence','所有同模板日志继承语义，同时保留自己独有的 request_id / trace_id。'],
-      temporal_aggregation:['离散事件 → 时间演化趋势','现在可以观察 10:11 的资源压力如何领先于 10:12/10:13 的超时和 500。'],
-      causal_graph:['相关事件 → 带证据的候选链','融合多个统计与结构信号；边被明确标记为候选，需要外部 Telemetry 验证。'],
-      causal_summary:['结构化图 → 人可读 RCA','叙述必须引用提供的 evidence_refs；模型不可用或输出无效时自动使用确定性 Fallback。'],
-      export_artifacts:['分析内存对象 → 可交付报告','同一结果可进入 Markdown、HTML、JSON、工单、客户更新或其他系统。']
+      ingest_paths:[{en:'Evidence identity established',zh:'建立证据身份'},{en:'The text is not parsed yet, but every file and physical line now has an auditable id, hash, order, and origin.',zh:'文本尚未被解析，但每个文件与物理行现在拥有可审计的 ID、Hash、顺序和来源。'}],
+      merge_entries:[{en:'Physical lines → logical events',zh:'物理行 → 逻辑事件'},{en:'This sample has single-line logs only, so counts stay equal; a Java stack trace would collapse into one LogEntry that keeps all its line numbers.',zh:'示例日志都是单行，因此数量不变；如果是 Java Stack Trace，多行会合成一个 LogEntry 并保留全部行号。'}],
+      preprocess_redact:[{en:'Unstructured text → safe structured records',zh:'无结构文本 → 安全结构化记录'},{en:'Adds timestamp, level, service, request_id and more; sensitive values are masked before anything reaches templating or the model.',zh:'新增 timestamp、level、service、request_id 等字段；敏感值先被屏蔽，之后才允许进入模板与模型阶段。'}],
+      drain_templating:[{en:'9 lines → 6 structural patterns',zh:'9 行 → 6 个结构模式'},{en:'Dynamic values become <*>; logs with identical structure collapse into one template_id.',zh:'动态值统一为 <*>，同结构日志被压缩到同一 template_id。'}],
+      representative_sampling:[{en:'Template groups → a few explainable samples',zh:'模板组 → 少量可解释样本'},{en:'Each template keeps only the necessary representatives, shrinking model calls from per-line to per-template.',zh:'每个模板只保留必要代表，模型调用规模从逐行降为逐模板。'}],
+      ai_platform_annotation:[{en:'Text templates → semantic labels',zh:'文本模板 → 语义标签'},{en:'Templates now carry a golden signal, fault categories, entities, severity, confidence, and a rationale.',zh:'模板现在具有 Golden Signal、故障类别、实体、严重度、置信度和 rationale。'}],
+      broadcast_annotations:[{en:'Template semantics → every evidence line',zh:'模板语义 → 每一条 Evidence'},{en:'All lines of a template inherit its semantics while keeping their own request_id / trace_id.',zh:'所有同模板日志继承语义，同时保留自己独有的 request_id / trace_id。'}],
+      temporal_aggregation:[{en:'Discrete events → evolution over time',zh:'离散事件 → 时间演化趋势'},{en:'You can now see the 10:11 resource pressure leading the 10:12/10:13 timeouts and 500s.',zh:'现在可以观察 10:11 的资源压力如何领先于 10:12/10:13 的超时和 500。'}],
+      causal_graph:[{en:'Correlated events → evidence-backed candidate chain',zh:'相关事件 → 带证据的候选链'},{en:'Multiple statistical and structural signals are fused; edges are explicit candidates that need external telemetry to validate.',zh:'融合多个统计与结构信号；边被明确标记为候选，需要外部 Telemetry 验证。'}],
+      causal_summary:[{en:'Structured graph → human-readable RCA',zh:'结构化图 → 人可读 RCA'},{en:'The narrative must cite the provided evidence_refs; if the model is unavailable or invalid, a deterministic fallback renders instead.',zh:'叙述必须引用提供的 evidence_refs；模型不可用或输出无效时自动使用确定性 Fallback。'}],
+      export_artifacts:[{en:'In-memory result → deliverable reports',zh:'分析内存对象 → 可交付报告'},{en:'The same result can flow into Markdown, HTML, JSON, tickets, customer updates, or other systems.',zh:'同一结果可进入 Markdown、HTML、JSON、工单、客户更新或其他系统。'}]
     };
-    return map[stage.id];
+    return map[stage.id].map(L);
   }
 
   function traceState(stage) {
     const l = traceLog();
     const t = templates[l.template];
+    const en = lang === 'en';
     const base = {file:l.file,line:l.line,log_id:l.id,timestamp:l.ts,template:l.template};
     const states = {
       ingest_paths:`RawPhysicalLine\nraw_text = ${rawText(l)}\nsha256 = sha256(raw_text)\ningestion_order = ${l.order}`,
@@ -1128,11 +1264,11 @@
       drain_templating:`template_id = ${l.template}\ntemplate_text = ${t.text}\noccurrence_count = ${t.count}`,
       representative_sampling:`RepresentativeSample\nsample_reason = earliest\nsample_rank = 0\nmessage = ${l.message}\nevidence_ref = ${l.file}:${l.line}`,
       ai_platform_annotation:`TemplateAnnotation\ngolden_signal = ${t.golden}\nfault_categories = ${JSON.stringify(t.faults)}\nentities = ${JSON.stringify(t.entities)}\nseverity = ${t.severity}\nconfidence = ${t.confidence}`,
-      broadcast_annotations:`Enriched NormalizedLogLine\n${l.id} now inherits template ${l.template}\ngolden_signal = ${t.golden}\nfault_categories = ${JSON.stringify(t.faults)}\nrequest/trace/thread entities remain line-specific`,
+      broadcast_annotations:`Enriched NormalizedLogLine\n${l.id} ${en?'now inherits template':'现在继承模板'} ${l.template}\ngolden_signal = ${t.golden}\nfault_categories = ${JSON.stringify(t.faults)}\n${en?'request/trace/thread entities remain line-specific':'request/trace/thread 实体仍是行级独有'}`,
       temporal_aggregation:`WindowAggregate contribution\nwindow_start = ${l.ts.slice(0,16)}:00Z\nservice = ${l.service}\ngolden_signal = ${t.golden}\ncount += 1`,
-      causal_graph:`Evidence role\nnode = ${l.template} (${t.name})\n${l.template==='T6'?'This is a downstream symptom node.\nIncoming candidate edge: T4 → T6.':'This template participates in candidate causal ranking.'}\nneeds_validation = true`,
-      causal_summary:`EvidenceRef cited by summary\nlog_id = ${l.id}\nfile_path = ${l.file}\nline_number = ${l.line}\nclaim must reference this id before it is accepted`,
-      export_artifacts:`Export traceability\nJSON/Markdown/HTML keeps the redacted finding and evidence reference:\n${l.file}:${l.line} · ${l.id}`
+      causal_graph:`Evidence role\nnode = ${l.template} (${L(t.name)})\n${l.template==='T6'?(en?'This is a downstream symptom node.\nIncoming candidate edge: T4 → T6.':'这是下游症状节点。\n候选入边：T4 → T6。'):(en?'This template participates in candidate causal ranking.':'该模板参与候选因果排序。')}\nneeds_validation = true`,
+      causal_summary:`EvidenceRef cited by summary\nlog_id = ${l.id}\nfile_path = ${l.file}\nline_number = ${l.line}\n${en?'a claim must reference this id before it is accepted':'声明必须引用该 id 才会被接受'}`,
+      export_artifacts:`Export traceability\n${en?'JSON/Markdown/HTML keeps the redacted finding and evidence reference:':'JSON/Markdown/HTML 保留脱敏结论与证据引用：'}\n${l.file}:${l.line} · ${l.id}`
     };
     return {base,text:states[stage.id]};
   }
@@ -1156,20 +1292,20 @@
   }
 
   function renderInspector(stage) {
-    $('whyText').textContent = stage.why;
+    $('whyText').textContent = L(stage.why);
     $('codePath').innerHTML = `<strong>${escapeHtml(stage.file)}</strong><br>${escapeHtml(stage.fn)}`;
     $('codeSnippet').textContent = stage.snippet;
-    $('contractText').innerHTML = `<strong>输入：</strong><code>${escapeHtml(stage.inType)}</code><br><strong>输出：</strong><code>${escapeHtml(stage.outType)}</code>`;
+    $('contractText').innerHTML = `<strong>${L(UI.contractIn)}</strong><code>${escapeHtml(stage.inType)}</code><br><strong>${L(UI.contractOut)}</strong><code>${escapeHtml(stage.outType)}</code>`;
     $('eventTimeline').innerHTML = `
       <div class="event-row"><span class="event-dot"></span><span>${stage.id} · started</span><span class="event-time">+0ms</span></div>
-      <div class="event-row"><span class="event-dot done"></span><span>${stage.id} · completed</span><span class="event-time">+${stage.duration}ms demo</span></div>
-      <div class="event-row"><span class="event-dot done"></span><span>Prometheus step duration observed</span><span class="event-time">count-only</span></div>`;
+      <div class="event-row"><span class="event-dot done"></span><span>${stage.id} · completed</span><span class="event-time">+${stage.duration}${L(UI.demoMs)}</span></div>
+      <div class="event-row"><span class="event-dot done"></span><span>${L(UI.promObserved)}</span><span class="event-time">count-only</span></div>`;
     $('metadataBox').textContent = JSON.stringify({step_name:stage.id,event_type:'completed',status:'completed',attempt:1,idempotency_key:`${stage.id}:attempt:1`,metadata:stage.metadata},null,2);
   }
 
   function renderTrace(stage) {
     const {base,text} = traceState(stage);
-    $('traceMeta').innerHTML = `<dt>Selected log</dt><dd>${escapeHtml(base.log_id)}</dd><dt>Source</dt><dd>${escapeHtml(base.file)}:${base.line}</dd><dt>Timestamp</dt><dd>${escapeHtml(base.timestamp)}</dd><dt>Current template</dt><dd>${escapeHtml(base.template)}</dd>`;
+    $('traceMeta').innerHTML = `<dt>${L(UI.metaSelected)}</dt><dd>${escapeHtml(base.log_id)}</dd><dt>${L(UI.metaSource)}</dt><dd>${escapeHtml(base.file)}:${base.line}</dd><dt>${L(UI.metaTimestamp)}</dt><dd>${escapeHtml(base.timestamp)}</dd><dt>${L(UI.metaTemplate)}</dt><dd>${escapeHtml(base.template)}</dd>`;
     $('traceContent').textContent = text;
   }
 
@@ -1178,9 +1314,9 @@
     const body = $('stageBody');
     if (animate) body.classList.add('swapping');
     window.setTimeout(() => {
-      $('stageNumber').textContent = `STEP ${String(activeStage+1).padStart(2,'0')} / ${stageDefs.length}`;
-      $('stageTitle').textContent = stage.title;
-      $('stageSummary').textContent = stage.summary;
+      $('stageNumber').textContent = `STEP ${String(activeStage+1).padStart(2,'0')} / ${stageDefs.length}` + (stage.llm ? ` · ${L(UI.llmStep)}` : '');
+      $('stageTitle').textContent = L(stage.title);
+      $('stageSummary').textContent = L(stage.summary);
       const [it,ot,ib,ob] = titles(stage);
       $('inputTitle').textContent = it; $('outputTitle').textContent = ot; $('inputBadge').textContent = ib; $('outputBadge').textContent = ob;
       $('inputPanel').innerHTML = renderInput(stage);
@@ -1189,7 +1325,7 @@
       renderInspector(stage);
       renderTrace(stage);
       renderRail();
-      $('railStatus').textContent = `Step ${activeStage+1} / ${stageDefs.length}`;
+      $('railStatus').textContent = L(UI.stepOf)(activeStage+1, stageDefs.length);
       $('progressFill').style.width = `${((activeStage+1)/stageDefs.length)*100}%`;
       bindDynamicElements();
       body.classList.remove('swapping');
@@ -1209,12 +1345,22 @@
 
   function startPlay() {
     if (timer) { stopPlay(); return; }
-    $('playBtn').textContent = '⏸ 暂停';
+    $('playBtn').textContent = L(UI.pause);
     if (activeStage >= stageDefs.length-1) setStage(0);
     timer = window.setInterval(nextStage, Number($('speedSelect').value));
   }
-  function stopPlay() { if (timer) window.clearInterval(timer); timer=null; $('playBtn').textContent='▶ 自动播放'; }
+  function stopPlay() { if (timer) window.clearInterval(timer); timer=null; $('playBtn').textContent=L(UI.play); }
 
+  function setLang(next) {
+    lang = next;
+    try { localStorage.setItem('logan:explorer-lang', lang); } catch {}
+    renderChrome();
+    renderMetrics();
+    renderSelectors();
+    renderStage(false);
+  }
+
+  $('langBtn').addEventListener('click', () => setLang(lang === 'en' ? 'zh' : 'en'));
   $('prevBtn').addEventListener('click', () => { stopPlay(); prevStage(); });
   $('nextBtn').addEventListener('click', () => { stopPlay(); nextStage(); });
   $('playBtn').addEventListener('click', startPlay);
@@ -1224,16 +1370,18 @@
   $('traceSelect').addEventListener('change', e => { selectedTrace=e.target.value; renderStage(false); });
   $('copyBtn').addEventListener('click', async () => {
     const text = $('outputPanel').innerText;
-    try { await navigator.clipboard.writeText(text); $('copyBtn').textContent='✓ 已复制'; setTimeout(()=>$('copyBtn').textContent='复制当前输出',1200); }
-    catch { window.prompt('复制以下内容：', text); }
+    try { await navigator.clipboard.writeText(text); $('copyBtn').textContent=L(UI.copied); setTimeout(()=>$('copyBtn').textContent=L(UI.copy),1200); }
+    catch { window.prompt(L(UI.copyPrompt), text); }
   });
   window.addEventListener('resize', positionOrb);
   window.addEventListener('keydown', e => {
+    if (e.target && e.target.closest && e.target.closest('button, select, input, textarea, a')) return;
     if (e.key === 'ArrowRight') { stopPlay(); nextStage(); }
     if (e.key === 'ArrowLeft') { stopPlay(); prevStage(); }
     if (e.key === ' ') { e.preventDefault(); startPlay(); }
   });
 
+  renderChrome();
   renderMetrics();
   renderSelectors();
   renderStage(false);
