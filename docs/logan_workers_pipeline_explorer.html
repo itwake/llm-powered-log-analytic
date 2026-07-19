@@ -215,7 +215,7 @@
       top: 14px;
       height: calc(100vh - 28px);
       min-height: 760px;
-      overflow-y: auto;
+      overflow: hidden auto;
     }
 
     .rail-head {
@@ -237,24 +237,6 @@
       bottom: 24px;
       width: 2px;
       background: linear-gradient(to bottom, rgba(45,212,191,.48), rgba(167,139,250,.22), rgba(148,163,184,.08));
-    }
-
-    .flow-orb {
-      position: absolute;
-      left: 21px;
-      top: 19px;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: radial-gradient(circle at 35% 35%, #fff, var(--cyan) 38%, #0f766e 72%);
-      box-shadow: 0 0 0 5px rgba(45,212,191,.12), 0 0 28px rgba(45,212,191,.72);
-      z-index: 3;
-      transition: transform .55s cubic-bezier(.2,.8,.2,1);
-      animation: orbPulse 1.5s ease-in-out infinite;
-    }
-
-    @keyframes orbPulse {
-      50% { box-shadow: 0 0 0 9px rgba(45,212,191,.05), 0 0 36px rgba(45,212,191,.78); }
     }
 
     .step-btn {
@@ -300,8 +282,9 @@
       box-shadow: 0 0 22px rgba(45,212,191,.35);
     }
 
-    .step-name { font-size: 13px; font-weight: 800; }
-    .step-file { color: #728aa4; font-size: 10px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .step-btn > span { min-width: 0; }
+    .step-name { display: block; font-size: 13px; font-weight: 800; }
+    .step-file { display: block; color: #728aa4; font-size: 10px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .step-state { color: var(--muted); font-size: 11px; }
     .step-btn.active .step-state { color: var(--cyan); }
 
@@ -360,22 +343,12 @@
       color: var(--cyan);
       font-size: 26px;
       position: relative;
+      animation: arrowPulse 1.8s ease-in-out infinite;
     }
 
-    .flow-arrow::after {
-      content: "";
-      position: absolute;
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: var(--cyan);
-      box-shadow: 0 0 20px var(--cyan);
-      animation: arrowMove 1.5s ease-in-out infinite;
-    }
-
-    @keyframes arrowMove {
-      0%,100% { transform: translateX(-7px); opacity: .25; }
-      50% { transform: translateX(7px); opacity: 1; }
+    @keyframes arrowPulse {
+      0%, 100% { opacity: .5; }
+      50% { opacity: 1; }
     }
 
     .io-panel {
@@ -727,7 +700,7 @@
       .workspace { grid-template-columns: 1fr; }
       .rail { position: relative; top: auto; height: auto; min-height: 0; }
       .step-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
-      .step-list::before, .flow-orb { display: none; }
+      .step-list::before { display: none; }
       .io-grid { grid-template-columns: 1fr; }
       .flow-arrow { height: 30px; transform: rotate(90deg); }
       .panel-content { height: 340px; }
@@ -772,9 +745,7 @@
           <span id="railStatus">Step 1 / 11</span>
           <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
         </div>
-        <div class="step-list" id="stepList">
-          <div class="flow-orb" id="flowOrb"></div>
-        </div>
+        <div class="step-list" id="stepList"></div>
       </aside>
 
       <section class="stage-shell glass">
@@ -1045,24 +1016,13 @@
   }
 
   function renderRail() {
-    $('stepList').innerHTML = '<div class="flow-orb" id="flowOrb"></div>' + stageDefs.map((s,i) => `
+    $('stepList').innerHTML = stageDefs.map((s,i) => `
       <button class="step-btn ${i===activeStage?'active':''} ${i<activeStage?'done':''}" data-step="${i}">
         <span class="step-index">${i<activeStage?'✓':String(i+1).padStart(2,'0')}</span>
         <span><span class="step-name">${escapeHtml(L(s.title))}${s.llm?'<span class="llm-tag">LLM</span>':''}</span><span class="step-file">${escapeHtml(s.file)}</span></span>
         <span class="step-state">${i===activeStage?'RUN':i<activeStage?'DONE':'WAIT'}</span>
       </button>`).join('');
     document.querySelectorAll('.step-btn').forEach(btn => btn.addEventListener('click', () => setStage(Number(btn.dataset.step))));
-    requestAnimationFrame(positionOrb);
-  }
-
-  function positionOrb() {
-    const orb = $('flowOrb');
-    const active = document.querySelector('.step-btn.active');
-    if (!orb || !active || window.innerWidth <= 920) return;
-    const list = $('stepList').getBoundingClientRect();
-    const rect = active.getBoundingClientRect();
-    const y = rect.top - list.top + rect.height / 2 - 27;
-    orb.style.transform = `translateY(${y}px)`;
   }
 
   function groupRawLogs() {
@@ -1373,7 +1333,6 @@
     try { await navigator.clipboard.writeText(text); $('copyBtn').textContent=L(UI.copied); setTimeout(()=>$('copyBtn').textContent=L(UI.copy),1200); }
     catch { window.prompt(L(UI.copyPrompt), text); }
   });
-  window.addEventListener('resize', positionOrb);
   window.addEventListener('keydown', e => {
     if (e.target && e.target.closest && e.target.closest('button, select, input, textarea, a')) return;
     if (e.key === 'ArrowRight') { stopPlay(); nextStage(); }
