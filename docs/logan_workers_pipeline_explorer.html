@@ -204,19 +204,23 @@
       align-items: stretch;
     }
 
-    .rail, .inspector, .stage-shell {
+    .inspector, .stage-shell {
       border-radius: var(--radius);
       min-height: 780px;
     }
 
     .rail {
+      border-radius: var(--radius);
       padding: 18px 14px;
       position: sticky;
       top: 14px;
-      height: calc(100vh - 28px);
-      min-height: 760px;
-      overflow: hidden auto;
+      align-self: start;
+      max-height: calc(100vh - 28px);
+      overflow-y: auto;
+      scrollbar-width: none;
     }
+
+    .rail::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
     .rail-head {
       padding: 0 7px 12px;
@@ -249,12 +253,12 @@
       grid-template-columns: 42px minmax(0,1fr) auto;
       gap: 10px;
       align-items: center;
-      padding: 9px 8px;
+      padding: 7px 8px;
       border-radius: 13px;
       text-align: left;
       position: relative;
       z-index: 2;
-      margin: 2px 0;
+      margin: 1px 0;
       transition: background .18s ease, transform .18s ease;
     }
 
@@ -283,14 +287,14 @@
     }
 
     .step-btn > span { min-width: 0; }
-    .step-name { display: block; font-size: 13px; font-weight: 800; }
+    .step-name { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; font-weight: 800; }
+    .step-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .step-file { display: block; color: #728aa4; font-size: 10px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .step-state { color: var(--muted); font-size: 11px; }
     .step-btn.active .step-state { color: var(--cyan); }
 
     .llm-tag {
-      display: inline-block;
-      margin-left: 6px;
+      flex: 0 0 auto;
       padding: 2px 5px;
       border-radius: 6px;
       font-size: 8.5px;
@@ -298,7 +302,6 @@
       letter-spacing: .05em;
       color: #041014;
       background: linear-gradient(135deg, var(--purple), var(--cyan-2));
-      vertical-align: 1px;
     }
 
     .stage-shell {
@@ -698,7 +701,7 @@
       .header-actions { justify-content: flex-start; }
       .metrics { grid-template-columns: repeat(2, 1fr); }
       .workspace { grid-template-columns: 1fr; }
-      .rail { position: relative; top: auto; height: auto; min-height: 0; }
+      .rail { position: relative; top: auto; height: auto; min-height: 0; max-height: none; overflow: visible; }
       .step-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
       .step-list::before { display: none; }
       .io-grid { grid-template-columns: 1fr; }
@@ -1017,12 +1020,18 @@
 
   function renderRail() {
     $('stepList').innerHTML = stageDefs.map((s,i) => `
-      <button class="step-btn ${i===activeStage?'active':''} ${i<activeStage?'done':''}" data-step="${i}">
+      <button class="step-btn ${i===activeStage?'active':''} ${i<activeStage?'done':''}" data-step="${i}" title="${escapeHtml(L(s.title))}">
         <span class="step-index">${i<activeStage?'✓':String(i+1).padStart(2,'0')}</span>
-        <span><span class="step-name">${escapeHtml(L(s.title))}${s.llm?'<span class="llm-tag">LLM</span>':''}</span><span class="step-file">${escapeHtml(s.file)}</span></span>
+        <span><span class="step-name"><span class="step-title-text">${escapeHtml(L(s.title))}</span>${s.llm?'<span class="llm-tag">LLM</span>':''}</span><span class="step-file">${escapeHtml(s.file)}</span></span>
         <span class="step-state">${i===activeStage?'RUN':i<activeStage?'DONE':'WAIT'}</span>
       </button>`).join('');
     document.querySelectorAll('.step-btn').forEach(btn => btn.addEventListener('click', () => setStage(Number(btn.dataset.step))));
+    const activeBtn = document.querySelector('.step-btn.active');
+    if (activeBtn && window.innerWidth > 920) {
+      const railEl = document.querySelector('.rail');
+      if (Number(activeBtn.dataset.step) <= 1) railEl.scrollTop = 0;
+      else activeBtn.scrollIntoView({ block: 'nearest' });
+    }
   }
 
   function groupRawLogs() {
