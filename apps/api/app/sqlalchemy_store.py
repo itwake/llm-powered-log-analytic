@@ -10,12 +10,13 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from logan_workers.activities.export import export_analysis
-from logan_workers.models import AnalysisResult, OFFENDING_SIGNALS
+from logan_workers.models import OFFENDING_SIGNALS, AnalysisResult
 from logan_workers.pipeline import AnalyzeCasePipeline
 from sqlalchemy import and_, create_engine, delete, func, or_, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.config import Settings, settings
 from app.core.security import (
@@ -30,20 +31,20 @@ from app.core.security import (
 from app.db import Base
 from app.models import tables
 from app.observability import record_analytics_sink_operation
-from app.services.analytics_sinks import (
-    AnalyticsSinkError,
-    AnalyticsSinkPublisher,
-    AnalyticsSinkWriteOperation,
-    opensearch_index_name,
+from app.services.analysis_inputs import (
+    analysis_input_backend_counts,
+    materialize_analysis_inputs,
 )
 from app.services.analytics_queries import (
     AnalyticsQueryClient,
     AnalyticsQueryError,
     sanitize_analytics_query_error,
 )
-from app.services.analysis_inputs import (
-    analysis_input_backend_counts,
-    materialize_analysis_inputs,
+from app.services.analytics_sinks import (
+    AnalyticsSinkError,
+    AnalyticsSinkPublisher,
+    AnalyticsSinkWriteOperation,
+    opensearch_index_name,
 )
 from app.services.object_store import (
     S3ClientFactory,
@@ -54,46 +55,46 @@ from app.services.object_store import (
     safe_filename,
 )
 from app.store import (
+    CANCELLABLE_ANALYSIS_RUN_STATUSES,
+    CASE_PERMISSION_ROLES,
+    DEFAULT_ORGANIZATION_ID,
+    DEFAULT_ORGANIZATION_NAME,
+    DEFAULT_ORGANIZATION_SLUG,
+    MODEL_INVOCATION_AUDIT_ACTION,
+    RAW_LOG_RETAINED_MARKER,
+    REVOCABLE_CREDENTIAL_TYPES,
+    TERMINAL_ANALYSIS_RUN_STATUSES,
     AnalysisRunCancelled,
     AnalysisRunRecord,
     AnalysisStepArtifactRecord,
     AnalyticsSinkWriteRecord,
     AuditLogRecord,
-    CaseGroupAccessRecord,
     CaseCollaboratorRecord,
+    CaseGroupAccessRecord,
     CaseRecord,
-    CASE_PERMISSION_ROLES,
-    CANCELLABLE_ANALYSIS_RUN_STATUSES,
-    REVOCABLE_CREDENTIAL_TYPES,
     CredentialRecord,
-    DEFAULT_ORGANIZATION_ID,
-    DEFAULT_ORGANIZATION_NAME,
-    DEFAULT_ORGANIZATION_SLUG,
     ExportRecord,
     FeedbackRecord,
     JobEventRecord,
-    MODEL_INVOCATION_AUDIT_ACTION,
     OrganizationRecord,
     PolicyGroupMemberRecord,
     PolicyGroupRecord,
-    RAW_LOG_RETAINED_MARKER,
     RetentionResultRecord,
     SessionRecord,
-    TERMINAL_ANALYSIS_RUN_STATUSES,
     UploadRecord,
     UserRecord,
-    apply_job_event_progress,
     _case_role_allows,
+    _slugify,
     _validate_case_role,
     _validate_global_role,
-    merge_analysis_result_progress,
     _validate_policy_group_role,
-    _slugify,
+    apply_job_event_progress,
     log_job_event,
-    model_invocation_audit_metadata,
+    merge_analysis_result_progress,
     merge_recorded_progress,
-    sanitize_error_message,
+    model_invocation_audit_metadata,
     sanitize_artifact_metadata,
+    sanitize_error_message,
     sanitize_job_metadata,
     sanitize_workflow_payload,
 )
@@ -257,10 +258,16 @@ class SQLAlchemyStore:
         self.analytics_query_client = analytics_query_client
         self.database_url = _sync_database_url(database_url)
         _ensure_sqlite_parent_dir(self.database_url)
+        engine_options: dict[str, Any] = {
+            "future": True,
+            "connect_args": _sqlite_connect_args(self.database_url),
+        }
+        database = make_url(self.database_url)
+        if database.drivername.startswith("sqlite") and database.database == ":memory:":
+            engine_options["poolclass"] = StaticPool
         self.engine = engine or create_engine(
             self.database_url,
-            future=True,
-            connect_args=_sqlite_connect_args(self.database_url),
+            **engine_options,
         )
         self.session_factory = sessionmaker(self.engine, expire_on_commit=False, future=True)
         if create_schema:

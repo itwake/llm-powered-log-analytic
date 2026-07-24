@@ -9,7 +9,7 @@
 - `temporalio >=1.7` — worker/workflow/activity (optional; import-shimmed when absent).
 - `drain3 >=0.9,<1.0` — optional extra; `StableDrainAdapter` regex fallback when missing.
 - Stdlib only for the algorithms: `re`, `statistics`, `math`, `bisect`, `hashlib`, `uuid`, `gzip`/`zip`/`tarfile`.
-- `prometheus-client` / `opentelemetry` via the imported `app.observability` helpers.
+- `prometheus-client` counters owned by `logan_workers.observability`; API-only OpenTelemetry stays in `app.observability`.
 - `pytest` + `pytest-asyncio` (`asyncio_mode=auto`); `ruff` (line length 100, target `py311`).
 
 There is no per-app package manifest. The repo-root `pyproject.toml` defines a single `logan-platform` distribution whose `[tool.setuptools.packages.find]` scans both `apps/api` and `apps/workers`, so `logan_workers` and `app` install together with `pip install -e .` (add `[drain3]` for the drain3 engine).
@@ -52,8 +52,8 @@ benchmarks/logan/checkout_incident/  # reference benchmark: manifest.json + labe
 
 `apps/workers` is not standalone — it is coupled to `apps/api`'s `app` package in one direction, and called by `apps/api` in the other.
 
-- **workers → api (imports):** `pipeline.py` imports `app.observability` (the `record_pipeline_run_*`/`step_*` Prometheus helpers). `activities/analysis.py` imports `app.config.Settings`, `app.sqlalchemy_store.SQLAlchemyStore`, `app.store` helpers (`merge_recorded_progress`, `sanitize_error_message`), and `app.services.analysis_inputs`. So importing `logan_workers.pipeline` pulls in `app.observability`; you cannot ship workers alone.
-- **api → workers (calls):** `apps/api` imports `logan_workers.pipeline.AnalyzeCasePipeline` (run in-process by both `store.py` and `sqlalchemy_store.py` when `orchestrator=local`), `logan_workers.temporal_client.start_analyze_case_workflow` (when `orchestrator=temporal`), and `MockAIPlatformAnnotationGateway` (as `_default_model_gateway` in `apps/api/app/main.py` when `LOGAN_LLM_PROVIDER=mock`).
+- **workers → api (integration adapter only):** the analysis engine (`pipeline.py`, activities except `analysis.py`, algorithms, models, ports) has no `app.*` imports. The Temporal adapter `activities/analysis.py` imports API configuration, persistence, input materialization, and the shared model-gateway factory at activity runtime.
+- **api → workers (calls):** `apps/api` imports `logan_workers.pipeline.AnalyzeCasePipeline` (run in-process by both `store.py` and `sqlalchemy_store.py` when `orchestrator=local`), `logan_workers.temporal_client.start_analyze_case_workflow` (when `orchestrator=temporal`), and the worker-side `ModelGateway` port. `app.services.model_gateway_factory` is the single API/worker factory for the configured real or mock gateway.
 
 Four contracts define the seams:
 
@@ -64,7 +64,7 @@ Four contracts define the seams:
 | Progress | `progress_callback(event: dict)` | Events carry **count-only** metadata; the store persists them as `job_events`. |
 | Output | `models.py` `AnalysisResult` | Consumed by `store.complete_analysis_run`. |
 
-A new pipeline step must also be registered in `PIPELINE_STEP_NAMES` (`apps/api/app/observability.py`) and `PIPELINE_STEPS` (`scripts/full_stack_smoke.py`) or the metric/smoke tests fail.
+A new pipeline step must also be registered in `PIPELINE_STEP_NAMES` (`logan_workers/observability.py`) and `PIPELINE_STEPS` (`scripts/full_stack_smoke.py`) or the metric/smoke tests fail.
 
 ## Run it locally
 
@@ -141,7 +141,7 @@ python -m logan_workers.evaluation.scale --profile quick \
 
 ## Common tasks
 
-**Add a pipeline step.** Create an activity module under `activities/` (delegate heavy logic to a new `algorithms/` module); add a `run_step(...)` call in `pipeline.py` `_run_core` in the correct position returning count-only metadata; thread any output into `AnalysisResult` (`models.py`) if it must persist; register the step name in `PIPELINE_STEP_NAMES` (`apps/api/app/observability.py`) and `PIPELINE_STEPS` (`scripts/full_stack_smoke.py`); update `expected_steps` in `tests/workers/test_pipeline.py`; re-run `make evaluate`.
+**Add a pipeline step.** Create an activity module under `activities/` (delegate heavy logic to a new `algorithms/` module); add a `run_step(...)` call in `pipeline.py` `_run_core` in the correct position returning count-only metadata; thread any output into `AnalysisResult` (`models.py`) if it must persist; register the step name in `PIPELINE_STEP_NAMES` (`logan_workers/observability.py`) and `PIPELINE_STEPS` (`scripts/full_stack_smoke.py`); update `expected_steps` in `tests/workers/test_pipeline.py`; re-run `make evaluate`.
 
 **Change how templates are mined.** Edit `algorithms/drain_adapter.py` (`StableDrainAdapter.to_template` regex masks or the `Drain3Adapter` config in `DrainConfig`). Keep `template_key`/`template_id` deterministic. Run `tests/workers/test_drain_adapter.py` and the benchmark (label patterns match templates by regex in `labels.json`).
 

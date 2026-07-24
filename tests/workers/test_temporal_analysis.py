@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import func, select
-
+from app.config import Settings
+from app.models import tables
+from app.sqlalchemy_store import SQLAlchemyStore
 from logan_workers.activities import analysis as analysis_activity
 from logan_workers.workflows import analyze_case_workflow
 from logan_workers.workflows.analyze_case_workflow import (
@@ -14,11 +15,7 @@ from logan_workers.workflows.analyze_case_workflow import (
     AnalyzeCaseResult,
     AnalyzeCaseWorkflow,
 )
-
-from app.config import Settings
-from app.models import tables
-from app.sqlalchemy_store import SQLAlchemyStore
-
+from sqlalchemy import func, select
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 
@@ -35,7 +32,11 @@ class FakeS3Client:
 
 def _store(tmp_path: Path) -> tuple[SQLAlchemyStore, str, str]:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    app_settings = Settings(
+        database_url=database_url,
+        store_backend="sqlalchemy",
+        llm_provider="mock",
+    )
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     user = store.register_user(
         email="temporal-worker@example.com",
@@ -191,6 +192,7 @@ async def test_analysis_activity_materializes_s3_inputs_in_worker(
     app_settings = Settings(
         database_url=database_url,
         store_backend="sqlalchemy",
+        llm_provider="mock",
         object_store_backend="s3",
         analysis_input_tmp_dir=str(tmp_path / "analysis-inputs"),
         s3_bucket="logan",

@@ -133,7 +133,7 @@ This repository is the staged foundation for the final product. Implemented toda
 - Runnable FastAPI backend with session auth, SSO-only sign-in (mock SSO for local development),
   RBAC case access with per-case collaborators, and organization tenant isolation.
 - Durable SQLAlchemy metadata store on SQLite or PostgreSQL with normalized analysis fan-out
-  tables, plus an explicit in-memory store for tests.
+  tables; tests use the same store implementation over isolated in-memory SQLite.
 - Local disk object store by default; optional S3/MinIO presigned single and multipart raw
   uploads with completed-upload analysis materialization.
 - Next.js workbench with ECharts Temporal View, Cytoscape.js Causal Graph, a case chat stream
@@ -165,7 +165,7 @@ This repository is the staged foundation for the final product. Implemented toda
 
 ## Architecture
 
-- `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, AI Platform chat gateway support, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters with lifecycle/idempotency tracking, opt-in external temporal/log report query paths, and a lightweight in-memory store for explicit tests/local experimentation.
+- `apps/api`: FastAPI API, Pydantic v2 schemas, auth/session handling, AI Platform chat gateway support, SQLAlchemy metadata persistence with normalized analysis rows, optional ClickHouse/OpenSearch analytics sink adapters with lifecycle/idempotency tracking, opt-in external temporal/log report query paths, and isolated in-memory SQLite for tests/local experimentation.
 - `apps/workers`: Python log-analysis pipeline plus Temporal workflow/activity worker for ingestion, multi-line merge, timestamp parsing, redaction, templating, representative sampling, model annotation, label broadcasting, temporal aggregation, candidate causal graph generation with PGEM-style and Granger-style evidence, evidence-packet causal summary generation through the model gateway, cautious fallback summary rendering, and export generation.
 - `apps/web`: Next.js/React/TypeScript operational workbench shell aligned to final API shapes, with Apache ECharts for Temporal View stacked time windows and Cytoscape.js for the directed Causal Graph.
 - `infra/docker`: Dockerfiles for web, API, and worker. The web image builds the Next.js app and

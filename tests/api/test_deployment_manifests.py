@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 APPROVED_UBUNTU_2404_BASE_IMAGES = {
     "mirror.gcr.io/library/ubuntu:24.04",
@@ -40,7 +39,9 @@ def test_eks_config_trusts_forwarded_proxy_headers() -> None:
 
 
 def test_web_client_uses_same_origin_api_by_default() -> None:
-    api_client = (REPO_ROOT / "apps" / "web" / "src" / "lib" / "api.ts").read_text(
+    api_client = (
+        REPO_ROOT / "apps" / "web" / "src" / "lib" / "api" / "http.ts"
+    ).read_text(
         encoding="utf-8"
     )
 

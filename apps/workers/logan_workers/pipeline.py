@@ -4,14 +4,6 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from app.observability import (
-    record_pipeline_run_completed,
-    record_pipeline_run_failed,
-    record_pipeline_run_started,
-    record_pipeline_step_completed,
-    record_pipeline_step_failed,
-    record_pipeline_step_started,
-)
 from logan_workers.activities.broadcasting import broadcast_annotations
 from logan_workers.activities.causal import infer_causal_graph
 from logan_workers.activities.export import export_analysis
@@ -20,10 +12,18 @@ from logan_workers.activities.ingestion import ingest_paths
 from logan_workers.activities.preprocessing import merge_entries, preprocess_entries
 from logan_workers.activities.sampling import select_samples
 from logan_workers.activities.summary import render_causal_summary
-from logan_workers.activities.temporal_aggregation import build_time_window_aggregates
 from logan_workers.activities.templating import run_drain_templating
+from logan_workers.activities.temporal_aggregation import build_time_window_aggregates
 from logan_workers.models import AnalysisResult
-
+from logan_workers.observability import (
+    record_pipeline_run_completed,
+    record_pipeline_run_failed,
+    record_pipeline_run_started,
+    record_pipeline_step_completed,
+    record_pipeline_step_failed,
+    record_pipeline_step_started,
+)
+from logan_workers.ports import ModelGateway
 
 ProgressCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
@@ -85,7 +85,7 @@ class AnalyzeCasePipeline:
         paths: list[str],
         case_context: dict[str, Any] | None = None,
         config: dict[str, Any] | None = None,
-        gateway: MockAIPlatformAnnotationGateway | None = None,
+        gateway: ModelGateway | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> AnalysisResult:
         record_pipeline_run_started()
@@ -113,7 +113,7 @@ class AnalyzeCasePipeline:
         paths: list[str],
         case_context: dict[str, Any] | None = None,
         config: dict[str, Any] | None = None,
-        gateway: MockAIPlatformAnnotationGateway | None = None,
+        gateway: ModelGateway | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> AnalysisResult:
         config = config or {}

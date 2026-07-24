@@ -100,6 +100,9 @@ async def run_analysis_pipeline_activity(params: AnalyzeCaseParams) -> AnalyzeCa
             return _result_summary(existing_result, status=completed_run.status)
 
         app_settings = getattr(store, "settings", None) or Settings()
+        from app.services.model_gateway_factory import create_model_gateway
+
+        gateway = create_model_gateway(app_settings)
         with materialize_analysis_inputs(
             params.paths,
             app_settings,
@@ -126,6 +129,7 @@ async def run_analysis_pipeline_activity(params: AnalyzeCaseParams) -> AnalyzeCa
                 paths=materialized_paths,
                 case_context=params.case_context,
                 config=params.config,
+                gateway=gateway,
                 progress_callback=record_progress,
             )
         recorded_run = store.get_analysis_run(params.analysis_run_id)

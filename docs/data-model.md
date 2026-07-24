@@ -20,7 +20,7 @@ Core tables:
 The API now has a durable SQLAlchemy metadata store for auth/session, encrypted credentials,
 organizations, policy groups, cases, uploads, analysis runs,
 serialized results, normalized PostgreSQL/SQLite analytics rows, exports, feedback, and audit
-logs. The in-memory store remains available as an explicit lightweight test option.
+logs. Tests use the same SQLAlchemy store with isolated in-memory SQLite.
 
 `case_collaborators` stores per-case access grants with `case_id`, `user_id`, `role`, `added_by`,
 and create/update timestamps. `(case_id, user_id)` is unique. New case creators are written as

@@ -13,7 +13,8 @@ see the README Quick Start; for domain vocabulary, see [docs/glossary.md](docs/g
 | `apps/api/app/sqlalchemy_store.py` | Durable SQLAlchemy `MetadataStore` (SQLite/PostgreSQL) |
 | `apps/api/app/services/` | Model gateway, object store, analytics sinks/queries, SSO |
 | `apps/api/app/config.py` | Every `LOGAN_*` setting with its default |
-| `apps/api/app/observability.py` | Logging, Prometheus metrics, OTel, safe-label rules |
+| `apps/api/app/observability.py` | API logging, HTTP/model/sink metrics, OTel, safe-label rules |
+| `apps/workers/logan_workers/observability.py` | Pipeline metrics and allowed step names |
 | `apps/api/migrations/` | Incremental SQL DDL applied by `scripts/run_migrations.py` |
 | `apps/workers/logan_workers/pipeline.py` | The 10-step analysis pipeline orchestrator |
 | `apps/workers/logan_workers/activities/` | One module per pipeline step |
@@ -47,13 +48,13 @@ Situational:
 
 ## Conventions That Will Bite You
 
-### Two stores, one behavior
+### One persistence implementation
 
-`store.py` (in-memory) and `sqlalchemy_store.py` (durable) implement the same `MetadataStore`
-surface and **must stay behavior-identical**. There is no shared abstract base enforcing this —
-parity is maintained by hand. Any new store method or behavior change lands in **both** files,
-with coverage in `tests/api/test_api.py` (in-memory via `create_app`) and
-`tests/api/test_sqlalchemy_persistence.py` (durable).
+`store.py` owns the `MetadataStore` contract, records, shared helpers, and factories.
+`sqlalchemy_store.py` implements the behavior for SQLite and PostgreSQL. Tests use
+`create_ephemeral_store`, which runs the same implementation over isolated in-memory SQLite.
+Any new store method lands in the protocol and `SQLAlchemyStore`, with API coverage in
+`tests/api/test_api.py` and persistence coverage in `tests/api/test_sqlalchemy_persistence.py`.
 
 ### Adding a `LOGAN_*` setting touches five places
 
@@ -77,7 +78,7 @@ raw lines. Tests assert these properties; keep them passing rather than loosenin
 
 ### Tests never touch the network
 
-Unit tests build the app with explicit fakes: `create_app(InMemoryStore(settings),
+Unit tests build the app with explicit fakes: `create_app(create_ephemeral_store(settings),
 model_gateway=MockAIPlatformAnnotationGateway(), s3_client_factory=...)`. New external
 integrations must follow the same seam pattern: a real adapter, a deterministic fake, and an
 injection point on `app.state`.
@@ -91,7 +92,7 @@ Password register/login endpoints return 410. Local sign-in uses the built-in mo
 ### Pipeline steps are a closed, observable set
 
 Each step in `pipeline.py` emits `started`/`completed`/`failed` events with count-only metadata.
-When adding a step, also update `PIPELINE_STEP_NAMES` in `apps/api/app/observability.py` and
+When adding a step, also update `PIPELINE_STEP_NAMES` in `apps/workers/logan_workers/observability.py` and
 `PIPELINE_STEPS` in `scripts/full_stack_smoke.py`, then re-run the benchmark.
 
 ### Windows friendliness
@@ -125,5 +126,5 @@ and `tests/api/test_sqlalchemy_persistence.py` → regenerate the OpenAPI snapsh
 → tests in `tests/workers/test_pipeline.py` → run the benchmark.
 
 **Change a report view**: SQL fan-out read in `sqlalchemy_store.py` + the same shape from
-`store.py` → API route in `cases.py` → web page under
+`store.py` → API route in `cases.py` or `reports.py` → web page under
 `apps/web/src/app/(app)/cases/[caseId]/runs/[runId]/` → e2e assertion if the flow changed.

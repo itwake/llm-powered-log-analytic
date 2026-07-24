@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import ast
-from collections.abc import AsyncIterator
 import json
-from pathlib import Path
 import re
 import uuid
+from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
-
-from pydantic import ValidationError
 
 from logan_workers.models import (
     LogTemplate,
@@ -16,6 +14,8 @@ from logan_workers.models import (
     TemplateAnnotation,
     TemplateAnnotationResult,
 )
+from logan_workers.ports import ModelGateway
+from pydantic import ValidationError
 
 PROMPT_VERSION = "annotation_v1"
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "annotation_prompt.md"
@@ -494,7 +494,7 @@ async def annotate_templates(
     templates: list[LogTemplate],
     samples: list[RepresentativeSample],
     case_context: dict[str, Any],
-    gateway: MockAIPlatformAnnotationGateway | None = None,
+    gateway: ModelGateway | None = None,
     max_templates: int | None = None,
     max_sample_message_chars: int | None = None,
     max_samples_per_template: int | None = None,

@@ -6,11 +6,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, func, select
-
-from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
-
 from app.config import Settings
 from app.core.security import decrypt_token
 from app.main import create_app
@@ -21,8 +16,15 @@ from app.sqlalchemy_store import (
     _postgres_migration_checksum,
     _postgres_migration_version,
 )
-from app.store import RAW_LOG_RETAINED_MARKER, create_store
-
+from app.store import (
+    EPHEMERAL_SQLITE_DATABASE_URL,
+    RAW_LOG_RETAINED_MARKER,
+    InMemoryStore,
+    create_store,
+)
+from httpx import ASGITransport, AsyncClient
+from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
+from sqlalchemy import delete, func, select
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 PIPELINE_STEPS = [
@@ -1380,6 +1382,23 @@ def test_create_store_auto_uses_sqlalchemy_when_database_url_is_set(tmp_path: Pa
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
     store = create_store(Settings(database_url=database_url, store_backend="auto"))
     assert isinstance(store, SQLAlchemyStore)
+
+
+def test_memory_store_alias_uses_isolated_sqlalchemy() -> None:
+    first = create_store(Settings(database_url=None, store_backend="memory"))
+    second = InMemoryStore(Settings(database_url=None, store_backend="memory"))
+
+    assert isinstance(first, SQLAlchemyStore)
+    assert isinstance(second, SQLAlchemyStore)
+    assert first.database_url == EPHEMERAL_SQLITE_DATABASE_URL
+    created = first.register_user(
+        email="isolated@example.com",
+        username="isolated",
+        full_name=None,
+        password="password123",
+    )
+    assert first.get_user_by_username("isolated") == created
+    assert second.get_user_by_username("isolated") is None
 
 
 def test_create_store_auto_defaults_to_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

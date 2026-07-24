@@ -7,8 +7,6 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
-
 from logan_workers.algorithms.redactors import redact_text
 from logan_workers.models import (
     CausalGraph,
@@ -17,7 +15,8 @@ from logan_workers.models import (
     LogTemplate,
     NormalizedLogLine,
 )
-
+from logan_workers.ports import ModelGateway
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 PROMPT_VERSION = "causal_summary_v1"
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "causal_summary_prompt.md"
@@ -712,7 +711,7 @@ def _load_prompt() -> str:
 
 async def _call_gateway(
     *,
-    gateway: Any,
+    gateway: ModelGateway,
     packet: SummaryEvidencePacket,
     case_context: dict[str, Any] | None,
 ) -> dict[str, Any]:
@@ -841,7 +840,7 @@ async def render_causal_summary(
     templates: list[LogTemplate],
     logs: list[NormalizedLogLine],
     case_context: dict[str, Any] | None = None,
-    gateway: Any | None = None,
+    gateway: ModelGateway | None = None,
 ) -> CausalSummary:
     packet = build_causal_summary_evidence_packet(
         causal_graph=causal_graph,

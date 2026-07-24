@@ -3,20 +3,22 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import zipfile
 from collections.abc import AsyncIterator
 from pathlib import Path
-import zipfile
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
-from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
-
 from app.config import Settings
 from app.main import create_app
 from app.services.model_gateway import ModelTransportError
-from app.store import DEFAULT_ORGANIZATION_ID, InMemoryStore, merge_analysis_result_progress
-
+from app.store import (
+    DEFAULT_ORGANIZATION_ID,
+    MetadataStore,
+    create_ephemeral_store,
+    merge_analysis_result_progress,
+)
+from httpx import ASGITransport, AsyncClient
+from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 PIPELINE_STEPS = [
@@ -46,7 +48,7 @@ def test_merge_analysis_result_progress_preserves_orchestrator() -> None:
 
 
 def test_job_event_progress_logs_are_safe(caplog: pytest.LogCaptureFixture) -> None:
-    store = InMemoryStore()
+    store = create_ephemeral_store()
 
     with caplog.at_level("INFO", logger="logan.analysis.progress"):
         event = store.record_job_event(
@@ -106,7 +108,8 @@ def test_job_event_progress_logs_are_safe(caplog: pytest.LogCaptureFixture) -> N
 async def test_cors_allowed_origins_are_configurable() -> None:
     app_settings = Settings(cors_allowed_origins="https://logan.example.com, http://localhost:3000")
     app = create_app(
-        store=InMemoryStore(app_settings),        model_gateway=MockAIPlatformAnnotationGateway(),
+        store=create_ephemeral_store(app_settings),
+        model_gateway=MockAIPlatformAnnotationGateway(),
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"
@@ -245,8 +248,8 @@ async def _authenticated_client(
     app_settings: Settings | None = None,
     s3_client_factory=None,
     model_gateway=None,
-) -> tuple[AsyncClient, InMemoryStore, str]:
-    store = InMemoryStore(app_settings or Settings())
+) -> tuple[AsyncClient, MetadataStore, str]:
+    store = create_ephemeral_store(app_settings or Settings())
     app = create_app(
         store=store,
         model_gateway=model_gateway or MockAIPlatformAnnotationGateway(),
@@ -262,12 +265,12 @@ async def _authenticated_client(
     )
     token, _ = store.create_session(user.id)
     client.cookies.set("logan_session", token)
-    return client, store, store.users_by_username["engineer"]
+    return client, store, user.id
 
 
 async def _register_and_login(
     client: AsyncClient,
-    store: InMemoryStore,
+    store: MetadataStore,
     *,
     email: str,
     username: str,
@@ -280,8 +283,9 @@ async def _register_and_login(
         full_name=full_name,
         password="password123",
     )
-    user_id = store.users_by_username[username]
-    store.users[user_id].role = role
+    user_id = user.id
+    if role != user.role:
+        store.update_user_role(user_id=user_id, role=role, updated_by=user_id)
     token, _ = store.create_session(user.id)
     client.cookies.set("logan_session", token)
     return user_id
@@ -429,7 +433,7 @@ async def test_analysis_run_can_be_cancelled() -> None:
 
 @pytest.mark.asyncio
 async def test_prometheus_metrics_endpoint_records_safe_api_request_metrics() -> None:
-    store = InMemoryStore(Settings(metrics_enabled=True))
+    store = create_ephemeral_store(Settings(metrics_enabled=True))
     app = create_app(
         store=store,
         model_gateway=MockAIPlatformAnnotationGateway(),
@@ -543,7 +547,9 @@ async def test_auth_api_and_ai_platform_only_auth_surface() -> None:
 
 @pytest.mark.asyncio
 async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None:
-    store = InMemoryStore(Settings(local_object_store_dir=str(tmp_path / "object-store")))
+    store = create_ephemeral_store(
+        Settings(local_object_store_dir=str(tmp_path / "object-store"))
+    )
     app = create_app(
         store=store,
         model_gateway=MockAIPlatformAnnotationGateway(),
@@ -684,7 +690,9 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
 
 @pytest.mark.asyncio
 async def test_organization_isolation_and_policy_group_case_access(tmp_path: Path) -> None:
-    store = InMemoryStore(Settings(local_object_store_dir=str(tmp_path / "object-store")))
+    store = create_ephemeral_store(
+        Settings(local_object_store_dir=str(tmp_path / "object-store"))
+    )
     store.ensure_organization(
         organization_id="org-two",
         name="Second Organization",
@@ -739,7 +747,11 @@ async def test_organization_isolation_and_policy_group_case_access(tmp_path: Pat
         password="password123",
         organization_id="org-two",
     )
-    org_two_user.role = "admin"
+    store.update_user_role(
+        user_id=org_two_user.id,
+        role="admin",
+        updated_by=org_two_user.id,
+    )
     org_two_token, _ = store.create_session(org_two_user.id)
     org_two_admin.cookies.set("logan_session", org_two_token)
 
@@ -838,7 +850,7 @@ async def test_organization_isolation_and_policy_group_case_access(tmp_path: Pat
 
 @pytest.mark.asyncio
 async def test_admin_api_settings_are_safe_and_admin_only() -> None:
-    store = InMemoryStore(
+    store = create_ephemeral_store(
         Settings(
             database_url="postgresql://logan:db-secret@postgres/logan",
             github_source_token="gho_source_secret",
@@ -973,7 +985,7 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
 
 @pytest.mark.asyncio
 async def test_scim_users_and_groups_support_bearer_and_admin_session() -> None:
-    store = InMemoryStore(
+    store = create_ephemeral_store(
         Settings(scim_bearer_token="scim-secret", scim_organization_id="scim-org")
     )
     app = create_app(
@@ -1112,7 +1124,7 @@ async def test_scim_users_and_groups_support_bearer_and_admin_session() -> None:
 
 @pytest.mark.asyncio
 async def test_scim_bearer_defaults_to_default_organization() -> None:
-    store = InMemoryStore(Settings(scim_bearer_token="default-scim-secret"))
+    store = create_ephemeral_store(Settings(scim_bearer_token="default-scim-secret"))
     app = create_app(
         store=store,
         model_gateway=MockAIPlatformAnnotationGateway(),
@@ -1136,7 +1148,7 @@ async def test_scim_bearer_defaults_to_default_organization() -> None:
 
 @pytest.mark.asyncio
 async def test_audit_export_and_metadata_redaction_block_adversarial_payloads() -> None:
-    store = InMemoryStore()
+    store = create_ephemeral_store()
     app = create_app(
         store=store,
         model_gateway=MockAIPlatformAnnotationGateway(),
@@ -1254,7 +1266,7 @@ async def test_audit_export_and_metadata_redaction_block_adversarial_payloads() 
 
 @pytest.mark.asyncio
 async def test_api_rate_limit_only_when_enabled() -> None:
-    disabled_store = InMemoryStore(
+    disabled_store = create_ephemeral_store(
         Settings(rate_limit_enabled=False, rate_limit_requests_per_minute=1)
     )
     disabled_app = create_app(
@@ -1268,7 +1280,7 @@ async def test_api_rate_limit_only_when_enabled() -> None:
     assert (await disabled_client.get("/api/cases")).status_code == 401
     await disabled_client.aclose()
 
-    enabled_store = InMemoryStore(
+    enabled_store = create_ephemeral_store(
         Settings(rate_limit_enabled=True, rate_limit_requests_per_minute=2)
     )
     enabled_app = create_app(
@@ -1343,7 +1355,8 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
         "model_reasoning_effort": store.settings.ai_platform_reasoning_effort,
         "prompt_version": "annotation_v1",
         "representative_sample_count": len(analysis_result.samples),
-        "model_input_count": len(analysis_result.model_inputs),
+        # Raw model inputs are intentionally not reconstructed from SQL.
+        "model_input_count": len(analysis_result.samples),
         "annotation_count": len(analysis_result.annotations),
         "template_count": len(analysis_result.templates),
         "redacted": True,
@@ -1351,7 +1364,7 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     store.complete_analysis_run(
         run_id=run_id,
         result=analysis_result,
-        user_id=store.users_by_username["engineer"],
+        user_id=store.get_user_by_username("engineer").id,
     )
     assert len(store.list_audit_logs(case_id=case_id, action="model.invocation")) == 1
     serialized_model_invocation = json.dumps(model_invocation_metadata, sort_keys=True)
@@ -1702,7 +1715,7 @@ async def test_raw_byte_upload_complete_idempotent_and_analysis_by_input_file_id
 
 @pytest.mark.asyncio
 async def test_analysis_failure_records_sanitized_job_event() -> None:
-    store = InMemoryStore()
+    store = create_ephemeral_store()
     user = store.register_user(
         email="failure@example.com",
         username="failure",
@@ -1732,7 +1745,7 @@ async def test_analysis_failure_records_sanitized_job_event() -> None:
             gateway=FailingAnnotationGateway(),
         )
 
-    run = next(run for run in store.runs.values() if run.case_id == case.id)
+    run = store.list_analysis_runs(case.id)[0]
     assert run.status == "failed"
     assert run.error_message
     assert "gho_secret_token_1234567890" not in run.error_message
