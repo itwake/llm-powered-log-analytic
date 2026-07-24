@@ -113,7 +113,7 @@ here means *not overclaiming*, not *always answering*.
 
 Causal summaries are editable by owners/editors via
 `PATCH /api/cases/{case_id}/analysis-runs/{run_id}/causal-summary`, and users submit ratings through
-`POST /api/cases/{case_id}/feedback` (`apps/api/app/api/cases.py`). Model output is continuously
+`POST /api/cases/{case_id}/feedback` (`apps/api/app/api/reports.py`). Model output is continuously
 checked and corrected by operators.
 
 ### 8. Data governance reduces the risk surface
@@ -200,5 +200,5 @@ Stated plainly, because acknowledging them strengthens the reliability claim:
 | Evidence pointers | `EvidenceRef` in `apps/workers/logan_workers/models.py` |
 | White-box causal evidence | `CausalEdge` in `apps/workers/logan_workers/models.py` |
 | Annotation provenance | `TemplateAnnotation` in `apps/workers/logan_workers/models.py` |
-| Human-in-the-loop | `apps/api/app/api/cases.py` (feedback, causal-summary edit) |
+| Human-in-the-loop | `apps/api/app/api/reports.py` (feedback, causal-summary edit) |
 | Redaction before model calls | `apps/workers/logan_workers/activities/preprocessing.py`, `algorithms/redactors.py` |

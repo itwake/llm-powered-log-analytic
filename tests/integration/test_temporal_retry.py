@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import func, select
-
 from app.config import Settings
 from app.models import tables
 from app.sqlalchemy_store import SQLAlchemyStore
@@ -16,14 +14,18 @@ from logan_workers.workflows.analyze_case_workflow import (
     AnalyzeCaseParams,
     AnalyzeCaseWorkflow,
 )
-
+from sqlalchemy import func, select
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 
 
 def _store(tmp_path: Path) -> tuple[SQLAlchemyStore, str, str, str]:
     database_url = f"sqlite:///{tmp_path / 'logan-temporal-integration.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    app_settings = Settings(
+        database_url=database_url,
+        store_backend="sqlalchemy",
+        llm_provider="mock",
+    )
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     user = store.register_user(
         email="temporal-integration@example.com",

@@ -6,13 +6,12 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
-from fastapi import HTTPException
-from httpx import ASGITransport, AsyncClient
-
 from app.config import Settings
 from app.main import create_app
 from app.services.sso_auth_service import SsoAuthService, SsoUserProfile
-from app.store import InMemoryStore
+from app.store import create_ephemeral_store
+from fastapi import HTTPException
+from httpx import ASGITransport, AsyncClient
 
 
 def _unsigned_jwt(payload: dict[str, object]) -> str:
@@ -77,7 +76,7 @@ async def test_sso_exchange_code_reads_standard_claims() -> None:
 
 def test_sso_provision_user_rejects_conflicting_matches() -> None:
     settings = Settings(sso_enabled=True)
-    store = InMemoryStore(settings)
+    store = create_ephemeral_store(settings)
     store.register_user(
         email="first@example.com",
         username="first-user",
@@ -133,7 +132,7 @@ async def test_sso_callback_sets_logan_session_and_redirects_to_web() -> None:
         sso_token_url="https://sso.example.test/token",
         sso_client_id="webapp",
     )
-    store = InMemoryStore(settings)
+    store = create_ephemeral_store(settings)
     app = create_app(store=store)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as sso_http_client:
@@ -227,7 +226,7 @@ async def test_mock_sso_provider_can_complete_the_full_login_redirect_flow() -> 
         sso_mock_email="playwright-sso@example.com",
         sso_mock_full_name="Playwright SSO",
     )
-    store = InMemoryStore(settings)
+    store = create_ephemeral_store(settings)
     app = create_app(store=store)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as internal_http_client:

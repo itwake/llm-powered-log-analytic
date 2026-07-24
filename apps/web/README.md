@@ -48,7 +48,8 @@ apps/web/
     │       ├── settings/ai-platform/         # AI-Platform capabilities page
     │       └── admin/                        # admin console (gated on user.role === 'admin')
     ├── lib/
-    │   ├── api.ts             # THE typed REST/SSE client + every response interface (~1140 lines)
+    │   ├── api.ts             # public compatibility facade, upload API, response interfaces
+    │   └── api/               # shared HTTP, analysis, chat, and admin clients
     │   ├── auth.ts            # SSO URL builder
     │   ├── signals.ts         # golden-signal colors/order + text helpers (single source of truth)
     │   ├── analysisConfig.ts  # BACKGROUND_ANALYSIS_CONFIG — default run config
@@ -108,7 +109,7 @@ The web app talks to **`apps/api` only**, and only over HTTP from the browser. T
 
 | Contract point | Where | What to keep in sync |
 | --- | --- | --- |
-| REST + auth | `apps/web/src/lib/api.ts` → `${NEXT_PUBLIC_API_BASE_URL}` | Every call uses `credentials:'include'` so the cross-origin `logan_session` cookie is sent; the API's `LOGAN_CORS_ALLOWED_ORIGINS` must allow the web origin **with credentials**. |
+| REST + auth | `apps/web/src/lib/api/http.ts` → `${NEXT_PUBLIC_API_BASE_URL}` | Every call uses `credentials:'include'` so the cross-origin `logan_session` cookie is sent; the API's `LOGAN_CORS_ALLOWED_ORIGINS` must allow the web origin **with credentials**. |
 | Response types | `apps/web/src/lib/api.ts` interfaces | Hand-maintained mirror of the API's OpenAPI schema (`docs/openapi.snapshot.json`). Route/schema changes must be reflected here or the UI silently breaks. |
 | Pipeline steps | `apps/web/src/components/AnalysisProgressPanel.tsx` `PIPELINE_STEPS` | Must match the backend `PIPELINE_STEP_NAMES` order (a coupling to `apps/workers`). |
 | Run config | `apps/web/src/lib/analysisConfig.ts` `BACKGROUND_ANALYSIS_CONFIG` | The config the API/worker consume when a run is launched. |
@@ -135,7 +136,7 @@ npm run build --workspace @logan/web
 npm run start --workspace @logan/web
 ```
 
-`NEXT_PUBLIC_API_BASE_URL` is the **only** web-specific env var, and it is inlined at build/dev-start time. If empty, `api.ts` falls back to same-origin relative calls.
+`NEXT_PUBLIC_API_BASE_URL` is the **only** web-specific env var, and it is inlined at build/dev-start time. If empty, `api/http.ts` falls back to same-origin relative calls.
 
 ## Test, lint, typecheck
 
@@ -171,7 +172,7 @@ There is no unit-test runner. `lint` and `test` are identical; the only function
 2. Root [`CLAUDE.md`](../../CLAUDE.md) + `.env.example` — SSO-only auth, mock provider, and the API/web split.
 3. `apps/web/src/proxy.ts` — the edge auth gate and its public-path matcher.
 4. `apps/web/src/app/layout.tsx` + `providers.tsx` + `apps/web/src/theme.ts` — bootstrap and theming.
-5. `apps/web/src/lib/api.ts` — **the** central file: whole API surface, upload logic, SSE parser, every type.
+5. `apps/web/src/lib/api.ts` + `apps/web/src/lib/api/` — public facade/types plus focused HTTP, analysis, chat, and admin clients.
 6. `apps/web/src/components/Shell.tsx` — sidebar/header chrome and the client-side `me()` auth guard.
 7. `apps/web/src/app/(app)/cases/[caseId]/page.tsx` — the workspace tying upload, run polling, chat, and inspector together.
 8. `apps/web/src/components/AnalysisProgressPanel.tsx` — the 11-step pipeline mirror and progress model.
@@ -181,9 +182,9 @@ There is no unit-test runner. `lint` and `test` are identical; the only function
 
 ## Common tasks
 
-**Add a new report view/tab for a run.** Create `apps/web/src/app/(app)/cases/[caseId]/runs/[runId]/<name>/page.tsx` (client component; `useParams` for `caseId`/`runId`); add a `reportsApi.<name>()` call + response interface in `lib/api.ts`; add the tab to `analysisNavItems()` in `components/CaseAnalysisNav.tsx`. It inherits the run layout (the `CaseAnalysisNav` header) automatically.
+**Add a new report view/tab for a run.** Create `apps/web/src/app/(app)/cases/[caseId]/runs/[runId]/<name>/page.tsx` (client component; `useParams` for `caseId`/`runId`); add a `reportsApi.<name>()` call in `lib/api/analysis.ts` and its response interface in `lib/api.ts`; add the tab to `analysisNavItems()` in `components/CaseAnalysisNav.tsx`. It inherits the run layout (the `CaseAnalysisNav` header) automatically.
 
-**Add or change an API endpoint the UI calls.** Add the method + typed request/response interfaces to the relevant object (`casesApi`/`runsApi`/`reportsApi`/`adminApi`) in `lib/api.ts`. Reuse the `request<T>()` helper so `credentials:'include'` and error handling stay consistent. Keep the interface in sync with the backend OpenAPI schema.
+**Add or change an API endpoint the UI calls.** Add the method to the focused module under `lib/api/` and its typed request/response interface to the `lib/api.ts` public facade. Reuse the `request<T>()` helper from `lib/api/http.ts` so `credentials:'include'` and error handling stay consistent. Keep the interface in sync with the backend OpenAPI schema.
 
 **Adjust the pipeline step display after a backend change.** Edit the `PIPELINE_STEPS` array in `components/AnalysisProgressPanel.tsx` to match the new backend step names/order. If the default run config changed, update `BACKGROUND_ANALYSIS_CONFIG` in `lib/analysisConfig.ts`.
 
@@ -199,7 +200,7 @@ There is no unit-test runner. `lint` and `test` are identical; the only function
 - **`src/proxy.ts` is Next.js 16's renamed middleware** (exports `proxy` + a `config.matcher`). Don't look for `middleware.ts`. The matcher excludes `/api`, `/_next`, favicon, and any path containing a dot.
 - **`lint` and `test` are both `tsc --noEmit`.** No Jest/Vitest, no ESLint here. The only behavioral test is the root Playwright spec.
 - **Almost everything is a Client Component** (`"use client"`). The only true server pieces are the root `layout`, `page.tsx` (redirect), the `healthz` route, and `proxy.ts`. Data is fetched client-side in `useEffect`, not in Server Components/loaders — there is **no Redux/Zustand/React-Query**; state is local `useState` + `fetch`.
-- **Chat is real SSE; analysis progress is polling.** Chat parses a `fetch` `ReadableStream` (manual `\n\n` frame parsing in `api.ts`). Run progress is polled with `setInterval` every 2000ms in the workspace page until a terminal status. Don't confuse the two.
+- **Chat is real SSE; analysis progress is polling.** Chat parses a `fetch` `ReadableStream` (manual `\n\n` frame parsing in `api/chat.ts`). Run progress is polled with `setInterval` every 2000ms in the workspace page until a terminal status. Don't confuse the two.
 - **`NEXT_PUBLIC_API_BASE_URL` is inlined at build time.** Empty ⇒ same-origin relative calls (fine only if API and web share an origin). In Docker it's an `ARG` baked into the image, so changing it requires a rebuild.
 - **Cross-origin cookie auth is fragile.** Every request uses `credentials:'include'`, so a misconfigured `LOGAN_CORS_ALLOWED_ORIGINS` on the API silently breaks all data loading — you get a session but every fetch 401s/CORS-fails.
 - **Chart containers need explicit height** from `globals.css` (`.temporal-chart` / `.cytoscape-container`). ECharts and Cytoscape both attach to a ref'd div and must be disposed/destroyed in `useEffect` cleanup; forgetting height ⇒ a zero-size, invisible chart.

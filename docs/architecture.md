@@ -42,7 +42,7 @@ prompts, credentials, tokens, cookies, database URLs, S3 secrets, and full file 
 Production adapters are represented by SQLAlchemy models, migration DDL, Docker Compose services,
 and Kubernetes manifests. Metadata can run against SQLite or PostgreSQL through SQLAlchemy.
 Uploaded bytes use a local disk object store by default, so tests can still inject the
-deterministic in-memory store, mock model gateway, and fake S3 client
+isolated in-memory SQLite store, mock model gateway, and fake S3 client
 with no Docker services or external model network required. Production raw uploads can switch to
 S3/MinIO with `LOGAN_OBJECT_STORE_BACKEND=s3` or `minio`. Smaller files use the existing single
 presigned `PUT` path. Large files use S3 multipart sessions with durable upload metadata for the

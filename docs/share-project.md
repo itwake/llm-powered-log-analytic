@@ -60,7 +60,7 @@ The API does not contain most of the log analysis math. Its main job is to contr
 
 Inside this folder, `main.py` starts the application. The `api` folder contains the API routes. The `services` folder contains services for object storage, SSO, the model gateway, and external analytics systems.
 
-The project has two metadata stores. The normal store uses SQLAlchemy with SQLite or PostgreSQL. There is also an in-memory store for tests.
+The project has one metadata-store implementation: SQLAlchemy over SQLite or PostgreSQL. Tests use that same implementation with an isolated in-memory SQLite database.
 
 ### The worker application
 
