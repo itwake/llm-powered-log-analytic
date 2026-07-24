@@ -16,7 +16,7 @@ migrations; it is not a separate store backend.
 ## Development
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[dev]"
 uvicorn app.main:app --reload --app-dir apps/api --port 8000
 ```
 

@@ -7,7 +7,7 @@ Python analysis pipeline.
 
 ```bash
 python -m pytest
-python -m ruff check apps tests scripts
+python -m ruff check --select F apps tests scripts
 npm run lint
 python scripts/export_openapi.py --out docs/openapi.snapshot.json
 docker compose up -d --build

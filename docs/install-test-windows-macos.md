@@ -25,8 +25,8 @@ source .venv/bin/activate
 Install and test:
 
 ```bash
-python -m pip install -e .
-npm install
+python -m pip install -e ".[dev]"
+npm ci
 python -m pytest
 npm run lint
 ```

@@ -38,12 +38,22 @@ Use `docker compose down -v` only when you intentionally want to remove local ca
 
 Requirements: Python 3.11 or newer and Node.js 22 or newer.
 
+On Windows, the helper script creates the virtual environment, installs runtime dependencies,
+copies `.env.example` to `.env`, and starts both applications:
+
+```powershell
+.\scripts\local.ps1
+# cmd.exe alternative: scripts\local.bat
+```
+
+For a manual or non-Windows setup:
+
 ```bash
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
-python -m pip install -e .
-npm install
+python -m pip install -e ".[dev]"
+npm ci
 ```
 
 Copy `.env.example` values into your shell, then start the two processes:
@@ -102,9 +112,11 @@ Production mode validates that runtime secrets are not left at development defau
 
 ## Quality checks
 
+Run the shared local/CI checks with `make check`, or invoke them directly:
+
 ```bash
 python -m pytest
-python -m ruff check apps tests scripts
+python -m ruff check --select F apps tests scripts
 npm run lint
 npm run e2e
 ```

@@ -24,7 +24,7 @@ these remain candidates requiring validation.
 ## Development
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[dev]"
 python -m pytest tests/workers
 python -m logan_workers.evaluation.run \
   --benchmark benchmarks/logan/checkout_incident \

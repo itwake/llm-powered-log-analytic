@@ -4,11 +4,11 @@ NPM ?= npm
 SCALE_PROFILE ?= quick
 SCALE_TARGET_BYTES ?=
 
-.PHONY: setup up down migrate test evaluate scale-benchmark e2e lint api web demo demo-logs openapi-snapshot
+.PHONY: setup up down migrate test evaluate scale-benchmark e2e lint check api web demo demo-logs openapi-snapshot
 
 setup:
-	$(NPM) install
-	$(PYTHON) -m pip install -e .
+	$(NPM) ci
+	$(PYTHON) -m pip install -e ".[dev]"
 
 up:
 	$(COMPOSE) up -d --build
@@ -40,11 +40,13 @@ e2e:
 	$(NPM) run e2e
 
 lint:
-	$(PYTHON) -m compileall apps/api apps/workers
+	$(PYTHON) -m ruff check --select F apps tests scripts
 	$(NPM) run lint --workspace @logan/web
 
+check: lint test
+
 api:
-	uvicorn app.main:app --reload --app-dir apps/api --host 0.0.0.0 --port 8000
+	$(PYTHON) -m uvicorn app.main:app --reload --app-dir apps/api --host 0.0.0.0 --port 8000
 
 web:
 	$(NPM) run dev --workspace @logan/web

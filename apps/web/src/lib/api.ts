@@ -165,13 +165,6 @@ export interface UploadStartResponse {
   upload_url: string;
 }
 
-export interface UploadCompleteResponse {
-  file_id: string;
-  status: string;
-  sha256: string;
-  size_bytes: number;
-}
-
 export interface UploadContentResponse {
   file_id: string;
   status: string;
@@ -564,11 +557,6 @@ export const casesApi = {
       method: "POST",
       body: payload,
     }),
-  completeUpload: (caseId: string, fileId: string, sha256: string) =>
-    request<UploadCompleteResponse>(`/api/cases/${caseId}/uploads/${fileId}/complete`, {
-      method: "POST",
-      body: {sha256},
-  }),
   uploadContent: async (
     caseId: string,
     upload: UploadStartResponse,

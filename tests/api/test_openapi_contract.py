@@ -5,13 +5,11 @@ from pathlib import Path
 
 from scripts.export_openapi import current_openapi_schema
 
-
 REQUIRED_ENDPOINTS: dict[str, set[str]] = {
     "/api/cases": {"get", "post"},
     "/api/cases/{case_id}": {"delete", "get", "patch"},
     "/api/cases/{case_id}/uploads": {"post"},
     "/api/cases/{case_id}/uploads/{file_id}/content": {"put"},
-    "/api/cases/{case_id}/uploads/{file_id}/complete": {"post"},
     "/api/cases/{case_id}/analysis-runs": {"get", "post"},
     "/api/cases/{case_id}/analysis-runs/{run_id}": {"get"},
     "/api/cases/{case_id}/analysis-runs/{run_id}/cancel": {"post"},
@@ -34,6 +32,20 @@ def test_required_openapi_contract_paths_are_present() -> None:
     for path, methods in REQUIRED_ENDPOINTS.items():
         assert path in paths
         assert methods <= set(paths[path])
+
+
+def test_upload_contract_has_one_typed_content_step() -> None:
+    paths = current_openapi_schema()["paths"]
+
+    assert "/api/cases/{case_id}/uploads/{file_id}/complete" not in paths
+    start_schema = paths["/api/cases/{case_id}/uploads"]["post"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    content_schema = paths["/api/cases/{case_id}/uploads/{file_id}/content"]["put"]["responses"][
+        "200"
+    ]["content"]["application/json"]["schema"]
+    assert start_schema == {"$ref": "#/components/schemas/UploadStartResponse"}
+    assert content_schema == {"$ref": "#/components/schemas/UploadContentResponse"}
 
 
 def test_openapi_snapshot_matches_current_schema() -> None:

@@ -16,7 +16,6 @@ from app.services.object_store import (
     local_upload_object_uri,
     path_to_file_uri,
     safe_filename,
-    stat_object,
     write_bytes,
 )
 from app.store import JobEventRecord
@@ -68,16 +67,15 @@ def test_local_upload_uri_is_scoped_and_sanitized(tmp_path: Path) -> None:
     )
 
 
-def test_write_and_stat_object_share_digest(tmp_path: Path) -> None:
+def test_write_object_persists_content_and_digest(tmp_path: Path) -> None:
     content = b"2026-06-06T10:00:00Z ERROR gateway failed\n"
     uri = path_to_file_uri(tmp_path / "objects" / "incident.log")
 
     written = write_bytes(uri, content)
-    persisted = stat_object(uri)
 
-    assert written == persisted
-    assert persisted.sha256 == digest_bytes(content)[0]
-    assert persisted.size_bytes == len(content)
+    assert file_uri_to_path(uri).read_bytes() == content
+    assert written.sha256 == digest_bytes(content)[0]
+    assert written.size_bytes == len(content)
 
 
 def test_materialize_analysis_inputs_normalizes_file_uri(tmp_path: Path) -> None:

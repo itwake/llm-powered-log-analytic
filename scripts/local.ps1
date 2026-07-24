@@ -69,11 +69,11 @@ if (-not $SkipInstall) {
         }
     }
     if (-not $ApiOnly) {
-        Assert-Command npm "Install Node.js 20.9+ from https://nodejs.org/ and reopen the terminal."
+        Assert-Command npm "Install Node.js 22+ from https://nodejs.org/ and reopen the terminal."
         if (-not (Test-Path (Join-Path $repoRoot "node_modules"))) {
             Write-Host "Installing npm workspace dependencies ..."
-            npm install
-            if ($LASTEXITCODE -ne 0) { throw "npm install failed." }
+            npm ci
+            if ($LASTEXITCODE -ne 0) { throw "npm ci failed." }
         }
     }
 }

@@ -1094,18 +1094,13 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     case_id = await _create_case(client)
 
     content = b"2026-06-06T10:00:00Z ERROR gateway request failed status=500 path=/checkout\n"
-    uploaded = await _upload_content(
+    await _upload_content(
         client,
         case_id=case_id,
         filename="gateway.log",
         content_type="text/plain",
         content=content,
     )
-    complete = await client.post(
-        f"/api/cases/{case_id}/uploads/{uploaded['file_id']}/complete",
-        json={"sha256": uploaded["sha256"]},
-    )
-    assert complete.status_code == 200
 
     run = await client.post(
         f"/api/cases/{case_id}/analysis-runs",
@@ -1426,7 +1421,7 @@ async def test_chat_stream_gateway_error_frame_is_sanitized() -> None:
 
 
 @pytest.mark.asyncio
-async def test_raw_byte_upload_complete_idempotent_and_analysis_by_input_file_ids(
+async def test_local_upload_is_idempotent_and_analysis_accepts_file_ids(
     tmp_path: Path,
 ) -> None:
     client, store, _ = await _authenticated_client(
@@ -1455,16 +1450,19 @@ async def test_raw_byte_upload_complete_idempotent_and_analysis_by_input_file_id
     assert upload_record.object_uri.endswith("/incident.log")
     assert "\\" not in upload_record.object_uri
 
-    complete = await client.post(
-        f"/api/cases/{case_id}/uploads/{file_id}/complete",
-        json={"sha256": uploaded["sha256"]},
+    second_upload = await client.put(
+        f"/api/cases/{case_id}/uploads/{file_id}/content",
+        content=content,
+        headers={"content-type": "text/plain"},
     )
-    assert complete.status_code == 200, complete.text
-    second_complete = await client.post(
-        f"/api/cases/{case_id}/uploads/{file_id}/complete",
-        json={"sha256": uploaded["sha256"]},
+    assert second_upload.status_code == 200, second_upload.text
+
+    conflicting_upload = await client.put(
+        f"/api/cases/{case_id}/uploads/{file_id}/content",
+        content=content.replace(b"30000", b"30001"),
+        headers={"content-type": "text/plain"},
     )
-    assert second_complete.status_code == 200, second_complete.text
+    assert conflicting_upload.status_code == 409
 
     run = await client.post(
         f"/api/cases/{case_id}/analysis-runs",
@@ -1577,25 +1575,4 @@ async def test_zip_upload_analysis_by_input_file_ids_ingests_archive(tmp_path: P
     assert status.json()["progress"]["raw_lines"] == 2
     logs = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/logs")
     assert {item["file_path"] for item in logs.json()["items"]} == {"auth/auth.log", "gateway.log"}
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_upload_complete_sha_mismatch_returns_conflict(tmp_path: Path) -> None:
-    client, _, _ = await _authenticated_client(
-        Settings(local_object_store_dir=str(tmp_path / "object-store"))
-    )
-    case_id = await _create_case(client)
-    uploaded = await _upload_content(
-        client,
-        case_id=case_id,
-        filename="payment.log",
-        content_type="text/plain",
-        content=b"2026-06-06T10:00:00Z ERROR payment-service timeout calling auth-service\n",
-    )
-    mismatch = await client.post(
-        f"/api/cases/{case_id}/uploads/{uploaded['file_id']}/complete",
-        json={"sha256": "0" * 64},
-    )
-    assert mismatch.status_code == 409
     await client.aclose()

@@ -559,12 +559,6 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     assert uploaded.status_code == 200, uploaded.text
     assert uploaded.json()["sha256"] == expected_sha
 
-    complete = await client.post(
-        f"/api/cases/{case_id}/uploads/{file_id}/complete",
-        json={"sha256": expected_sha},
-    )
-    assert complete.status_code == 200, complete.text
-
     run = await client.post(
         f"/api/cases/{case_id}/analysis-runs",
         json={

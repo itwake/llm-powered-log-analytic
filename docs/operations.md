@@ -12,6 +12,13 @@ The Compose stack contains only API and web services. SQLite metadata and local 
 
 For local process development:
 
+```powershell
+.\scripts\local.ps1
+# cmd.exe alternative: scripts\local.bat
+```
+
+Or start the two processes manually:
+
 ```bash
 uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port 8000
 npm run dev --workspace @logan/web

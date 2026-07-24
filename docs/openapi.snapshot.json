@@ -1607,17 +1607,32 @@
         "title": "TaskExecuteRequest",
         "type": "object"
       },
-      "UploadCompleteRequest": {
+      "UploadContentResponse": {
         "properties": {
+          "file_id": {
+            "title": "File Id",
+            "type": "string"
+          },
           "sha256": {
             "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
             "type": "string"
           }
         },
         "required": [
-          "sha256"
+          "file_id",
+          "status",
+          "sha256",
+          "size_bytes"
         ],
-        "title": "UploadCompleteRequest",
+        "title": "UploadContentResponse",
         "type": "object"
       },
       "UploadRequest": {
@@ -1648,6 +1663,24 @@
           "size_bytes"
         ],
         "title": "UploadRequest",
+        "type": "object"
+      },
+      "UploadStartResponse": {
+        "properties": {
+          "file_id": {
+            "title": "File Id",
+            "type": "string"
+          },
+          "upload_url": {
+            "title": "Upload Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "upload_url"
+        ],
+        "title": "UploadStartResponse",
         "type": "object"
       },
       "UserOut": {
@@ -4030,9 +4063,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Request Upload Api Cases  Case Id  Uploads Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UploadStartResponse"
                 }
               }
             },
@@ -4050,69 +4081,6 @@
           }
         },
         "summary": "Request Upload",
-        "tags": [
-          "cases"
-        ]
-      }
-    },
-    "/api/cases/{case_id}/uploads/{file_id}/complete": {
-      "post": {
-        "operationId": "complete_upload_api_cases__case_id__uploads__file_id__complete_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "case_id",
-            "required": true,
-            "schema": {
-              "title": "Case Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "file_id",
-            "required": true,
-            "schema": {
-              "title": "File Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UploadCompleteRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Complete Upload Api Cases  Case Id  Uploads  File Id  Complete Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Complete Upload",
         "tags": [
           "cases"
         ]
@@ -4146,9 +4114,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Upload Content Api Cases  Case Id  Uploads  File Id  Content Put",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UploadContentResponse"
                 }
               }
             },

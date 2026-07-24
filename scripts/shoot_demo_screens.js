@@ -1,9 +1,16 @@
-/* Tutorial screenshot set. Usage: node shoot2.js <caseId> <runId> <outDir> */
+/* Usage: node scripts/shoot_demo_screens.js <caseId> <runId> <outDir> */
 const { chromium } = require("@playwright/test");
 const fs = require("fs");
 
 const [caseId, runId, outDir] = process.argv.slice(2);
-const base = "http://localhost:3000";
+if (!caseId || !runId || !outDir) {
+  console.error(
+    "Usage: node scripts/shoot_demo_screens.js <caseId> <runId> <outDir>",
+  );
+  process.exit(2);
+}
+
+const base = (process.env.LOGAN_DEMO_WEB_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 const run = `${base}/cases/${caseId}/runs/${runId}`;
 
 (async () => {

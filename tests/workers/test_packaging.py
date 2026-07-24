@@ -9,10 +9,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_removed_infrastructure_is_not_packaged() -> None:
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    dependencies = "\n".join(pyproject["project"]["dependencies"]).lower()
+    project = pyproject["project"]
+    dependencies = [
+        *project["dependencies"],
+        *(
+            dependency
+            for extra in project.get("optional-dependencies", {}).values()
+            for dependency in extra
+        ),
+    ]
+    dependency_text = "\n".join(dependencies).lower()
 
     for removed in ("boto3", "drain3", "opentelemetry", "temporalio"):
-        assert removed not in dependencies
+        assert removed not in dependency_text
 
 
 def test_analysis_engine_does_not_import_api_package() -> None:

@@ -71,8 +71,16 @@ class UploadRequest(BaseModel):
     size_bytes: int = Field(ge=0)
 
 
-class UploadCompleteRequest(BaseModel):
+class UploadStartResponse(BaseModel):
+    file_id: str
+    upload_url: str
+
+
+class UploadContentResponse(BaseModel):
+    file_id: str
+    status: str
     sha256: str
+    size_bytes: int
 
 
 class AnalysisRunRequest(BaseModel):

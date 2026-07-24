@@ -21,14 +21,14 @@ from app.schemas.case import (
     CaseUpdateRequest,
     JobEventListResponse,
     JobEventResponse,
-    UploadCompleteRequest,
+    UploadContentResponse,
     UploadRequest,
+    UploadStartResponse,
 )
 from app.services.model_gateway import ModelCredentialError, ModelGatewayError
 from app.services.object_store import (
     digest_bytes,
     file_uri_to_path,
-    stat_object,
     write_bytes,
 )
 from app.store import MetadataStore, UserRecord, sanitize_error_message
@@ -371,13 +371,13 @@ def remove_case_collaborator(
     return {"status": "removed" if removed else "not_found", "removed": removed}
 
 
-@router.post("/{case_id}/uploads")
+@router.post("/{case_id}/uploads", response_model=UploadStartResponse)
 def request_upload(
     case_id: str,
     payload: UploadRequest,
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
-) -> dict[str, object]:
+) -> UploadStartResponse:
     require_case_permission(
         store=store,
         user=user,
@@ -391,20 +391,24 @@ def request_upload(
         content_type=payload.content_type,
         size_bytes=payload.size_bytes,
     )
-    return {
-        "file_id": upload.id,
-        "upload_url": f"/api/cases/{case_id}/uploads/{upload.id}/content",
-    }
+    return UploadStartResponse(
+        file_id=upload.id,
+        upload_url=f"/api/cases/{case_id}/uploads/{upload.id}/content",
+    )
 
 
-@router.put("/{case_id}/uploads/{file_id}/content", name="upload_content")
+@router.put(
+    "/{case_id}/uploads/{file_id}/content",
+    name="upload_content",
+    response_model=UploadContentResponse,
+)
 async def upload_content(
     request: Request,
     case_id: str,
     file_id: str,
     user: UserRecord = Depends(current_user),
     store: MetadataStore = Depends(get_store),
-) -> dict[str, object]:
+) -> UploadContentResponse:
     require_case_permission(
         store=store,
         user=user,
@@ -436,54 +440,9 @@ async def upload_content(
             detail="raw upload content is only supported for local file-backed uploads",
         ) from exc
     upload = store.complete_upload(upload_id=file_id, sha256=stored.sha256)
-    return _completed_upload_response(upload, size_bytes=stored.size_bytes)
-
-
-@router.post("/{case_id}/uploads/{file_id}/complete")
-def complete_upload(
-    case_id: str,
-    file_id: str,
-    payload: UploadCompleteRequest,
-    user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
-) -> dict[str, object]:
-    require_case_permission(
-        store=store,
-        user=user,
-        case_id=case_id,
-        permission="edit",
-        hide_forbidden=False,
+    return UploadContentResponse.model_validate(
+        _completed_upload_response(upload, size_bytes=stored.size_bytes)
     )
-    upload_record = _require_upload_for_case(store, case_id, file_id)
-    if upload_record.completed:
-        if upload_record.sha256 != payload.sha256:
-            raise HTTPException(
-                status_code=409,
-                detail="upload already completed with different sha256",
-            )
-        return _completed_upload_response(upload_record)
-    try:
-        stored = stat_object(upload_record.object_uri)
-    except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="upload content has not been uploaded",
-        ) from exc
-    if upload_record.size_bytes != stored.size_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"upload size mismatch: expected {upload_record.size_bytes} bytes, "
-                f"found {stored.size_bytes} bytes"
-            ),
-        )
-    if stored.sha256 != payload.sha256:
-        raise HTTPException(
-            status_code=409,
-            detail="upload sha256 does not match stored content",
-        )
-    upload = store.complete_upload(upload_id=file_id, sha256=payload.sha256)
-    return _completed_upload_response(upload)
 
 
 @router.post("/{case_id}/analysis-runs")

@@ -5,8 +5,8 @@
 ```bash
 python -m venv .venv
 # activate the environment
-python -m pip install -e .
-npm install
+python -m pip install -e ".[dev]"
+npm ci
 python -m pytest
 npm run lint
 ```
@@ -40,11 +40,12 @@ reports, or client errors. Model calls receive redacted representative samples o
 ## Verification
 
 ```bash
-python -m ruff check apps tests scripts
+python -m ruff check --select F apps tests scripts
 python -m pytest
 npm run lint
 npm run e2e
 ```
 
+`make check` runs the first three non-browser checks through the same repository entrypoints.
 Tests must not make unapproved network calls. Use the mock model gateway and mock SSO provider for
 deterministic local and CI behavior.

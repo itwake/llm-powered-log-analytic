@@ -19,6 +19,13 @@ dependencies = [
   "prometheus-client>=0.20"
 ]
 
+[project.optional-dependencies]
+dev = [
+  "pytest>=9",
+  "pytest-asyncio>=1",
+  "ruff>=0.15"
+]
+
 [tool.setuptools.packages.find]
 where = ["apps/api", "apps/workers"]
 

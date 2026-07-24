@@ -311,6 +311,7 @@ python scripts/seed_demo_case.py --logs-dir demo/logs   # seed this exact demo
 - Quick start, Docker options, and docs: see the repository README
 - Regenerate the demo logs: `python scripts/generate_demo_logs.py`
 - Regenerate these screenshots: `node scripts/shoot_demo_screens.js <caseId> <runId> docs/images/demo`
+- Capture a non-default web URL by setting `LOGAN_DEMO_WEB_BASE_URL` before the screenshot command
 - Present this deck: `npx slidev docs/demo-guide.md`
 
 <!--

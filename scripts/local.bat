@@ -62,12 +62,12 @@ if defined API_ONLY goto ensure_env
 :install_web
 where npm >nul 2>nul
 if errorlevel 1 (
-    echo npm was not found on PATH. Install Node.js 20.9+ from https://nodejs.org/ and reopen the terminal.
+    echo npm was not found on PATH. Install Node.js 22+ from https://nodejs.org/ and reopen the terminal.
     exit /b 1
 )
 if not exist "%REPO_ROOT%\node_modules" (
     echo Installing npm workspace dependencies ...
-    call npm install
+    call npm ci
     if errorlevel 1 exit /b 1
 )
 

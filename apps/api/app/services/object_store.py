@@ -80,27 +80,9 @@ def digest_bytes(content: bytes) -> tuple[str, int]:
     return hashlib.sha256(content).hexdigest(), len(content)
 
 
-def digest_file(path: Path) -> tuple[str, int]:
-    digest = hashlib.sha256()
-    size_bytes = 0
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-            size_bytes += len(chunk)
-    return digest.hexdigest(), size_bytes
-
-
 def write_bytes(object_uri: str, content: bytes) -> StoredObject:
     path = file_uri_to_path(object_uri)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
     sha256, size_bytes = digest_bytes(content)
-    return StoredObject(object_uri=object_uri, sha256=sha256, size_bytes=size_bytes)
-
-
-def stat_object(object_uri: str) -> StoredObject:
-    path = file_uri_to_path(object_uri)
-    if not path.is_file():
-        raise FileNotFoundError(path)
-    sha256, size_bytes = digest_file(path)
     return StoredObject(object_uri=object_uri, sha256=sha256, size_bytes=size_bytes)
