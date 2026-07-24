@@ -24,8 +24,6 @@ export interface UploadProgressEvent {
   phase: UploadProgressPhase;
   bytesSent: number;
   totalBytes: number;
-  partNumber?: number;
-  partCount?: number;
   message?: string;
 }
 
@@ -41,7 +39,6 @@ interface UploadContentOptions {
   fileIndex?: number;
   totalFiles?: number;
   onProgress?: UploadProgressCallback;
-  multipart?: boolean;
 }
 
 function emitUploadProgress(
@@ -80,70 +77,6 @@ async function uploadRawFile(
     }),
   });
   return parseXhrPayload(xhr) as UploadContentResponse;
-}
-
-async function sha256File(file: File): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function uploadPresignedFile(
-  upload: UploadStartResponse,
-  file: File,
-  context: UploadProgressContext,
-): Promise<void> {
-  if (!upload.upload_url) {
-    throw new Error("upload response did not include an upload URL");
-  }
-  const headers = new Headers(upload.upload_headers || {});
-  await xhrUpload(upload.upload_url, file, {
-    headers,
-    onProgress: (loaded) => emitUploadProgress(context, file, {
-      fileId: upload.file_id,
-      phase: "uploading",
-      bytesSent: loaded,
-    }),
-  });
-}
-
-async function uploadMultipartFile(
-  upload: UploadStartResponse,
-  file: File,
-  context: UploadProgressContext,
-): Promise<{sha256: string; parts: MultipartCompletePart[]}> {
-  if (!upload.multipart_upload_id || !upload.part_size_bytes || !upload.parts?.length) {
-    throw new Error("multipart upload response is incomplete");
-  }
-  const completedParts: MultipartCompletePart[] = [];
-  const sortedParts = [...upload.parts].sort((left, right) => left.part_number - right.part_number);
-  let completedBytes = 0;
-  for (const part of sortedParts) {
-    const start = (part.part_number - 1) * upload.part_size_bytes;
-    const end = Math.min(start + upload.part_size_bytes, file.size);
-    const chunk = file.slice(start, end);
-    const xhr = await xhrUpload(part.upload_url, chunk, {
-      headers: new Headers(part.upload_headers || {}),
-      onProgress: (loaded) => emitUploadProgress(context, file, {
-        fileId: upload.file_id,
-        phase: "uploading",
-        bytesSent: completedBytes + loaded,
-        partNumber: part.part_number,
-        partCount: sortedParts.length,
-      }),
-    });
-    const etag = xhr.getResponseHeader("etag");
-    if (!etag) {
-      throw new Error(`multipart part ${part.part_number} did not return an ETag`);
-    }
-    completedParts.push({part_number: part.part_number, etag});
-    completedBytes += chunk.size;
-  }
-  emitUploadProgress(context, file, {
-    fileId: upload.file_id,
-    phase: "hashing",
-    bytesSent: file.size,
-  });
-  return {sha256: await sha256File(file), parts: completedParts};
 }
 
 export interface UserOut {
@@ -225,40 +158,11 @@ export interface UploadRequest {
   filename: string;
   content_type?: string | null;
   size_bytes: number;
-  multipart?: boolean | null;
-  part_size_bytes?: number | null;
-}
-
-export interface MultipartUploadPartUrl {
-  part_number: number;
-  upload_url: string;
-  upload_headers: Record<string, string>;
-}
-
-export interface MultipartUploadedPart {
-  part_number: number;
-  etag: string;
-  size_bytes: number;
-}
-
-export interface MultipartCompletePart {
-  part_number: number;
-  etag: string;
 }
 
 export interface UploadStartResponse {
   file_id: string;
-  upload_url?: string;
-  object_uri?: string | null;
-  upload_backend?: "local" | "s3" | "minio" | string;
-  upload_mode?: "single" | "multipart" | string;
-  upload_headers?: Record<string, string>;
-  multipart_upload_id?: string;
-  part_size_bytes?: number;
-  part_count?: number;
-  parts?: MultipartUploadPartUrl[];
-  uploaded_parts?: MultipartUploadedPart[];
-  expires_in: number;
+  upload_url: string;
 }
 
 export interface UploadCompleteResponse {
@@ -565,16 +469,8 @@ export interface CapabilitiesResponse {
 
 export interface AdminSettingsResponse {
   env: string;
-  store_backend: string;
-  configured_store_backend: string;
-  object_backend: string;
-  orchestrator: string;
   retention_days: Record<string, number>;
-  rate_limit: {
-    enabled: boolean;
-    requests_per_minute: number;
-  };
-  analytics: Record<string, string | boolean>;
+  metrics_enabled: boolean;
 }
 
 export interface RetentionRunResponse {
@@ -668,22 +564,10 @@ export const casesApi = {
       method: "POST",
       body: payload,
     }),
-  refreshMultipartUpload: (caseId: string, fileId: string) =>
-    request<UploadStartResponse>(`/api/cases/${caseId}/uploads/${fileId}/multipart`),
-  abortMultipartUpload: (caseId: string, fileId: string) =>
-    request<{file_id: string; status: string; aborted_at: string}>(
-      `/api/cases/${caseId}/uploads/${fileId}/multipart`,
-      {method: "DELETE"},
-    ),
-  completeUpload: (
-    caseId: string,
-    fileId: string,
-    sha256: string,
-    multipart?: {multipart_upload_id: string; parts: MultipartCompletePart[]},
-  ) =>
+  completeUpload: (caseId: string, fileId: string, sha256: string) =>
     request<UploadCompleteResponse>(`/api/cases/${caseId}/uploads/${fileId}/complete`, {
       method: "POST",
-      body: multipart ? {sha256, ...multipart} : {sha256},
+      body: {sha256},
   }),
   uploadContent: async (
     caseId: string,
@@ -696,49 +580,12 @@ export const casesApi = {
       totalFiles: options?.totalFiles ?? 1,
       onProgress: options?.onProgress,
     };
-    if (upload.upload_mode === "multipart") {
-      if (!upload.multipart_upload_id) {
-        throw new Error("multipart upload response is missing an upload id");
-      }
-      const multipartUploadId = upload.multipart_upload_id;
-      const completed = await uploadMultipartFile(upload, file, context);
-      emitUploadProgress(context, file, {
-        fileId: upload.file_id,
-        phase: "verifying",
-        bytesSent: file.size,
-        message: "Completing multipart upload",
-      });
-      return casesApi.completeUpload(caseId, upload.file_id, completed.sha256, {
-        multipart_upload_id: multipartUploadId,
-        parts: completed.parts,
-      });
-    }
-    if (upload.upload_backend === "s3" || upload.upload_backend === "minio") {
-      emitUploadProgress(context, file, {
-        fileId: upload.file_id,
-        phase: "hashing",
-        bytesSent: 0,
-      });
-      const sha256 = await sha256File(file);
-      await uploadPresignedFile(upload, file, context);
-      emitUploadProgress(context, file, {
-        fileId: upload.file_id,
-        phase: "verifying",
-        bytesSent: file.size,
-        message: "Verifying object storage upload",
-      });
-      return casesApi.completeUpload(caseId, upload.file_id, sha256);
-    }
-    if (!upload.upload_url) {
-      throw new Error("upload response did not include an upload URL");
-    }
     return uploadRawFile(upload.upload_url, file, context, upload.file_id);
   },
   uploadFiles: async (
     caseId: string,
     files: File[],
     options?: {
-      multipart?: boolean;
       onProgress?: UploadProgressCallback;
     },
   ) => {
@@ -758,7 +605,6 @@ export const casesApi = {
         filename: file.name || "upload.bin",
         content_type: file.type || null,
         size_bytes: file.size,
-        multipart: options?.multipart || null,
       });
       emitUploadProgress(context, file, {
         fileId: upload.file_id,
@@ -767,7 +613,6 @@ export const casesApi = {
       });
       const completed = await casesApi.uploadContent(caseId, upload, file, {
         ...context,
-        multipart: options?.multipart,
       });
       emitUploadProgress(context, file, {
         fileId: upload.file_id,

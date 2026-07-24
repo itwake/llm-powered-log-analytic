@@ -15,7 +15,6 @@ from app.store import (
     DEFAULT_ORGANIZATION_ID,
     MetadataStore,
     create_ephemeral_store,
-    merge_analysis_result_progress,
 )
 from httpx import ASGITransport, AsyncClient
 from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
@@ -34,17 +33,6 @@ PIPELINE_STEPS = [
     "causal_summary",
     "export_artifacts",
 ]
-
-
-def test_merge_analysis_result_progress_preserves_orchestrator() -> None:
-    assert merge_analysis_result_progress(
-        {"current_step": "workflow_start", "orchestrator": "temporal"},
-        {"current_step": "completed", "files_processed": 3},
-    ) == {
-        "current_step": "completed",
-        "files_processed": 3,
-        "orchestrator": "temporal",
-    }
 
 
 def test_job_event_progress_logs_are_safe(caplog: pytest.LogCaptureFixture) -> None:
@@ -129,8 +117,7 @@ async def test_cors_allowed_origins_are_configurable() -> None:
 class FailingAnnotationGateway(MockAIPlatformAnnotationGateway):
     async def responses(self, **kwargs):
         raise RuntimeError(
-            "annotation failed source_token=gho_secret_token_1234567890 "
-            "password=hunter2"
+            "annotation failed source_token=gho_secret_token_1234567890 password=hunter2"
         )
 
 
@@ -160,100 +147,14 @@ class StreamingErrorGateway(MockAIPlatformAnnotationGateway):
         return await super().responses(**kwargs)
 
 
-class FakeS3NotFound(Exception):
-    response = {"Error": {"Code": "NoSuchKey"}}
-
-
-class FakeS3Client:
-    def __init__(self) -> None:
-        self.objects: dict[tuple[str, str], dict[str, object]] = {}
-        self.complete_objects: dict[tuple[str, str, str], dict[str, object]] = {}
-        self.uploaded_parts: dict[tuple[str, str, str], list[dict[str, object]]] = {}
-        self.presign_calls: list[dict[str, object]] = []
-        self.head_calls: list[dict[str, str]] = []
-        self.download_calls: list[dict[str, str]] = []
-        self.get_object_calls: list[dict[str, str]] = []
-        self.create_multipart_calls: list[dict[str, object]] = []
-        self.complete_multipart_calls: list[dict[str, object]] = []
-        self.abort_multipart_calls: list[dict[str, str]] = []
-        self.list_parts_calls: list[dict[str, object]] = []
-        self._upload_counter = 0
-
-    def generate_presigned_url(self, operation: str, **kwargs: object) -> str:
-        self.presign_calls.append({"operation": operation, **kwargs})
-        params = kwargs.get("Params")
-        assert isinstance(params, dict)
-        signature = f"fake-{len(self.presign_calls)}"
-        if operation == "upload_part":
-            return (
-                f"https://minio.example/{params['Bucket']}/{params['Key']}"
-                f"?uploadId={params['UploadId']}&partNumber={params['PartNumber']}"
-                f"&signature={signature}"
-            )
-        return f"https://minio.example/{params['Bucket']}/{params['Key']}?signature={signature}"
-
-    def head_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
-        self.head_calls.append({"Bucket": Bucket, "Key": Key})
-        try:
-            return self.objects[(Bucket, Key)]
-        except KeyError as exc:
-            raise FakeS3NotFound() from exc
-
-    def _object_body(self, *, Bucket: str, Key: str) -> bytes:
-        body = self.objects[(Bucket, Key)].get("Body", b"")
-        if isinstance(body, bytes):
-            return body
-        if isinstance(body, bytearray):
-            return bytes(body)
-        if hasattr(body, "read"):
-            content = body.read()
-            return bytes(content)
-        return bytes(str(body), encoding="utf-8")
-
-    def download_file(self, *, Bucket: str, Key: str, Filename: str) -> None:
-        self.download_calls.append({"Bucket": Bucket, "Key": Key, "Filename": Filename})
-        Path(Filename).write_bytes(self._object_body(Bucket=Bucket, Key=Key))
-
-    def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
-        self.get_object_calls.append({"Bucket": Bucket, "Key": Key})
-        return {"Body": io.BytesIO(self._object_body(Bucket=Bucket, Key=Key))}
-
-    def create_multipart_upload(self, **kwargs: object) -> dict[str, object]:
-        self._upload_counter += 1
-        upload_id = f"multipart-{self._upload_counter}"
-        self.create_multipart_calls.append({**kwargs, "UploadId": upload_id})
-        return {"UploadId": upload_id}
-
-    def list_parts(self, **kwargs: object) -> dict[str, object]:
-        self.list_parts_calls.append(dict(kwargs))
-        key = (str(kwargs["Bucket"]), str(kwargs["Key"]), str(kwargs["UploadId"]))
-        return {"Parts": self.uploaded_parts.get(key, [])}
-
-    def complete_multipart_upload(self, **kwargs: object) -> dict[str, object]:
-        self.complete_multipart_calls.append(dict(kwargs))
-        bucket = str(kwargs["Bucket"])
-        key = str(kwargs["Key"])
-        upload_id = str(kwargs["UploadId"])
-        completed_object = self.complete_objects.get((bucket, key, upload_id))
-        if completed_object is not None:
-            self.objects[(bucket, key)] = completed_object
-        return {"Bucket": bucket, "Key": key, "UploadId": upload_id}
-
-    def abort_multipart_upload(self, **kwargs: str) -> dict[str, object]:
-        self.abort_multipart_calls.append(dict(kwargs))
-        return {}
-
-
 async def _authenticated_client(
     app_settings: Settings | None = None,
-    s3_client_factory=None,
     model_gateway=None,
 ) -> tuple[AsyncClient, MetadataStore, str]:
     store = create_ephemeral_store(app_settings or Settings())
     app = create_app(
         store=store,
         model_gateway=model_gateway or MockAIPlatformAnnotationGateway(),
-        s3_client_factory=s3_client_factory,
     )
     transport = ASGITransport(app=app)
     client = AsyncClient(transport=transport, base_url="http://testserver")
@@ -460,81 +361,6 @@ async def test_prometheus_metrics_endpoint_records_safe_api_request_metrics() ->
 
 
 @pytest.mark.asyncio
-async def test_temporal_start_path_passes_safe_workflow_params(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    async def fake_start_analyze_case_workflow(**kwargs: object) -> object:
-        captured.update(kwargs)
-        return object()
-
-    monkeypatch.setattr(
-        "logan_workers.temporal_client.start_analyze_case_workflow",
-        fake_start_analyze_case_workflow,
-    )
-    client, store, _ = await _authenticated_client(
-        Settings(
-            analysis_orchestrator="temporal",
-            temporal_address="temporal.test:7233",
-            temporal_namespace="logan-test",
-            temporal_task_queue="logan-analysis-test",
-            temporal_activity_start_to_close_seconds=17,
-            temporal_activity_max_attempts=4,
-            database_url="postgresql+psycopg://logan:secret@postgres/logan",
-            github_source_token="gho_source_secret_1234567890",
-            ai_platform_token="ai_platform_secret_1234567890",
-            s3_access_key="access-key",
-            s3_secret_key="secret-key",
-        )
-    )
-    case_id = await _create_case(client)
-
-    response = await client.post(
-        f"/api/cases/{case_id}/analysis-runs",
-        json={
-            "input_paths": [str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
-            "config": {
-                "default_window_size_seconds": 60,
-                "model": {"model": "gpt-5.4"},
-                "api_key": "sk-should-not-enter-history",
-                "database_url": "postgresql://secret",
-                "nested": {
-                    "keep": 1,
-                    "source_token": "gho_nested_secret_1234567890",
-                },
-            },
-        },
-    )
-
-    assert response.status_code == 200, response.text
-    run_id = response.json()["analysis_run_id"]
-    run = store.get_analysis_run(run_id)
-    assert run is not None
-    assert run.status == "processing"
-    assert run.progress == {"current_step": "workflow_start", "orchestrator": "temporal"}
-    assert captured["case_id"] == case_id
-    assert captured["analysis_run_id"] == run_id
-    assert captured["activity_start_to_close_seconds"] == 17
-    assert captured["activity_max_attempts"] == 4
-    workflow_config = captured["config"]
-    assert isinstance(workflow_config, dict)
-    assert workflow_config["model"] == {"model": "gpt-5.4"}
-    assert workflow_config["nested"] == {"keep": 1}
-    assert "api_key" not in workflow_config
-    assert "database_url" not in workflow_config
-    serialized_capture = json.dumps(
-        {
-            "paths": captured["paths"],
-            "case_context": captured["case_context"],
-            "config": workflow_config,
-        },
-        sort_keys=True,
-    )
-    assert "secret" not in serialized_capture.lower()
-    assert "token" not in serialized_capture.lower()
-    await client.aclose()
-
-
-@pytest.mark.asyncio
 async def test_auth_api_and_ai_platform_only_auth_surface() -> None:
     client, _, _ = await _authenticated_client()
     me = await client.get("/api/auth/me")
@@ -547,9 +373,7 @@ async def test_auth_api_and_ai_platform_only_auth_surface() -> None:
 
 @pytest.mark.asyncio
 async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None:
-    store = create_ephemeral_store(
-        Settings(local_object_store_dir=str(tmp_path / "object-store"))
-    )
+    store = create_ephemeral_store(Settings(local_object_store_dir=str(tmp_path / "object-store")))
     app = create_app(
         store=store,
         model_gateway=MockAIPlatformAnnotationGateway(),
@@ -595,8 +419,12 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
 
     assert (await collaborator.get("/api/cases")).json()["total"] == 0
     assert (await collaborator.get(f"/api/cases/{case_id}")).status_code == 404
-    assert (await anonymous.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")).status_code == 401
-    assert (await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")).status_code == 404
+    assert (
+        await anonymous.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")
+    ).status_code == 401
+    assert (
+        await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")
+    ).status_code == 404
     forbidden_upload = await collaborator.post(
         f"/api/cases/{case_id}/uploads",
         json={"filename": "blocked.log", "content_type": "text/plain", "size_bytes": 10},
@@ -620,9 +448,15 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
     assert visible_cases.status_code == 200
     assert visible_cases.json()["total"] == 1
     assert (await collaborator.get(f"/api/cases/{case_id}")).status_code == 200
-    assert (await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/events")).status_code == 200
-    assert (await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")).status_code == 200
-    assert (await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")).status_code == 200
+    assert (
+        await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/events")
+    ).status_code == 200
+    assert (
+        await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/artifacts")
+    ).status_code == 200
+    assert (
+        await collaborator.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
+    ).status_code == 200
     viewer_start = await collaborator.post(
         f"/api/cases/{case_id}/analysis-runs",
         json={"input_paths": [], "config": {"default_window_size_seconds": 60}},
@@ -690,9 +524,7 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
 
 @pytest.mark.asyncio
 async def test_organization_isolation_and_policy_group_case_access(tmp_path: Path) -> None:
-    store = create_ephemeral_store(
-        Settings(local_object_store_dir=str(tmp_path / "object-store"))
-    )
+    store = create_ephemeral_store(Settings(local_object_store_dir=str(tmp_path / "object-store")))
     store.ensure_organization(
         organization_id="org-two",
         name="Second Organization",
@@ -853,13 +685,7 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
     store = create_ephemeral_store(
         Settings(
             database_url="postgresql://logan:db-secret@postgres/logan",
-            github_source_token="gho_source_secret",
             ai_platform_token="ai-platform-secret",
-            s3_access_key="access-secret",
-            s3_secret_key="s3-secret",
-            clickhouse_password="clickhouse-secret",
-            opensearch_password="opensearch-secret",
-            rate_limit_enabled=False,
         )
     )
     app = create_app(
@@ -897,12 +723,7 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
     settings_text = settings_response.text.lower()
     for forbidden in (
         "db-secret",
-        "gho_source_secret",
         "ai-platform-secret",
-        "access-secret",
-        "s3-secret",
-        "clickhouse-secret",
-        "opensearch-secret",
         "database_url",
         "token",
         "password",
@@ -1089,9 +910,7 @@ async def test_scim_users_and_groups_support_bearer_and_admin_session() -> None:
         f"/api/scim/v2/Groups/{group_id}",
         json={
             "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
-            "Operations": [
-                {"op": "remove", "path": "members", "value": [{"value": scim_user_id}]}
-            ],
+            "Operations": [{"op": "remove", "path": "members", "value": [{"value": scim_user_id}]}],
         },
     )
     assert removed.status_code == 200, removed.text
@@ -1265,53 +1084,10 @@ async def test_audit_export_and_metadata_redaction_block_adversarial_payloads() 
 
 
 @pytest.mark.asyncio
-async def test_api_rate_limit_only_when_enabled() -> None:
-    disabled_store = create_ephemeral_store(
-        Settings(rate_limit_enabled=False, rate_limit_requests_per_minute=1)
-    )
-    disabled_app = create_app(
-        store=disabled_store,        model_gateway=MockAIPlatformAnnotationGateway(),
-    )
-    disabled_client = AsyncClient(
-        transport=ASGITransport(app=disabled_app),
-        base_url="http://testserver",
-    )
-    assert (await disabled_client.get("/api/cases")).status_code == 401
-    assert (await disabled_client.get("/api/cases")).status_code == 401
-    await disabled_client.aclose()
-
-    enabled_store = create_ephemeral_store(
-        Settings(rate_limit_enabled=True, rate_limit_requests_per_minute=2)
-    )
-    enabled_app = create_app(
-        store=enabled_store,        model_gateway=MockAIPlatformAnnotationGateway(),
-    )
-    enabled_client = AsyncClient(
-        transport=ASGITransport(app=enabled_app),
-        base_url="http://testserver",
-    )
-    assert (await enabled_client.get("/api/cases")).status_code == 401
-    assert (await enabled_client.get("/api/cases")).status_code == 401
-    limited = await enabled_client.get("/api/cases")
-    assert limited.status_code == 429
-    assert "rate limit exceeded" in limited.json()["detail"]
-    body = (await enabled_client.get("/metrics")).text
-    assert 'logan_rate_limit_rejections_total{key_type="ip"}' in body
-    assert "127.0.0.1" not in body
-    assert "session:" not in body
-    assert "logan_session" not in body
-    assert "gho_secret_token_1234567890" not in body
-    assert "password=hunter2" not in body
-    await enabled_client.aclose()
-
-
-@pytest.mark.asyncio
 async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
     client, store, _ = await _authenticated_client(
         Settings(
-            object_store_backend="local",
             local_object_store_dir=str(tmp_path / "object-store"),
-            step_artifacts_enabled=True,
             step_artifact_failure_mode="fail",
         )
     )
@@ -1641,11 +1417,7 @@ async def test_chat_stream_gateway_error_frame_is_sanitized() -> None:
     assert frames == [
         (
             "error",
-            {
-                "message": (
-                    "stream failed source_token=<REDACTED> password=<REDACTED>"
-                )
-            },
+            {"message": ("stream failed source_token=<REDACTED> password=<REDACTED>")},
         )
     ]
     assert "gho_secret_token_1234567890" not in response.text
@@ -1826,493 +1598,4 @@ async def test_upload_complete_sha_mismatch_returns_conflict(tmp_path: Path) -> 
         json={"sha256": "0" * 64},
     )
     assert mismatch.status_code == 409
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_upload_complete_uses_head_object_and_presigned_url() -> None:
-    fake_s3 = FakeS3Client()
-    client, store, _ = await _authenticated_client(
-        Settings(
-            object_store_backend="s3",
-            s3_bucket="logan",
-            s3_access_key="access",
-            s3_secret_key="secret",
-        ),
-        s3_client_factory=lambda _: fake_s3,
-    )
-    case_id = await _create_case(client)
-    content = b"2026-06-06T10:00:00Z ERROR gateway request failed\n"
-    expected_sha = hashlib.sha256(content).hexdigest()
-
-    upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "../incident.log", "content_type": "text/plain", "size_bytes": len(content)},
-    )
-    assert upload.status_code == 200, upload.text
-    payload = upload.json()
-    file_id = payload["file_id"]
-    assert payload["upload_backend"] == "s3"
-    assert payload["upload_url"].startswith("https://minio.example/logan/")
-    assert payload["upload_headers"] == {"content-type": "text/plain"}
-    assert payload["object_uri"] is None
-
-    upload_record = store.get_upload(file_id)
-    assert upload_record is not None
-    assert upload_record.object_uri == f"s3://logan/cases/{case_id}/uploads/{file_id}/incident.log"
-    key = f"cases/{case_id}/uploads/{file_id}/incident.log"
-    fake_s3.objects[("logan", key)] = {
-        "ContentLength": len(content),
-        "Metadata": {"sha256": expected_sha},
-    }
-
-    complete = await client.post(
-        f"/api/cases/{case_id}/uploads/{file_id}/complete",
-        json={"sha256": expected_sha},
-    )
-
-    assert complete.status_code == 200, complete.text
-    assert complete.json()["sha256"] == expected_sha
-    assert fake_s3.head_calls == [{"Bucket": "logan", "Key": key}]
-    completed = store.get_upload(file_id)
-    assert completed is not None
-    assert completed.completed is True
-    assert completed.sha256 == expected_sha
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_multipart_upload_start_returns_plan_and_persists_metadata() -> None:
-    fake_s3 = FakeS3Client()
-    client, store, _ = await _authenticated_client(
-        Settings(
-            object_store_backend="minio",
-            s3_endpoint="http://minio:9000",
-            s3_bucket="logan",
-            s3_access_key="access",
-            s3_secret_key="secret",
-            s3_presign_expires_seconds=321,
-            s3_multipart_threshold_bytes=10,
-            s3_multipart_part_size_bytes=5,
-        ),
-        s3_client_factory=lambda _: fake_s3,
-    )
-    case_id = await _create_case(client)
-
-    upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "../incident.log", "content_type": "text/plain", "size_bytes": 12},
-    )
-
-    assert upload.status_code == 200, upload.text
-    payload = upload.json()
-    file_id = payload["file_id"]
-    assert payload["upload_backend"] == "minio"
-    assert payload["upload_mode"] == "multipart"
-    assert "object_uri" not in payload
-    assert payload["multipart_upload_id"] == "multipart-1"
-    assert payload["part_size_bytes"] == 5
-    assert payload["part_count"] == 3
-    assert payload["expires_in"] == 321
-    assert [part["part_number"] for part in payload["parts"]] == [1, 2, 3]
-    assert payload["parts"][0]["upload_headers"] == {}
-    assert "partNumber=1" in payload["parts"][0]["upload_url"]
-
-    key = f"cases/{case_id}/uploads/{file_id}/incident.log"
-    assert fake_s3.create_multipart_calls == [
-        {
-            "Bucket": "logan",
-            "Key": key,
-            "ContentType": "text/plain",
-            "UploadId": "multipart-1",
-        }
-    ]
-    persisted = store.get_upload(file_id)
-    assert persisted is not None
-    assert persisted.upload_metadata == {
-        "upload_mode": "multipart",
-        "multipart_upload_id": "multipart-1",
-        "part_size_bytes": 5,
-        "part_count": 3,
-    }
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_multipart_upload_start_rejects_excessive_part_count() -> None:
-    fake_s3 = FakeS3Client()
-    client, _, _ = await _authenticated_client(
-        Settings(
-            object_store_backend="s3",
-            s3_bucket="logan",
-            s3_access_key="access",
-            s3_secret_key="secret",
-            s3_multipart_threshold_bytes=1,
-            s3_multipart_part_size_bytes=5,
-            s3_multipart_max_parts=2,
-        ),
-        s3_client_factory=lambda _: fake_s3,
-    )
-    case_id = await _create_case(client)
-
-    upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "incident.log", "content_type": "text/plain", "size_bytes": 11},
-    )
-
-    assert upload.status_code == 400
-    assert "exceeding the maximum of 2" in upload.json()["detail"]
-    assert fake_s3.create_multipart_calls == []
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_multipart_refresh_returns_fresh_urls_and_uploaded_parts() -> None:
-    fake_s3 = FakeS3Client()
-    client, store, _ = await _authenticated_client(
-        Settings(
-            object_store_backend="s3",
-            s3_bucket="logan",
-            s3_access_key="access",
-            s3_secret_key="secret",
-            s3_multipart_threshold_bytes=10,
-            s3_multipart_part_size_bytes=5,
-        ),
-        s3_client_factory=lambda _: fake_s3,
-    )
-    case_id = await _create_case(client)
-    upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "incident.log", "content_type": "text/plain", "size_bytes": 12},
-    )
-    assert upload.status_code == 200, upload.text
-    started = upload.json()
-    file_id = started["file_id"]
-    initial_url = started["parts"][0]["upload_url"]
-    persisted = store.get_upload(file_id)
-    assert persisted is not None
-    upload_id = persisted.upload_metadata["multipart_upload_id"]
-    key = f"cases/{case_id}/uploads/{file_id}/incident.log"
-    fake_s3.uploaded_parts[("logan", key, upload_id)] = [
-        {"PartNumber": 1, "ETag": '"etag-1"', "Size": 5}
-    ]
-
-    refreshed = await client.get(f"/api/cases/{case_id}/uploads/{file_id}/multipart")
-
-    assert refreshed.status_code == 200, refreshed.text
-    payload = refreshed.json()
-    assert payload["upload_mode"] == "multipart"
-    assert payload["multipart_upload_id"] == upload_id
-    assert len(payload["parts"]) == 3
-    assert payload["parts"][0]["upload_url"] != initial_url
-    assert payload["uploaded_parts"] == [
-        {"part_number": 1, "etag": '"etag-1"', "size_bytes": 5}
-    ]
-    assert fake_s3.list_parts_calls == [
-        {"Bucket": "logan", "Key": key, "UploadId": upload_id}
-    ]
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_multipart_complete_finishes_s3_upload_and_marks_complete() -> None:
-    fake_s3 = FakeS3Client()
-    client, store, _ = await _authenticated_client(
-        Settings(
-            object_store_backend="s3",
-            s3_bucket="logan",
-            s3_access_key="access",
-            s3_secret_key="secret",
-            s3_multipart_threshold_bytes=10,
-            s3_multipart_part_size_bytes=5,
-        ),
-        s3_client_factory=lambda _: fake_s3,
-    )
-    case_id = await _create_case(client)
-    content = b"hello world!"
-    expected_sha = hashlib.sha256(content).hexdigest()
-    upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "incident.log", "content_type": "text/plain", "size_bytes": len(content)},
-    )
-    assert upload.status_code == 200, upload.text
-    file_id = upload.json()["file_id"]
-    persisted = store.get_upload(file_id)
-    assert persisted is not None
-    upload_id = persisted.upload_metadata["multipart_upload_id"]
-    key = f"cases/{case_id}/uploads/{file_id}/incident.log"
-    fake_s3.complete_objects[("logan", key, upload_id)] = {
-        "ContentLength": len(content),
-        "Metadata": {},
-    }
-
-    complete = await client.post(
-        f"/api/cases/{case_id}/uploads/{file_id}/complete",
-        json={
-            "sha256": expected_sha,
-            "multipart_upload_id": upload_id,
-            "parts": [
-                {"part_number": 3, "etag": '"etag-3"'},
-                {"part_number": 1, "etag": '"etag-1"'},
-                {"part_number": 2, "etag": '"etag-2"'},
-            ],
-        },
-    )
-
-    assert complete.status_code == 200, complete.text
-    assert complete.json()["sha256"] == expected_sha
-    assert fake_s3.complete_multipart_calls == [
-        {
-            "Bucket": "logan",
-            "Key": key,
-            "UploadId": upload_id,
-            "MultipartUpload": {
-                "Parts": [
-                    {"PartNumber": 1, "ETag": '"etag-1"'},
-                    {"PartNumber": 2, "ETag": '"etag-2"'},
-                    {"PartNumber": 3, "ETag": '"etag-3"'},
-                ]
-            },
-        }
-    ]
-    assert fake_s3.head_calls == [{"Bucket": "logan", "Key": key}]
-    completed = store.get_upload(file_id)
-    assert completed is not None
-    assert completed.completed is True
-    assert completed.sha256 == expected_sha
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_multipart_abort_marks_metadata_and_is_idempotent() -> None:
-    fake_s3 = FakeS3Client()
-    client, store, _ = await _authenticated_client(
-        Settings(
-            object_store_backend="minio",
-            s3_endpoint="http://minio:9000",
-            s3_bucket="logan",
-            s3_access_key="access",
-            s3_secret_key="secret",
-            s3_multipart_threshold_bytes=10,
-            s3_multipart_part_size_bytes=5,
-        ),
-        s3_client_factory=lambda _: fake_s3,
-    )
-    case_id = await _create_case(client)
-    upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "incident.log", "content_type": "text/plain", "size_bytes": 12},
-    )
-    assert upload.status_code == 200, upload.text
-    file_id = upload.json()["file_id"]
-    persisted = store.get_upload(file_id)
-    assert persisted is not None
-    upload_id = persisted.upload_metadata["multipart_upload_id"]
-    key = f"cases/{case_id}/uploads/{file_id}/incident.log"
-
-    aborted = await client.delete(f"/api/cases/{case_id}/uploads/{file_id}/multipart")
-    second_abort = await client.delete(f"/api/cases/{case_id}/uploads/{file_id}/multipart")
-
-    assert aborted.status_code == 200, aborted.text
-    assert second_abort.status_code == 200, second_abort.text
-    assert aborted.json()["status"] == "aborted"
-    assert fake_s3.abort_multipart_calls == [
-        {"Bucket": "logan", "Key": key, "UploadId": upload_id}
-    ]
-    updated = store.get_upload(file_id)
-    assert updated is not None
-    assert updated.upload_metadata["aborted_at"]
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_upload_complete_rejects_missing_object_or_size_mismatch() -> None:
-    fake_s3 = FakeS3Client()
-    client, _, _ = await _authenticated_client(
-        Settings(
-            object_store_backend="minio",
-            s3_endpoint="http://minio:9000",
-            s3_bucket="logan",
-            s3_access_key="access",
-            s3_secret_key="secret",
-        ),
-        s3_client_factory=lambda _: fake_s3,
-    )
-    case_id = await _create_case(client)
-    content = b"gateway failed\n"
-    expected_sha = hashlib.sha256(content).hexdigest()
-
-    missing_upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "missing.log", "content_type": "text/plain", "size_bytes": len(content)},
-    )
-    missing_file_id = missing_upload.json()["file_id"]
-    missing = await client.post(
-        f"/api/cases/{case_id}/uploads/{missing_file_id}/complete",
-        json={"sha256": expected_sha},
-    )
-    assert missing.status_code == 400
-    assert missing.json()["detail"] == "upload content has not been uploaded"
-
-    mismatch_upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "mismatch.log", "content_type": "text/plain", "size_bytes": len(content)},
-    )
-    mismatch_file_id = mismatch_upload.json()["file_id"]
-    fake_s3.objects[("logan", f"cases/{case_id}/uploads/{mismatch_file_id}/mismatch.log")] = {
-        "ContentLength": len(content) + 1,
-        "Metadata": {},
-    }
-    mismatch = await client.post(
-        f"/api/cases/{case_id}/uploads/{mismatch_file_id}/complete",
-        json={"sha256": expected_sha},
-    )
-    assert mismatch.status_code == 400
-    assert "upload size mismatch" in mismatch.json()["detail"]
-
-    sha_upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "sha.log", "content_type": "text/plain", "size_bytes": len(content)},
-    )
-    sha_file_id = sha_upload.json()["file_id"]
-    fake_s3.objects[("logan", f"cases/{case_id}/uploads/{sha_file_id}/sha.log")] = {
-        "ContentLength": len(content),
-        "Metadata": {"sha256": "0" * 64},
-    }
-    sha_mismatch = await client.post(
-        f"/api/cases/{case_id}/uploads/{sha_file_id}/complete",
-        json={"sha256": expected_sha},
-    )
-    assert sha_mismatch.status_code == 409
-    assert sha_mismatch.json()["detail"] == "upload sha256 does not match stored content metadata"
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_input_file_ids_analysis_materializes_completed_upload() -> None:
-    fake_s3 = FakeS3Client()
-    app_settings = Settings(
-        object_store_backend="s3",
-        s3_bucket="logan",
-        s3_access_key="access",
-        s3_secret_key="secret",
-    )
-    client, store, _ = await _authenticated_client(
-        app_settings,
-        s3_client_factory=lambda _: fake_s3,
-    )
-    case_id = await _create_case(client)
-    content = (
-        b"2026-06-06T10:00:00Z ERROR gateway-service failed checkout request\n"
-    )
-    expected_sha = hashlib.sha256(content).hexdigest()
-    upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "gateway.log", "content_type": "text/plain", "size_bytes": len(content)},
-    )
-    file_id = upload.json()["file_id"]
-    key = f"cases/{case_id}/uploads/{file_id}/gateway.log"
-    fake_s3.objects[("logan", key)] = {
-        "ContentLength": len(content),
-        "Metadata": {},
-        "Body": content,
-    }
-    complete = await client.post(
-        f"/api/cases/{case_id}/uploads/{file_id}/complete",
-        json={"sha256": expected_sha},
-    )
-    assert complete.status_code == 200, complete.text
-
-    run = await client.post(
-        f"/api/cases/{case_id}/analysis-runs",
-        json={"input_file_ids": [file_id], "config": {"default_window_size_seconds": 60}},
-    )
-
-    assert run.status_code == 200, run.text
-    run_id = run.json()["analysis_run_id"]
-    status = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")
-    assert status.status_code == 200, status.text
-    assert status.json()["status"] == "completed"
-    assert status.json()["progress"]["files_processed"] == 1
-    logs = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/logs")
-    assert logs.status_code == 200, logs.text
-    assert [item["file_path"] for item in logs.json()["items"]] == ["gateway.log"]
-    summary = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
-    assert summary.status_code == 200, summary.text
-    assert fake_s3.download_calls
-    downloaded_path = Path(fake_s3.download_calls[0]["Filename"])
-    assert not downloaded_path.exists()
-    materialize_events = store.list_job_events(
-        analysis_run_id=run_id,
-        step_name="materialize_inputs",
-    )
-    assert [event.metadata for event in materialize_events] == [
-        {
-            "source_count": 1,
-            "materialized_count": 1,
-            "storage_backend_counts": {"s3": 1},
-        }
-    ]
-    serialized_metadata = json.dumps(materialize_events[0].metadata, sort_keys=True)
-    assert key not in serialized_metadata
-    assert "secret" not in serialized_metadata.lower()
-    await client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_s3_temporal_input_file_ids_pass_object_uri_to_workflow(
-    monkeypatch,
-) -> None:
-    captured: dict[str, object] = {}
-
-    async def fake_start_analyze_case_workflow(**kwargs: object) -> object:
-        captured.update(kwargs)
-        return object()
-
-    monkeypatch.setattr(
-        "logan_workers.temporal_client.start_analyze_case_workflow",
-        fake_start_analyze_case_workflow,
-    )
-    fake_s3 = FakeS3Client()
-    client, store, _ = await _authenticated_client(
-        Settings(
-            analysis_orchestrator="temporal",
-            object_store_backend="s3",
-            s3_bucket="logan",
-            s3_access_key="access",
-            s3_secret_key="secret",
-            database_url="postgresql+psycopg://logan:secret@postgres/logan",
-        ),
-        s3_client_factory=lambda _: fake_s3,
-    )
-    case_id = await _create_case(client)
-    content = b"gateway failed\n"
-    expected_sha = hashlib.sha256(content).hexdigest()
-    upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "gateway.log", "content_type": "text/plain", "size_bytes": len(content)},
-    )
-    file_id = upload.json()["file_id"]
-    fake_s3.objects[("logan", f"cases/{case_id}/uploads/{file_id}/gateway.log")] = {
-        "ContentLength": len(content),
-        "Metadata": {},
-        "Body": content,
-    }
-    complete = await client.post(
-        f"/api/cases/{case_id}/uploads/{file_id}/complete",
-        json={"sha256": expected_sha},
-    )
-    assert complete.status_code == 200, complete.text
-
-    run = await client.post(
-        f"/api/cases/{case_id}/analysis-runs",
-        json={"input_file_ids": [file_id], "config": {"default_window_size_seconds": 60}},
-    )
-
-    assert run.status_code == 200, run.text
-    persisted_run = store.get_analysis_run(run.json()["analysis_run_id"])
-    assert persisted_run is not None
-    assert persisted_run.status == "processing"
-    assert captured["paths"] == [f"s3://logan/cases/{case_id}/uploads/{file_id}/gateway.log"]
-    assert fake_s3.download_calls == []
     await client.aclose()

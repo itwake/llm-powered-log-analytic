@@ -10,14 +10,9 @@ from typing import Any
 
 from app.config import Settings, settings
 from app.services.object_store import (
-    ObjectStoreConfigurationError,
     digest_bytes,
     file_uri_to_path,
-    get_s3_client,
-    is_local_backend,
-    is_s3_backend,
     path_to_file_uri,
-    s3_object_uri,
     write_bytes,
 )
 from app.store import (
@@ -26,7 +21,6 @@ from app.store import (
     sanitize_artifact_metadata,
     sanitize_error_message,
 )
-
 
 STEP_MANIFEST_ARTIFACT_TYPE = "step_manifest"
 STEP_MANIFEST_CONTENT_TYPE = "application/json"
@@ -47,32 +41,8 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _safe_object_segment(value: str | None, fallback: str) -> str:
-    text = str(value or "").strip()
-    text = re.sub(r"[^A-Za-z0-9_.=-]+", "_", text)
-    text = text.strip("._-")
-    return text[:128] or fallback
-
-
-def _step_artifact_key(*, case_id: str, analysis_run_id: str, step_name: str) -> str:
-    return "/".join(
-        [
-            "cases",
-            _safe_object_segment(case_id, "case"),
-            "analysis-runs",
-            _safe_object_segment(analysis_run_id, "run"),
-            "steps",
-            f"{_safe_object_segment(step_name, 'step')}.json",
-        ]
-    )
-
-
-def _local_step_artifact_key(
-    *, case_id: str, analysis_run_id: str, step_name: str
-) -> str:
-    digest = hashlib.sha256(
-        f"{case_id}:{analysis_run_id}:{step_name}".encode("utf-8")
-    ).hexdigest()
+def _local_step_artifact_key(*, case_id: str, analysis_run_id: str, step_name: str) -> str:
+    digest = hashlib.sha256(f"{case_id}:{analysis_run_id}:{step_name}".encode("utf-8")).hexdigest()
     return "/".join(["step-artifacts", f"{digest}.json"])
 
 
@@ -83,27 +53,12 @@ def step_artifact_object_uri(
     step_name: str,
     app_settings: Settings = settings,
 ) -> str:
-    key = _step_artifact_key(
+    path = Path(app_settings.local_object_store_dir) / _local_step_artifact_key(
         case_id=case_id,
         analysis_run_id=analysis_run_id,
         step_name=step_name,
     )
-    if is_local_backend(app_settings):
-        path = Path(app_settings.local_object_store_dir) / _local_step_artifact_key(
-            case_id=case_id,
-            analysis_run_id=analysis_run_id,
-            step_name=step_name,
-        )
-        return path_to_file_uri(path)
-    if is_s3_backend(app_settings):
-        if not app_settings.s3_bucket:
-            raise ObjectStoreConfigurationError(
-                "LOGAN_S3_BUCKET is required for step artifact storage"
-            )
-        return s3_object_uri(bucket=app_settings.s3_bucket, key=key)
-    raise ObjectStoreConfigurationError(
-        "LOGAN_OBJECT_STORE_BACKEND must be local, s3, or minio for step artifacts"
-    )
+    return path_to_file_uri(path)
 
 
 def _event_idempotency_hash(event: JobEventRecord) -> str:
@@ -138,37 +93,10 @@ def _manifest_bytes(manifest: dict[str, Any]) -> bytes:
     return json.dumps(manifest, separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
-def _write_s3_step_manifest(
-    *,
-    object_uri: str,
-    content: bytes,
-    sha256: str,
-    app_settings: Settings,
-    s3_client_factory: Any | None = None,
-) -> None:
-    if not object_uri.startswith("s3://"):
-        raise ValueError("step artifact object URI is not S3-backed")
-    bucket, _, key = object_uri.removeprefix("s3://").partition("/")
-    if not bucket or not key:
-        raise ValueError("invalid S3 step artifact object URI")
-    client = get_s3_client(app_settings, s3_client_factory=s3_client_factory)
-    client.put_object(
-        Bucket=bucket,
-        Key=key,
-        Body=content,
-        ContentType=STEP_MANIFEST_CONTENT_TYPE,
-        Metadata={
-            "sha256": sha256,
-            "content-type": STEP_MANIFEST_CONTENT_TYPE,
-        },
-    )
-
-
 def write_step_manifest(
     *,
     event: JobEventRecord,
     app_settings: Settings = settings,
-    s3_client_factory: Any | None = None,
 ) -> StepArtifactWriteResult:
     manifest = build_step_manifest(event=event)
     content = _manifest_bytes(manifest)
@@ -179,19 +107,10 @@ def write_step_manifest(
         step_name=event.step_name,
         app_settings=app_settings,
     )
-    if object_uri.startswith("s3://"):
-        _write_s3_step_manifest(
-            object_uri=object_uri,
-            content=content,
-            sha256=sha256,
-            app_settings=app_settings,
-            s3_client_factory=s3_client_factory,
-        )
-    else:
-        stored = write_bytes(object_uri, content)
-        object_uri = stored.object_uri
-        sha256 = stored.sha256 or sha256
-        size_bytes = stored.size_bytes
+    stored = write_bytes(object_uri, content)
+    object_uri = stored.object_uri
+    sha256 = stored.sha256 or sha256
+    size_bytes = stored.size_bytes
 
     return StepArtifactWriteResult(
         artifact_type=STEP_MANIFEST_ARTIFACT_TYPE,
@@ -204,7 +123,6 @@ def write_step_manifest(
             "status": event.status,
             "attempt": event.attempt,
             "idempotency_key_hash": _event_idempotency_hash(event),
-            "storage_backend": "s3" if object_uri.startswith("s3://") else "local",
             "content_type": STEP_MANIFEST_CONTENT_TYPE,
         },
     )
@@ -233,17 +151,13 @@ def materialize_step_artifact_for_event(
     store: MetadataStore,
     event: JobEventRecord,
     app_settings: Settings = settings,
-    s3_client_factory: Any | None = None,
 ) -> None:
-    if not app_settings.step_artifacts_enabled:
-        return
     if event.event_type != "completed":
         return
     try:
         written = write_step_manifest(
             event=event,
             app_settings=app_settings,
-            s3_client_factory=s3_client_factory,
         )
         store.upsert_analysis_step_artifact(
             case_id=event.case_id,

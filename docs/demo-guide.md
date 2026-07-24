@@ -277,9 +277,9 @@ image: images/demo/09-causal-summary.png
 | --- | --- |
 | Deterministic mock annotator | AI Platform LLM (same pipeline, same UI) |
 | SQLite metadata | PostgreSQL |
-| Local object store | S3 / MinIO presigned + multipart uploads |
-| Synchronous analysis | Temporal workflow / worker |
-| SQL-backed reports | Optional ClickHouse / OpenSearch at scale |
+| Local object store | Persistent local volume |
+| In-process analysis | One deterministic pipeline |
+| SQL-backed reports | SQLite or PostgreSQL through SQLAlchemy |
 
 All switches are configuration - no code changes between the two worlds.
 

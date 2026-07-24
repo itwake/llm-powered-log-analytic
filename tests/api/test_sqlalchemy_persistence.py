@@ -17,9 +17,8 @@ from app.sqlalchemy_store import (
     _postgres_migration_version,
 )
 from app.store import (
-    EPHEMERAL_SQLITE_DATABASE_URL,
     RAW_LOG_RETAINED_MARKER,
-    InMemoryStore,
+    create_ephemeral_store,
     create_store,
 )
 from httpx import ASGITransport, AsyncClient
@@ -42,17 +41,6 @@ PIPELINE_STEPS = [
 ]
 
 
-class FakeS3Client:
-    def __init__(self) -> None:
-        self.objects: dict[tuple[str, str], bytes] = {}
-        self.download_calls: list[dict[str, str]] = []
-
-    def download_file(self, *, Bucket: str, Key: str, Filename: str) -> None:
-        self.download_calls.append({"Bucket": Bucket, "Key": Key, "Filename": Filename})
-        Path(Filename).write_bytes(self.objects[(Bucket, Key)])
-
-
-
 def test_postgres_migration_metadata_helpers_are_stable() -> None:
     migration_path = Path("apps/api/migrations/0003_enterprise_policy_scim.sql")
     sql = migration_path.read_text(encoding="utf-8")
@@ -65,13 +53,13 @@ def test_postgres_migration_metadata_helpers_are_stable() -> None:
 
 def test_postgres_incremental_migration_paths_skip_initial_schema() -> None:
     names = [
-        path.name
-        for path in _postgres_incremental_migration_paths(Path("apps/api/migrations"))
+        path.name for path in _postgres_incremental_migration_paths(Path("apps/api/migrations"))
     ]
 
     assert "0001_initial.sql" not in names
     assert "0002_analysis_step_artifacts.sql" in names
     assert "0003_enterprise_policy_scim.sql" in names
+    assert "0004_simplify_core.sql" in names
 
 
 async def _client(store: SQLAlchemyStore) -> AsyncClient:
@@ -221,7 +209,7 @@ def _clear_result_json(store: SQLAlchemyStore, run_id: str) -> None:
 
 def test_sqlalchemy_credentials_persist_expiration_and_revocation(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    app_settings = Settings(database_url=database_url)
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     user = store.register_user(
         email="credential-persistence@example.com",
@@ -241,14 +229,13 @@ def test_sqlalchemy_credentials_persist_expiration_and_revocation(tmp_path: Path
 
     assert saved_token.expires_at == future_expires_at
 
-    active_token = store.get_credential(
-        user_id=user.id, credential_type="ai_platform_token"
-    )
+    active_token = store.get_credential(user_id=user.id, credential_type="ai_platform_token")
     assert active_token is not None
     assert active_token.expires_at == future_expires_at
-    assert decrypt_token(
-        active_token.encrypted_token, store.settings.credential_encryption_key
-    ) == "persisted-ai-platform-token"
+    assert (
+        decrypt_token(active_token.encrypted_token, store.settings.credential_encryption_key)
+        == "persisted-ai-platform-token"
+    )
     assert active_token.key_id == store.settings.credential_encryption_key_id
     assert store.has_credential(user.id) is True
 
@@ -283,7 +270,6 @@ async def test_sqlalchemy_scim_bearer_uses_configured_organization(
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
     app_settings = Settings(
         database_url=database_url,
-        store_backend="sqlalchemy",
         scim_bearer_token="sql-scim-secret",
         scim_organization_id="sql-scim-org",
     )
@@ -307,108 +293,9 @@ async def test_sqlalchemy_scim_bearer_uses_configured_organization(
     await client.aclose()
 
 
-def test_sqlalchemy_store_records_s3_upload_object_uri(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(
-        database_url=database_url,
-        store_backend="sqlalchemy",
-        object_store_backend="s3",
-        s3_bucket="logan",
-        s3_access_key="access",
-        s3_secret_key="secret",
-    )
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    user = store.register_user(
-        email="s3-persistence@example.com",
-        username="s3-persistence",
-        full_name=None,
-        password="password123",
-    )
-    case = store.create_case(
-        user_id=user.id,
-        data={
-            "title": "S3 upload persistence",
-            "issue_description": None,
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "incident_start": None,
-            "incident_end": None,
-            "timezone": "UTC",
-        },
-    )
-
-    upload = store.create_upload(
-        case_id=case.id,
-        filename="../incident.log",
-        content_type="text/plain",
-        size_bytes=10,
-    )
-
-    assert upload.object_uri == f"s3://logan/cases/{case.id}/uploads/{upload.id}/incident.log"
-
-
-def test_sqlalchemy_store_persists_upload_metadata(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(
-        database_url=database_url,
-        store_backend="sqlalchemy",
-        object_store_backend="s3",
-        s3_bucket="logan",
-        s3_access_key="access",
-        s3_secret_key="secret",
-    )
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    user = store.register_user(
-        email="multipart-persistence@example.com",
-        username="multipart-persistence",
-        full_name=None,
-        password="password123",
-    )
-    case = store.create_case(
-        user_id=user.id,
-        data={
-            "title": "Multipart upload persistence",
-            "issue_description": None,
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "incident_start": None,
-            "incident_end": None,
-            "timezone": "UTC",
-        },
-    )
-    upload = store.create_upload(
-        case_id=case.id,
-        filename="incident.log",
-        content_type="text/plain",
-        size_bytes=12,
-    )
-
-    store.update_upload_metadata(
-        upload_id=upload.id,
-        metadata={
-            "upload_mode": "multipart",
-            "multipart_upload_id": "multipart-1",
-            "part_size_bytes": 5,
-            "part_count": 3,
-        },
-    )
-    recreated = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    persisted = recreated.get_upload(upload.id)
-
-    assert persisted is not None
-    assert persisted.upload_metadata == {
-        "upload_mode": "multipart",
-        "multipart_upload_id": "multipart-1",
-        "part_size_bytes": 5,
-        "part_count": 3,
-    }
-
-
 def test_sqlalchemy_case_collaborators_persist_and_filter_access(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    app_settings = Settings(database_url=database_url)
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     owner = store.register_user(
         email="sql-owner@example.com",
@@ -484,11 +371,14 @@ def test_sqlalchemy_case_collaborators_persist_and_filter_access(tmp_path: Path)
     assert items[0].id == case.id
     assert recreated.list_cases_for_user(outsider)[1] == 0
 
-    assert recreated.remove_case_collaborator(
-        case_id=case.id,
-        user_id=collaborator.id,
-        removed_by=owner.id,
-    ) is True
+    assert (
+        recreated.remove_case_collaborator(
+            case_id=case.id,
+            user_id=collaborator.id,
+            removed_by=owner.id,
+        )
+        is True
+    )
     assert recreated.user_can_access_case(collaborator.id, case.id, "view") is False
 
     group = recreated.create_policy_group(
@@ -542,7 +432,7 @@ def test_sqlalchemy_case_collaborators_persist_and_filter_access(tmp_path: Path)
 
 def test_sqlalchemy_case_update_cancel_and_delete(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    app_settings = Settings(database_url=database_url)
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     owner = store.register_user(
         email="sql-edit-owner@example.com",
@@ -619,10 +509,7 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
     app_settings = Settings(
         database_url=database_url,
-        store_backend="sqlalchemy",
-        object_store_backend="local",
         local_object_store_dir=str(tmp_path / "object-store"),
-        step_artifacts_enabled=True,
         step_artifact_failure_mode="fail",
     )
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
@@ -945,7 +832,7 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
 @pytest.mark.asyncio
 async def test_sqlalchemy_fanout_scopes_raw_file_ids_per_run(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    app_settings = Settings(database_url=database_url)
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     user = store.register_user(
         email="repeat.engineer@example.com",
@@ -993,77 +880,11 @@ async def test_sqlalchemy_fanout_scopes_raw_file_ids_per_run(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
-async def test_sqlalchemy_local_analysis_materializes_s3_input_uri(
-    tmp_path: Path,
-) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(
-        database_url=database_url,
-        store_backend="sqlalchemy",
-        object_store_backend="s3",
-        analysis_input_tmp_dir=str(tmp_path / "analysis-inputs"),
-        s3_bucket="logan",
-        s3_access_key="access",
-        s3_secret_key="secret",
-    )
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    user = store.register_user(
-        email="s3-local@example.com",
-        username="s3-local",
-        full_name=None,
-        password="password123",
-    )
-    case = store.create_case(
-        user_id=user.id,
-        data={
-            "title": "S3 input analysis",
-            "issue_description": "Local store should materialize S3 inputs.",
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "timezone": "UTC",
-        },
-    )
-    fake_s3 = FakeS3Client()
-    key = "cases/case-1/uploads/file-1/gateway.log"
-    fake_s3.objects[("logan", key)] = (
-        b"2026-06-06T10:00:00Z ERROR gateway-service failed checkout request\n"
-    )
-
-    run = await store.start_analysis(
-        case_id=case.id,
-        user_id=user.id,
-        input_paths=[f"s3://logan/{key}"],
-        config={"default_window_size_seconds": 60},
-        gateway=MockAIPlatformAnnotationGateway(),
-        s3_client_factory=lambda _: fake_s3,
-    )
-
-    assert run.status == "completed"
-    assert run.progress["files_processed"] == 1
-    assert _analytics_counts(store, run.id)["raw_files"] == 1
-    assert fake_s3.download_calls
-    assert not Path(fake_s3.download_calls[0]["Filename"]).exists()
-    materialize_events = store.list_job_events(
-        analysis_run_id=run.id,
-        step_name="materialize_inputs",
-    )
-    assert [event.metadata for event in materialize_events] == [
-        {
-            "source_count": 1,
-            "materialized_count": 1,
-            "storage_backend_counts": {"s3": 1},
-        }
-    ]
-    assert key not in json.dumps(materialize_events[0].metadata, sort_keys=True)
-
-
-@pytest.mark.asyncio
 async def test_sqlalchemy_report_endpoints_read_fanout_without_result_json(
     tmp_path: Path,
 ) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
+    app_settings = Settings(database_url=database_url)
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     user = store.register_user(
         email="fanout-reports@example.com",
@@ -1180,13 +1001,13 @@ async def test_sqlalchemy_report_endpoints_read_fanout_without_result_json(
     assert graph_body["nodes"]
     assert graph_body["edges"]
     node_ids = {node["id"] for node in graph_body["nodes"]}
-    assert all(edge["source"] in node_ids and edge["target"] in node_ids for edge in graph_body["edges"])
+    assert all(
+        edge["source"] in node_ids and edge["target"] in node_ids for edge in graph_body["edges"]
+    )
     assert all(edge["needs_validation"] for edge in graph_body["edges"])
     assert graph_body["root_cause_candidates"]
 
-    causal_summary = await client.get(
-        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary"
-    )
+    causal_summary = await client.get(f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary")
     assert causal_summary.status_code == 200, causal_summary.text
     assert causal_summary.json()["summary_markdown"] == result_json_summary
     assert causal_summary.json()["evidence_refs"]
@@ -1205,9 +1026,7 @@ async def test_sqlalchemy_report_endpoints_read_fanout_without_result_json(
     assert fanout_body["customer_update_markdown"] == result_json_customer_update
     assert fanout_body["edited"] is True
     assert store.get_analysis_result(case.id, run.id) is None
-    fanout_fetch = await client.get(
-        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary"
-    )
+    fanout_fetch = await client.get(f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary")
     assert fanout_fetch.json()["summary_markdown"] == fanout_summary
     fanout_export = await client.post(
         f"/api/cases/{case.id}/analysis-runs/{run.id}/exports",
@@ -1234,7 +1053,6 @@ async def test_sqlalchemy_retention_scrubs_raw_text_and_preserves_reports(
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
     app_settings = Settings(
         database_url=database_url,
-        store_backend="sqlalchemy",
         audit_retention_days=30,
         raw_log_retention_days=30,
         report_retention_days=30,
@@ -1378,19 +1196,18 @@ async def test_sqlalchemy_retention_scrubs_raw_text_and_preserves_reports(
     assert causal_graph is not None and causal_graph["nodes"]
 
 
-def test_create_store_auto_uses_sqlalchemy_when_database_url_is_set(tmp_path: Path) -> None:
+def test_create_store_uses_configured_database_url(tmp_path: Path) -> None:
     database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    store = create_store(Settings(database_url=database_url, store_backend="auto"))
+    store = create_store(Settings(database_url=database_url))
     assert isinstance(store, SQLAlchemyStore)
 
 
-def test_memory_store_alias_uses_isolated_sqlalchemy() -> None:
-    first = create_store(Settings(database_url=None, store_backend="memory"))
-    second = InMemoryStore(Settings(database_url=None, store_backend="memory"))
+def test_ephemeral_stores_use_isolated_sqlalchemy() -> None:
+    first = create_ephemeral_store()
+    second = create_ephemeral_store()
 
     assert isinstance(first, SQLAlchemyStore)
     assert isinstance(second, SQLAlchemyStore)
-    assert first.database_url == EPHEMERAL_SQLITE_DATABASE_URL
     created = first.register_user(
         email="isolated@example.com",
         username="isolated",
@@ -1401,10 +1218,10 @@ def test_memory_store_alias_uses_isolated_sqlalchemy() -> None:
     assert second.get_user_by_username("isolated") is None
 
 
-def test_create_store_auto_defaults_to_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_store_defaults_to_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
 
-    store = create_store(Settings(store_backend="auto"))
+    store = create_store(Settings())
 
     assert isinstance(store, SQLAlchemyStore)
     assert store.database_url == "sqlite:///.logan/logan.db"

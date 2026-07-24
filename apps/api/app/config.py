@@ -61,16 +61,11 @@ class Settings:
     credential_encryption_key: str = os.getenv(
         "LOGAN_CREDENTIAL_ENCRYPTION_KEY", "change-me-local-key"
     )
-    credential_encryption_key_id: str = os.getenv(
-        "LOGAN_CREDENTIAL_ENCRYPTION_KEY_ID", "default"
-    )
-    credential_encryption_keyring: str = os.getenv(
-        "LOGAN_CREDENTIAL_ENCRYPTION_KEYRING", "{}"
-    )
+    credential_encryption_key_id: str = os.getenv("LOGAN_CREDENTIAL_ENCRYPTION_KEY_ID", "default")
+    credential_encryption_keyring: str = os.getenv("LOGAN_CREDENTIAL_ENCRYPTION_KEYRING", "{}")
     llm_provider: str = os.getenv("LOGAN_LLM_PROVIDER", "ai_platform")
     ai_platform_model: str = os.getenv("LOGAN_AI_PLATFORM_MODEL", "gpt-5.4")
     ai_platform_reasoning_effort: str = os.getenv("LOGAN_AI_PLATFORM_REASONING_EFFORT", "high")
-    github_source_token: str | None = os.getenv("LOGAN_GITHUB_SOURCE_TOKEN") or None
     ai_platform_chat_host: str | None = os.getenv("LOGAN_AI_PLATFORM_CHAT_HOST") or None
     ai_platform_chat_uri: str = os.getenv(
         "LOGAN_AI_PLATFORM_CHAT_URI", "/v1/api/v1/chat/completions"
@@ -96,50 +91,20 @@ class Settings:
     )
     ai_platform_store_completions: bool = _env_bool("LOGAN_AI_PLATFORM_STORE_COMPLETIONS", False)
     ai_platform_token_ttl_seconds: int = int(os.getenv("LOGAN_AI_PLATFORM_TOKEN_TTL_SECONDS", "30"))
-    ai_platform_timeout_seconds: float = float(os.getenv("LOGAN_AI_PLATFORM_TIMEOUT_SECONDS", "120"))
+    ai_platform_timeout_seconds: float = float(
+        os.getenv("LOGAN_AI_PLATFORM_TIMEOUT_SECONDS", "120")
+    )
     ai_platform_ca_bundle: str | None = _env_first(
         "LOGAN_AI_PLATFORM_CA_BUNDLE", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"
     )
     ai_platform_tls_verify: bool = _env_bool("LOGAN_AI_PLATFORM_TLS_VERIFY", True)
     ai_platform_proxy_url: str | None = _env_first("LOGAN_AI_PLATFORM_PROXY_URL")
     ai_platform_trust_env: bool = _env_bool("LOGAN_AI_PLATFORM_TRUST_ENV", True)
-    database_url: str | None = _env_first("LOGAN_DATABASE_URL") or DEFAULT_SQLITE_DATABASE_URL
-    store_backend: str = os.getenv("LOGAN_STORE_BACKEND", "auto")
-    analysis_orchestrator: str = os.getenv("LOGAN_ANALYSIS_ORCHESTRATOR", "local")
-    temporal_address: str = os.getenv("LOGAN_TEMPORAL_ADDRESS", "temporal:7233")
-    temporal_namespace: str = os.getenv("LOGAN_TEMPORAL_NAMESPACE", "default")
-    temporal_task_queue: str = os.getenv("LOGAN_TEMPORAL_TASK_QUEUE", "logan-analysis")
-    temporal_activity_start_to_close_seconds: int = int(
-        os.getenv("LOGAN_TEMPORAL_ACTIVITY_START_TO_CLOSE_SECONDS", "3600")
-    )
-    temporal_activity_max_attempts: int = int(
-        os.getenv("LOGAN_TEMPORAL_ACTIVITY_MAX_ATTEMPTS", "3")
-    )
-    object_store_backend: str = os.getenv("LOGAN_OBJECT_STORE_BACKEND", "local")
+    database_url: str = _env_first("LOGAN_DATABASE_URL") or DEFAULT_SQLITE_DATABASE_URL
     local_object_store_dir: str = os.getenv(
         "LOGAN_LOCAL_OBJECT_STORE_DIR", str(Path.cwd() / ".logan" / "object-store")
     )
-    analysis_input_tmp_dir: str = os.getenv(
-        "LOGAN_ANALYSIS_INPUT_TMP_DIR", str(Path.cwd() / ".logan" / "analysis-inputs")
-    )
-    s3_endpoint: str | None = os.getenv("LOGAN_S3_ENDPOINT") or None
-    s3_bucket: str | None = os.getenv("LOGAN_S3_BUCKET") or None
-    s3_access_key: str | None = os.getenv("LOGAN_S3_ACCESS_KEY") or None
-    s3_secret_key: str | None = os.getenv("LOGAN_S3_SECRET_KEY") or None
-    s3_region: str = os.getenv("LOGAN_S3_REGION", "us-east-1")
-    s3_presign_expires_seconds: int = int(os.getenv("LOGAN_S3_PRESIGN_EXPIRES_SECONDS", "900"))
-    s3_force_path_style: bool = _env_bool("LOGAN_S3_FORCE_PATH_STYLE", True)
-    s3_multipart_threshold_bytes: int = int(
-        os.getenv("LOGAN_S3_MULTIPART_THRESHOLD_BYTES", "104857600")
-    )
-    s3_multipart_part_size_bytes: int = int(
-        os.getenv("LOGAN_S3_MULTIPART_PART_SIZE_BYTES", "67108864")
-    )
-    s3_multipart_max_parts: int = int(os.getenv("LOGAN_S3_MULTIPART_MAX_PARTS", "10000"))
-    step_artifacts_enabled: bool = _env_bool("LOGAN_STEP_ARTIFACTS_ENABLED", True)
-    step_artifact_failure_mode: str = os.getenv(
-        "LOGAN_STEP_ARTIFACT_FAILURE_MODE", "warn"
-    ).lower()
+    step_artifact_failure_mode: str = os.getenv("LOGAN_STEP_ARTIFACT_FAILURE_MODE", "warn").lower()
     secure_cookies: bool = os.getenv("LOGAN_ENV", "development") == "production"
     web_base_url: str | None = os.getenv("LOGAN_WEB_BASE_URL") or None
     sso_enabled: bool = _env_bool("LOGAN_SSO_ENABLED", False)
@@ -157,7 +122,9 @@ class Settings:
     sso_tls_verify: bool = _env_bool("LOGAN_SSO_TLS_VERIFY", True)
     sso_timeout_seconds: float = float(os.getenv("LOGAN_SSO_TIMEOUT_SECONDS", "15"))
     sso_mock_enabled: bool = _env_bool("LOGAN_SSO_MOCK_ENABLED", False)
-    sso_mock_username: str = (os.getenv("LOGAN_SSO_MOCK_USERNAME") or "logan.mock").strip() or "logan.mock"
+    sso_mock_username: str = (
+        os.getenv("LOGAN_SSO_MOCK_USERNAME") or "logan.mock"
+    ).strip() or "logan.mock"
     sso_mock_email: str = (
         os.getenv("LOGAN_SSO_MOCK_EMAIL") or "logan.mock@example.com"
     ).strip() or "logan.mock@example.com"
@@ -167,38 +134,10 @@ class Settings:
     raw_log_retention_days: int = int(os.getenv("LOGAN_RAW_LOG_RETENTION_DAYS", "30"))
     report_retention_days: int = int(os.getenv("LOGAN_REPORT_RETENTION_DAYS", "365"))
     audit_retention_days: int = int(os.getenv("LOGAN_AUDIT_RETENTION_DAYS", "730"))
-    rate_limit_enabled: bool = _env_bool("LOGAN_RATE_LIMIT_ENABLED", False)
-    rate_limit_requests_per_minute: int = int(
-        os.getenv("LOGAN_RATE_LIMIT_REQUESTS_PER_MINUTE", "120")
-    )
     log_level: str = os.getenv("LOGAN_LOG_LEVEL", "INFO")
     metrics_enabled: bool = _env_bool("LOGAN_METRICS_ENABLED", True)
     metrics_path: str = os.getenv("LOGAN_METRICS_PATH", "/metrics")
-    cors_allowed_origins: str = os.getenv(
-        "LOGAN_CORS_ALLOWED_ORIGINS", "http://localhost:3000"
-    )
-    otel_enabled: bool = _env_bool("LOGAN_OTEL_ENABLED", False)
-    otel_service_name: str = os.getenv("LOGAN_OTEL_SERVICE_NAME", "logan-api")
-    otel_exporter_otlp_endpoint: str | None = (
-        os.getenv("LOGAN_OTEL_EXPORTER_OTLP_ENDPOINT") or None
-    )
-    analytics_sinks_enabled: bool = _env_bool("LOGAN_ANALYTICS_SINKS_ENABLED", False)
-    clickhouse_url: str | None = os.getenv("LOGAN_CLICKHOUSE_URL") or None
-    clickhouse_database: str = os.getenv("LOGAN_CLICKHOUSE_DATABASE", "logan")
-    clickhouse_username: str | None = os.getenv("LOGAN_CLICKHOUSE_USERNAME") or None
-    clickhouse_password: str | None = os.getenv("LOGAN_CLICKHOUSE_PASSWORD") or None
-    opensearch_url: str | None = os.getenv("LOGAN_OPENSEARCH_URL") or None
-    opensearch_username: str | None = os.getenv("LOGAN_OPENSEARCH_USERNAME") or None
-    opensearch_password: str | None = os.getenv("LOGAN_OPENSEARCH_PASSWORD") or None
-    external_analytics_queries_enabled: bool = _env_bool(
-        "LOGAN_EXTERNAL_ANALYTICS_QUERIES_ENABLED", False
-    )
-    external_analytics_query_timeout_seconds: float = float(
-        os.getenv("LOGAN_EXTERNAL_ANALYTICS_QUERY_TIMEOUT_SECONDS", "10")
-    )
-    analytics_sink_failure_mode: str = os.getenv(
-        "LOGAN_ANALYTICS_SINK_FAILURE_MODE", "warn"
-    ).lower()
+    cors_allowed_origins: str = os.getenv("LOGAN_CORS_ALLOWED_ORIGINS", "http://localhost:3000")
     scim_bearer_token: str | None = os.getenv("LOGAN_SCIM_BEARER_TOKEN") or None
     scim_organization_id: str = (
         os.getenv("LOGAN_SCIM_ORGANIZATION_ID", "default").strip() or "default"
@@ -222,7 +161,9 @@ class Settings:
         if not self.ai_platform_tls_verify:
             errors.append("LOGAN_AI_PLATFORM_TLS_VERIFY must not be false in production")
         if self.sso_enabled and not self.sso_tls_verify:
-            errors.append("LOGAN_SSO_TLS_VERIFY must not be false in production when SSO is enabled")
+            errors.append(
+                "LOGAN_SSO_TLS_VERIFY must not be false in production when SSO is enabled"
+            )
         if self.sso_mock_enabled:
             errors.append("LOGAN_SSO_MOCK_ENABLED must be false in production")
         if errors:
@@ -238,7 +179,6 @@ class Settings:
         if origins:
             return origins[0].rstrip("/")
         return None
-
 
     def ai_platform_httpx_verify(self) -> bool | str:
         if not self.ai_platform_tls_verify:

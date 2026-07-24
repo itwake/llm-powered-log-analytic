@@ -5,8 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, auth, capabilities, cases, chat, reports, scim
 from app.config import validate_runtime_settings
-from app.observability import configure_logging, configure_otel, install_metrics
-from app.rate_limit import RateLimitMiddleware
+from app.observability import configure_logging, install_metrics
 from app.services.model_gateway_factory import create_model_gateway
 from app.store import MetadataStore, create_store
 
@@ -15,8 +14,6 @@ def create_app(
     store: MetadataStore | None = None,
     *,
     model_gateway: object | None = None,
-    s3_client_factory: object | None = None,
-    **_legacy_options: object,
 ) -> FastAPI:
     app = FastAPI(title="LogAn Platform API", version="0.1.0")
 
@@ -27,7 +24,6 @@ def create_app(
     app.state.store = store or create_store()
     validate_runtime_settings(app.state.store.settings)
     configure_logging(app.state.store.settings)
-    app.state.s3_client_factory = s3_client_factory
     app.state.model_gateway = model_gateway or create_model_gateway(app.state.store.settings)
     app.add_middleware(
         CORSMiddleware,
@@ -36,7 +32,6 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(RateLimitMiddleware, app_settings=app.state.store.settings)
     app.include_router(auth.router)
     app.include_router(capabilities.router)
     app.include_router(cases.router)
@@ -44,7 +39,6 @@ def create_app(
     app.include_router(chat.router)
     app.include_router(admin.router)
     app.include_router(scim.router)
-    configure_otel(app, app.state.store.settings)
     install_metrics(app, app.state.store.settings)
     return app
 

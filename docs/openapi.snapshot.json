@@ -501,49 +501,13 @@
       },
       "AdminSettingsResponse": {
         "properties": {
-          "analytics": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "boolean"
-                }
-              ]
-            },
-            "title": "Analytics",
-            "type": "object"
-          },
-          "configured_store_backend": {
-            "title": "Configured Store Backend",
-            "type": "string"
-          },
           "env": {
             "title": "Env",
             "type": "string"
           },
-          "object_backend": {
-            "title": "Object Backend",
-            "type": "string"
-          },
-          "orchestrator": {
-            "title": "Orchestrator",
-            "type": "string"
-          },
-          "rate_limit": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "boolean"
-                }
-              ]
-            },
-            "title": "Rate Limit",
-            "type": "object"
+          "metrics_enabled": {
+            "title": "Metrics Enabled",
+            "type": "boolean"
           },
           "retention_days": {
             "additionalProperties": {
@@ -551,21 +515,12 @@
             },
             "title": "Retention Days",
             "type": "object"
-          },
-          "store_backend": {
-            "title": "Store Backend",
-            "type": "string"
           }
         },
         "required": [
           "env",
-          "store_backend",
-          "configured_store_backend",
-          "object_backend",
-          "orchestrator",
           "retention_days",
-          "rate_limit",
-          "analytics"
+          "metrics_enabled"
         ],
         "title": "AdminSettingsResponse",
         "type": "object"
@@ -1652,53 +1607,8 @@
         "title": "TaskExecuteRequest",
         "type": "object"
       },
-      "UploadCompletePart": {
-        "properties": {
-          "etag": {
-            "minLength": 1,
-            "title": "Etag",
-            "type": "string"
-          },
-          "part_number": {
-            "minimum": 1.0,
-            "title": "Part Number",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "part_number",
-          "etag"
-        ],
-        "title": "UploadCompletePart",
-        "type": "object"
-      },
       "UploadCompleteRequest": {
         "properties": {
-          "multipart_upload_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Multipart Upload Id"
-          },
-          "parts": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/UploadCompletePart"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parts"
-          },
           "sha256": {
             "title": "Sha256",
             "type": "string"
@@ -1726,29 +1636,6 @@
           "filename": {
             "title": "Filename",
             "type": "string"
-          },
-          "multipart": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Multipart"
-          },
-          "part_size_bytes": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Part Size Bytes"
           },
           "size_bytes": {
             "minimum": 0.0,
@@ -4279,110 +4166,6 @@
           }
         },
         "summary": "Upload Content",
-        "tags": [
-          "cases"
-        ]
-      }
-    },
-    "/api/cases/{case_id}/uploads/{file_id}/multipart": {
-      "delete": {
-        "operationId": "abort_case_multipart_upload_api_cases__case_id__uploads__file_id__multipart_delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "case_id",
-            "required": true,
-            "schema": {
-              "title": "Case Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "file_id",
-            "required": true,
-            "schema": {
-              "title": "File Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Abort Case Multipart Upload Api Cases  Case Id  Uploads  File Id  Multipart Delete",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Abort Case Multipart Upload",
-        "tags": [
-          "cases"
-        ]
-      },
-      "get": {
-        "operationId": "refresh_multipart_upload_api_cases__case_id__uploads__file_id__multipart_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "case_id",
-            "required": true,
-            "schema": {
-              "title": "Case Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "file_id",
-            "required": true,
-            "schema": {
-              "title": "File Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Refresh Multipart Upload Api Cases  Case Id  Uploads  File Id  Multipart Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Refresh Multipart Upload",
         "tags": [
           "cases"
         ]

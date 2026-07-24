@@ -39,8 +39,6 @@ interface UploadItem {
   status: UploadItemStatus;
   bytesSent: number;
   fileId?: string;
-  partNumber?: number;
-  partCount?: number;
   message?: string;
 }
 
@@ -186,8 +184,6 @@ export default function CaseWorkspacePage() {
         status: event.phase,
         bytesSent: Math.min(event.bytesSent, event.totalBytes),
         fileId: event.fileId,
-        partNumber: event.partNumber,
-        partCount: event.partCount,
         message: event.message,
       };
       if (existing < 0) {
@@ -518,9 +514,6 @@ export default function CaseWorkspacePage() {
                           <Stack direction="row" sx={{ color: "text.secondary", flexWrap: "wrap", gap: 1.5 }}>
                             <Typography variant="caption">{percent}%</Typography>
                             <Typography variant="caption">{formatBytes(item.bytesSent)} / {formatBytes(item.size)}</Typography>
-                            {item.partNumber && item.partCount && (
-                              <Typography variant="caption">part {item.partNumber}/{item.partCount}</Typography>
-                            )}
                             {item.message && <Typography variant="caption">{item.message}</Typography>}
                           </Stack>
                         </Box>

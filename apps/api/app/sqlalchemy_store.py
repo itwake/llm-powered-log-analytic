@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import time
 import uuid
 from contextlib import contextmanager
@@ -30,28 +29,9 @@ from app.core.security import (
 )
 from app.db import Base
 from app.models import tables
-from app.observability import record_analytics_sink_operation
-from app.services.analysis_inputs import (
-    analysis_input_backend_counts,
-    materialize_analysis_inputs,
-)
-from app.services.analytics_queries import (
-    AnalyticsQueryClient,
-    AnalyticsQueryError,
-    sanitize_analytics_query_error,
-)
-from app.services.analytics_sinks import (
-    AnalyticsSinkError,
-    AnalyticsSinkPublisher,
-    AnalyticsSinkWriteOperation,
-    opensearch_index_name,
-)
+from app.services.analysis_inputs import materialize_analysis_inputs
 from app.services.object_store import (
-    S3ClientFactory,
-    is_local_backend,
-    is_s3_backend,
     local_upload_object_uri,
-    s3_upload_object_uri,
     safe_filename,
 )
 from app.store import (
@@ -67,7 +47,6 @@ from app.store import (
     AnalysisRunCancelled,
     AnalysisRunRecord,
     AnalysisStepArtifactRecord,
-    AnalyticsSinkWriteRecord,
     AuditLogRecord,
     CaseCollaboratorRecord,
     CaseGroupAccessRecord,
@@ -90,13 +69,11 @@ from app.store import (
     _validate_policy_group_role,
     apply_job_event_progress,
     log_job_event,
-    merge_analysis_result_progress,
     merge_recorded_progress,
     model_invocation_audit_metadata,
     sanitize_artifact_metadata,
     sanitize_error_message,
     sanitize_job_metadata,
-    sanitize_workflow_payload,
 )
 
 
@@ -127,11 +104,6 @@ def _worker_uuid(value: str | None, fallback_key: str) -> str:
 
 def _iso(value: datetime | None) -> str | None:
     return _utc(value).isoformat() if value else None
-
-
-def _hash_json(value: dict[str, Any], *, prefix: str = "") -> str:
-    encoded = json.dumps(value, separators=(",", ":"), sort_keys=True)
-    return f"{prefix}{hashlib.sha256(encoded.encode('utf-8')).hexdigest()}"
 
 
 def _str_list(value: Any) -> list[str]:
@@ -213,9 +185,7 @@ def _sync_database_url(database_url: str) -> str:
 
 def _postgres_incremental_migration_paths(migrations_dir: Path) -> list[Path]:
     return [
-        path
-        for path in sorted(migrations_dir.glob("*.sql"))
-        if path.name != "0001_initial.sql"
+        path for path in sorted(migrations_dir.glob("*.sql")) if path.name != "0001_initial.sql"
     ]
 
 
@@ -250,12 +220,8 @@ class SQLAlchemyStore:
         database_url: str,
         engine: Engine | None = None,
         create_schema: bool = True,
-        analytics_sink_publisher: Any | None = None,
-        analytics_query_client: Any | None = None,
     ) -> None:
         self.settings = app_settings
-        self.analytics_sink_publisher = analytics_sink_publisher
-        self.analytics_query_client = analytics_query_client
         self.database_url = _sync_database_url(database_url)
         _ensure_sqlite_parent_dir(self.database_url)
         engine_options: dict[str, Any] = {
@@ -305,13 +271,17 @@ class SQLAlchemyStore:
             with self.engine.begin() as connection:
                 self._lock_postgres_schema_migrations(connection)
                 connection.exec_driver_sql(_SCHEMA_MIGRATIONS_TABLE_SQL)
-                existing = connection.execute(
-                    text(
-                        "SELECT checksum, status FROM schema_migrations "
-                        "WHERE version = :version"
-                    ),
-                    {"version": version},
-                ).mappings().first()
+                existing = (
+                    connection.execute(
+                        text(
+                            "SELECT checksum, status FROM schema_migrations "
+                            "WHERE version = :version"
+                        ),
+                        {"version": version},
+                    )
+                    .mappings()
+                    .first()
+                )
                 if existing:
                     if existing["checksum"] != checksum:
                         raise RuntimeError(
@@ -495,11 +465,7 @@ class SQLAlchemyStore:
                     )
                 )
             )
-            if (
-                not user
-                or not user.is_active
-                or not verify_password(password, user.password_hash)
-            ):
+            if not user or not user.is_active or not verify_password(password, user.password_hash):
                 return None
             return self._user_record(user)
 
@@ -607,9 +573,7 @@ class SQLAlchemyStore:
             if user is None:
                 raise KeyError(user_id)
             if email is not None and email != user.email:
-                existing = session.scalar(
-                    select(tables.User).where(tables.User.email == email)
-                )
+                existing = session.scalar(select(tables.User).where(tables.User.email == email))
                 if existing is not None:
                     raise ValueError("user already exists")
                 user.email = email
@@ -753,9 +717,7 @@ class SQLAlchemyStore:
                 tables.Credential.revoked_at.is_(None),
             )
             if credential_type_filter is not None:
-                query = query.where(
-                    tables.Credential.credential_type.in_(credential_type_filter)
-                )
+                query = query.where(tables.Credential.credential_type.in_(credential_type_filter))
             credentials = session.scalars(query).all()
             revoked_at = _now()
             for credential in credentials:
@@ -772,9 +734,7 @@ class SQLAlchemyStore:
                     .select_from(tables.Credential)
                     .where(
                         tables.Credential.user_id == user_id,
-                        tables.Credential.credential_type.in_(
-                            REVOCABLE_CREDENTIAL_TYPES
-                        ),
+                        tables.Credential.credential_type.in_(REVOCABLE_CREDENTIAL_TYPES),
                         tables.Credential.revoked_at.is_(None),
                         or_(
                             tables.Credential.expires_at.is_(None),
@@ -831,9 +791,7 @@ class SQLAlchemyStore:
             )
         return self._case_record(case)
 
-    def update_case(
-        self, *, case_id: str, data: dict[str, Any], user_id: str
-    ) -> CaseRecord:
+    def update_case(self, *, case_id: str, data: dict[str, Any], user_id: str) -> CaseRecord:
         allowed_fields = {
             "title",
             "issue_description",
@@ -980,9 +938,7 @@ class SQLAlchemyStore:
             rows = session.scalars(items_query).all()
             return [self._case_record(row) for row in rows], total
 
-    def user_can_access_case(
-        self, user_id: str, case_id: str, permission: str
-    ) -> bool:
+    def user_can_access_case(self, user_id: str, case_id: str, permission: str) -> bool:
         with self._session() as session:
             user = session.get(tables.User, user_id)
             if user is None or not user.is_active:
@@ -1035,8 +991,7 @@ class SQLAlchemyStore:
                 .order_by(tables.CaseCollaborator.created_at, tables.CaseCollaborator.id)
             ).all()
             items = [
-                self._case_collaborator_record(collaborator, user)
-                for collaborator, user in rows
+                self._case_collaborator_record(collaborator, user) for collaborator, user in rows
             ]
             if case.created_by and not any(item.user_id == case.created_by for item in items):
                 creator = session.get(tables.User, case.created_by)
@@ -1109,9 +1064,7 @@ class SQLAlchemyStore:
             session.flush()
             return self._case_collaborator_record(collaborator, user)
 
-    def remove_case_collaborator(
-        self, *, case_id: str, user_id: str, removed_by: str
-    ) -> bool:
+    def remove_case_collaborator(self, *, case_id: str, user_id: str, removed_by: str) -> bool:
         with self._session() as session:
             if session.get(tables.Case, case_id) is None:
                 raise KeyError(case_id)
@@ -1227,9 +1180,7 @@ class SQLAlchemyStore:
             group = session.get(tables.PolicyGroup, group_id)
             return self._policy_group_record(group) if group else None
 
-    def list_policy_groups(
-        self, *, organization_id: str | None = None
-    ) -> list[PolicyGroupRecord]:
+    def list_policy_groups(self, *, organization_id: str | None = None) -> list[PolicyGroupRecord]:
         with self._session() as session:
             query = select(tables.PolicyGroup).order_by(
                 tables.PolicyGroup.name, tables.PolicyGroup.id
@@ -1248,10 +1199,7 @@ class SQLAlchemyStore:
                 .where(tables.PolicyGroupMember.group_id == group_id)
                 .order_by(tables.PolicyGroupMember.created_at, tables.PolicyGroupMember.id)
             ).all()
-            items = [
-                self._policy_group_member_record(member, user)
-                for member, user in rows
-            ]
+            items = [self._policy_group_member_record(member, user) for member, user in rows]
             return sorted(
                 items,
                 key=lambda item: (item.role != "owner", item.email or "", item.user_id),
@@ -1344,10 +1292,7 @@ class SQLAlchemyStore:
                 .where(tables.CaseGroupAccess.case_id == case_id)
                 .order_by(tables.CaseGroupAccess.created_at, tables.CaseGroupAccess.id)
             ).all()
-            items = [
-                self._case_group_access_record(access, group)
-                for access, group in rows
-            ]
+            items = [self._case_group_access_record(access, group) for access, group in rows]
             return sorted(
                 items,
                 key=lambda item: (item.role != "owner", item.group_name or "", item.group_id),
@@ -1433,22 +1378,12 @@ class SQLAlchemyStore:
     ) -> UploadRecord:
         upload_id = str(uuid.uuid4())
         stored_filename = safe_filename(filename)
-        if is_local_backend(self.settings):
-            object_uri = local_upload_object_uri(
-                case_id=case_id,
-                file_id=upload_id,
-                filename=stored_filename,
-                app_settings=self.settings,
-            )
-        elif is_s3_backend(self.settings):
-            object_uri = s3_upload_object_uri(
-                case_id=case_id,
-                file_id=upload_id,
-                filename=stored_filename,
-                app_settings=self.settings,
-            )
-        else:
-            object_uri = f"memory://uploads/{case_id}/{upload_id}/{stored_filename}"
+        object_uri = local_upload_object_uri(
+            case_id=case_id,
+            file_id=upload_id,
+            filename=stored_filename,
+            app_settings=self.settings,
+        )
         with self._session() as session:
             upload = tables.RawFile(
                 id=upload_id,
@@ -1459,7 +1394,6 @@ class SQLAlchemyStore:
                 size_bytes=size_bytes,
                 sha256=None,
                 upload_completed=False,
-                upload_metadata={},
                 file_role="log",
                 created_at=_now(),
             )
@@ -1474,16 +1408,6 @@ class SQLAlchemyStore:
         with self._session() as session:
             upload = session.get(tables.RawFile, upload_id)
             return self._upload_record(upload) if upload else None
-
-    def update_upload_metadata(
-        self, *, upload_id: str, metadata: dict[str, Any]
-    ) -> UploadRecord:
-        with self._session() as session:
-            upload = session.get(tables.RawFile, upload_id)
-            if upload is None:
-                raise KeyError(upload_id)
-            upload.upload_metadata = dict(metadata)
-        return self._upload_record(upload)
 
     def complete_upload(self, *, upload_id: str, sha256: str) -> UploadRecord:
         with self._session() as session:
@@ -1502,7 +1426,6 @@ class SQLAlchemyStore:
         input_paths: list[str],
         config: dict[str, Any],
         gateway: Any | None = None,
-        s3_client_factory: S3ClientFactory | None = None,
     ) -> AnalysisRunRecord:
         run = self.create_analysis_run(case_id=case_id, user_id=user_id, config=config)
         return await self.run_analysis(
@@ -1511,7 +1434,6 @@ class SQLAlchemyStore:
             input_paths=input_paths,
             config=config,
             gateway=gateway,
-            s3_client_factory=s3_client_factory,
         )
 
     def create_analysis_run(
@@ -1535,7 +1457,6 @@ class SQLAlchemyStore:
         input_paths: list[str],
         config: dict[str, Any],
         gateway: Any | None = None,
-        s3_client_factory: S3ClientFactory | None = None,
     ) -> AnalysisRunRecord:
         run = self.get_analysis_run(run_id)
         if run is None:
@@ -1550,46 +1471,6 @@ class SQLAlchemyStore:
             if not input_paths:
                 fixture_dir = Path("tests/fixtures/logs/checkout_incident")
                 input_paths = [str(path) for path in sorted(fixture_dir.glob("*.log"))]
-            orchestrator = (self.settings.analysis_orchestrator or "local").lower()
-            if orchestrator not in {"local", "temporal"}:
-                raise ValueError(
-                    "LOGAN_ANALYSIS_ORCHESTRATOR must be one of: local, temporal"
-                )
-            if orchestrator == "temporal":
-                from logan_workers.temporal_client import (
-                    TemporalClientConfig,
-                    start_analyze_case_workflow,
-                )
-
-                self._set_analysis_progress(
-                    run_id=run.id,
-                    progress={"current_step": "workflow_start", "orchestrator": "temporal"},
-                )
-                await start_analyze_case_workflow(
-                    case_id=case_id,
-                    analysis_run_id=run.id,
-                    paths=input_paths,
-                    case_context=sanitize_workflow_payload(
-                        {
-                            "title": case.title,
-                            "issue_description": case.issue_description,
-                            "product": case.product,
-                            "environment": case.environment,
-                            "user_id": user_id,
-                        }
-                    ),
-                    config=sanitize_workflow_payload(config),
-                    activity_start_to_close_seconds=(
-                        self.settings.temporal_activity_start_to_close_seconds
-                    ),
-                    activity_max_attempts=self.settings.temporal_activity_max_attempts,
-                    temporal_config=TemporalClientConfig(
-                        address=self.settings.temporal_address,
-                        namespace=self.settings.temporal_namespace,
-                        task_queue=self.settings.temporal_task_queue,
-                    ),
-                )
-                return self.get_analysis_run(run.id) or run
 
             def record_progress(event: dict[str, Any]) -> None:
                 self._raise_if_analysis_cancelled(run.id)
@@ -1602,21 +1483,14 @@ class SQLAlchemyStore:
                     attempt=int(event.get("attempt", 1)),
                     idempotency_key=str(event["idempotency_key"]),
                     metadata=(
-                        event.get("metadata")
-                        if isinstance(event.get("metadata"), dict)
-                        else {}
+                        event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
                     ),
                     error_message=event.get("error_message"),
                 )
                 self._update_analysis_progress(run_id=run.id, event=job_event)
                 self._raise_if_analysis_cancelled(run.id)
 
-            with materialize_analysis_inputs(
-                input_paths,
-                self.settings,
-                run_id=run.id,
-                s3_client_factory=s3_client_factory,
-            ) as materialized_paths:
+            with materialize_analysis_inputs(input_paths) as materialized_paths:
                 record_progress(
                     {
                         "step_name": "materialize_inputs",
@@ -1627,9 +1501,6 @@ class SQLAlchemyStore:
                         "metadata": {
                             "source_count": len(input_paths),
                             "materialized_count": len(materialized_paths),
-                            "storage_backend_counts": analysis_input_backend_counts(
-                                input_paths
-                            ),
                         },
                     }
                 )
@@ -1726,7 +1597,9 @@ class SQLAlchemyStore:
             query = (
                 select(tables.AnalysisRun)
                 .where(tables.AnalysisRun.case_id == case_id)
-                .order_by(tables.AnalysisRun.run_number.desc(), tables.AnalysisRun.created_at.desc())
+                .order_by(
+                    tables.AnalysisRun.run_number.desc(), tables.AnalysisRun.created_at.desc()
+                )
             )
             return [self._analysis_run_record(row) for row in session.scalars(query).all()]
 
@@ -1807,9 +1680,7 @@ class SQLAlchemyStore:
             app_settings=self.settings,
         )
 
-    def apply_analysis_job_event(
-        self, *, run_id: str, event: dict[str, Any]
-    ) -> JobEventRecord:
+    def apply_analysis_job_event(self, *, run_id: str, event: dict[str, Any]) -> JobEventRecord:
         run = self.get_analysis_run(run_id)
         if run is None:
             raise KeyError(run_id)
@@ -1945,9 +1816,7 @@ class SQLAlchemyStore:
             if case_id is not None:
                 query = query.where(tables.AnalysisStepArtifact.case_id == case_id)
             if analysis_run_id is not None:
-                query = query.where(
-                    tables.AnalysisStepArtifact.analysis_run_id == analysis_run_id
-                )
+                query = query.where(tables.AnalysisStepArtifact.analysis_run_id == analysis_run_id)
             if step_name is not None:
                 query = query.where(tables.AnalysisStepArtifact.step_name == step_name)
             query = query.order_by(
@@ -1956,205 +1825,8 @@ class SQLAlchemyStore:
                 tables.AnalysisStepArtifact.id,
             )
             return [
-                self._analysis_step_artifact_record(row)
-                for row in session.scalars(query).all()
+                self._analysis_step_artifact_record(row) for row in session.scalars(query).all()
             ]
-
-    def list_analytics_sink_writes(
-        self,
-        *,
-        case_id: str | None = None,
-        analysis_run_id: str | None = None,
-        sink_name: str | None = None,
-    ) -> list[AnalyticsSinkWriteRecord]:
-        with self._session() as session:
-            query = select(tables.AnalyticsSinkWrite)
-            if case_id is not None:
-                query = query.where(tables.AnalyticsSinkWrite.case_id == case_id)
-            if analysis_run_id is not None:
-                query = query.where(
-                    tables.AnalyticsSinkWrite.analysis_run_id == analysis_run_id
-                )
-            if sink_name is not None:
-                query = query.where(tables.AnalyticsSinkWrite.sink_name == sink_name)
-            query = query.order_by(
-                tables.AnalyticsSinkWrite.created_at,
-                tables.AnalyticsSinkWrite.id,
-            )
-            return [
-                self._analytics_sink_write_record(row)
-                for row in session.scalars(query).all()
-            ]
-
-    def _succeeded_analytics_sink_write_exists(
-        self,
-        *,
-        case_id: str,
-        run_id: str,
-        sink_name: str,
-        destination: str,
-    ) -> bool:
-        with self._session() as session:
-            write_id = session.scalar(
-                select(tables.AnalyticsSinkWrite.id)
-                .where(
-                    tables.AnalyticsSinkWrite.case_id == case_id,
-                    tables.AnalyticsSinkWrite.analysis_run_id == run_id,
-                    tables.AnalyticsSinkWrite.sink_name == sink_name,
-                    tables.AnalyticsSinkWrite.destination == destination,
-                    tables.AnalyticsSinkWrite.status == "succeeded",
-                )
-                .limit(1)
-            )
-            return bool(write_id)
-
-    def _record_analytics_query_failure(
-        self,
-        *,
-        case_id: str,
-        run_id: str,
-        report_name: str,
-        sink_name: str,
-        error: AnalyticsQueryError,
-    ) -> None:
-        sanitized_error = sanitize_error_message(sanitize_analytics_query_error(error))
-        self.record_audit(
-            action="analytics_query.failed",
-            target_type="analysis_run",
-            target_id=run_id,
-            case_id=case_id,
-            metadata={
-                "analysis_run_id": run_id,
-                "case_id": case_id,
-                "error": sanitized_error,
-                "report": report_name,
-                "sink_name": sink_name,
-            },
-        )
-
-    def _record_analytics_query_success(
-        self,
-        *,
-        case_id: str,
-        run_id: str,
-        report_name: str,
-        sink_name: str,
-    ) -> None:
-        self.record_audit(
-            action="analytics_query.external",
-            target_type="analysis_run",
-            target_id=run_id,
-            case_id=case_id,
-            metadata={
-                "analysis_run_id": run_id,
-                "case_id": case_id,
-                "report": report_name,
-                "sink_name": sink_name,
-            },
-        )
-
-    def _external_analytics_query_client(self) -> Any:
-        if self.analytics_query_client is None:
-            self.analytics_query_client = AnalyticsQueryClient.from_settings(self.settings)
-        return self.analytics_query_client
-
-    def _try_external_temporal_report(
-        self,
-        *,
-        case_id: str,
-        run_id: str,
-        group_by: str,
-    ) -> dict[str, object] | None:
-        if not self.settings.external_analytics_queries_enabled:
-            return None
-        if not self.settings.clickhouse_url:
-            return None
-        destination = f"{self.settings.clickhouse_database}.window_aggregates"
-        if not self._succeeded_analytics_sink_write_exists(
-            case_id=case_id,
-            run_id=run_id,
-            sink_name="clickhouse",
-            destination=destination,
-        ):
-            return None
-
-        try:
-            report = self._external_analytics_query_client().query_temporal(
-                case_id=case_id,
-                run_id=run_id,
-                group_by=group_by,
-            )
-            if report is not None:
-                self._record_analytics_query_success(
-                    case_id=case_id,
-                    run_id=run_id,
-                    report_name="temporal",
-                    sink_name="clickhouse",
-                )
-            return report
-        except AnalyticsQueryError as exc:
-            self._record_analytics_query_failure(
-                case_id=case_id,
-                run_id=run_id,
-                report_name="temporal",
-                sink_name="clickhouse",
-                error=exc,
-            )
-            return None
-
-    def _try_external_logs_report(
-        self,
-        *,
-        case_id: str,
-        run_id: str,
-        window_start: datetime | None,
-        window_end: datetime | None,
-        q: str | None,
-        service: str | None,
-        limit: int,
-        offset: int,
-    ) -> dict[str, object] | None:
-        if not self.settings.external_analytics_queries_enabled:
-            return None
-        if not self.settings.opensearch_url:
-            return None
-        destination = f"{opensearch_index_name(case_id, run_id)}/_bulk"
-        if not self._succeeded_analytics_sink_write_exists(
-            case_id=case_id,
-            run_id=run_id,
-            sink_name="opensearch",
-            destination=destination,
-        ):
-            return None
-
-        try:
-            report = self._external_analytics_query_client().query_logs(
-                case_id=case_id,
-                run_id=run_id,
-                window_start=window_start,
-                window_end=window_end,
-                q=q,
-                service=service,
-                limit=limit,
-                offset=offset,
-            )
-            if report is not None:
-                self._record_analytics_query_success(
-                    case_id=case_id,
-                    run_id=run_id,
-                    report_name="logs",
-                    sink_name="opensearch",
-                )
-            return report
-        except AnalyticsQueryError as exc:
-            self._record_analytics_query_failure(
-                case_id=case_id,
-                run_id=run_id,
-                report_name="logs",
-                sink_name="opensearch",
-                error=exc,
-            )
-            return None
 
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
         with self._session() as session:
@@ -2317,7 +1989,9 @@ class SQLAlchemyStore:
                 return None
 
             template_ids = [template.id for template, _annotation in rows]
-            sample_lines: dict[str, tuple[tables.RepresentativeSample, tables.NormalizedLogLine]] = {}
+            sample_lines: dict[
+                str, tuple[tables.RepresentativeSample, tables.NormalizedLogLine]
+            ] = {}
             if template_ids:
                 for sample, line in session.execute(
                     select(tables.RepresentativeSample, tables.NormalizedLogLine)
@@ -2375,9 +2049,7 @@ class SQLAlchemyStore:
                 sample = sample_with_line[0] if sample_with_line else None
                 sample_line = sample_with_line[1] if sample_with_line else None
                 representative_line = representative_lines.get(template.representative_log_id or "")
-                representative_log_id = (
-                    sample.log_id if sample else template.representative_log_id
-                )
+                representative_log_id = sample.log_id if sample else template.representative_log_id
                 representative_message = (
                     sample_line.redacted_message
                     if sample_line
@@ -2395,7 +2067,9 @@ class SQLAlchemyStore:
                         "fault_categories": _str_list(annotation.fault_categories)
                         if annotation is not None
                         else [],
-                        "entities": _entities(annotation.entities) if annotation is not None else {},
+                        "entities": _entities(annotation.entities)
+                        if annotation is not None
+                        else {},
                         "occurrence_count": template.occurrence_count,
                         "first_seen": _iso(template.first_seen),
                         "last_seen": _iso(template.last_seen),
@@ -2443,14 +2117,6 @@ class SQLAlchemyStore:
         run_id: str,
         group_by: str = "golden_signal",
     ) -> dict[str, object] | None:
-        external_report = self._try_external_temporal_report(
-            case_id=case_id,
-            run_id=run_id,
-            group_by=group_by,
-        )
-        if external_report is not None:
-            return external_report
-
         with self._session() as session:
             rows = session.scalars(
                 select(tables.TimeWindowSignal)
@@ -2508,19 +2174,6 @@ class SQLAlchemyStore:
         limit: int = 200,
         offset: int = 0,
     ) -> dict[str, object] | None:
-        external_report = self._try_external_logs_report(
-            case_id=case_id,
-            run_id=run_id,
-            window_start=window_start,
-            window_end=window_end,
-            q=q,
-            service=service,
-            limit=limit,
-            offset=offset,
-        )
-        if external_report is not None:
-            return external_report
-
         with self._session() as session:
             has_rows = (
                 session.scalar(
@@ -2691,8 +2344,7 @@ class SQLAlchemyStore:
                     "golden_signal": node.golden_signal
                     or (annotation.golden_signal if annotation else "unknown"),
                     "fault_categories": _str_list(
-                        node.fault_categories
-                        or (annotation.fault_categories if annotation else [])
+                        node.fault_categories or (annotation.fault_categories if annotation else [])
                     ),
                     "occurrence_count": node.occurrence_count,
                     "first_seen": _iso(node.first_seen),
@@ -2768,9 +2420,7 @@ class SQLAlchemyStore:
                 ],
             }
 
-    def get_report_causal_summary(
-        self, *, case_id: str, run_id: str
-    ) -> dict[str, object] | None:
+    def get_report_causal_summary(self, *, case_id: str, run_id: str) -> dict[str, object] | None:
         with self._session() as session:
             row = session.scalar(
                 select(tables.CausalSummary)
@@ -2848,7 +2498,9 @@ class SQLAlchemyStore:
                 ],
             )
 
-        missing_template_ids = [template_id for template_id in template_ids if template_id not in refs]
+        missing_template_ids = [
+            template_id for template_id in template_ids if template_id not in refs
+        ]
         if missing_template_ids:
             fallback_rows = session.execute(
                 select(tables.NormalizedLogLine, tables.RawLogLine, tables.RawFile)
@@ -3173,9 +2825,7 @@ class SQLAlchemyStore:
             if run.status == "cancelled":
                 return self._analysis_run_record(run)
             run.error_message = None
-            run.progress_json = merge_analysis_result_progress(
-                run.progress_json, result.progress
-            )
+            run.progress_json = dict(result.progress)
             run.result_json = result_json
             self._fan_out_analysis_result(session=session, run=run, result=result)
             model_invocation_audit_count = (
@@ -3201,12 +2851,6 @@ class SQLAlchemyStore:
                     metadata=model_invocation_audit_metadata(run=run, result=result),
                 )
 
-        self._publish_analytics_sinks(
-            run_id=run_id,
-            result=result,
-            user_id=user_id,
-        )
-
         with self._session() as session:
             run = session.get(tables.AnalysisRun, run_id)
             if run is None:
@@ -3217,9 +2861,7 @@ class SQLAlchemyStore:
             run.status = "completed"
             run.completed_at = _now()
             run.error_message = None
-            run.progress_json = merge_analysis_result_progress(
-                run.progress_json, result.progress
-            )
+            run.progress_json = dict(result.progress)
             if case:
                 case.status = "ready"
                 case.updated_at = _now()
@@ -3233,222 +2875,6 @@ class SQLAlchemyStore:
                 metadata={"progress": result.progress},
             )
         return self._analysis_run_record(run)
-
-    def _publish_analytics_sinks(
-        self,
-        *,
-        run_id: str,
-        result: AnalysisResult,
-        user_id: str,
-    ) -> None:
-        if not self.settings.analytics_sinks_enabled:
-            return
-        if not (self.settings.clickhouse_url or self.settings.opensearch_url):
-            return
-
-        publisher = self.analytics_sink_publisher or AnalyticsSinkPublisher.from_settings(
-            self.settings
-        )
-        if hasattr(publisher, "publish_operations"):
-            operations = list(publisher.publish_operations(result))
-        else:
-            operations = [self._legacy_analytics_sink_operation(publisher, result)]
-        if not operations:
-            return
-
-        failure_mode = self.settings.analytics_sink_failure_mode.lower()
-        metadata: dict[str, int] = {
-            "clickhouse_enriched_log_rows": 0,
-            "clickhouse_window_rows": 0,
-            "opensearch_documents": 0,
-            "succeeded_writes": 0,
-            "failed_writes": 0,
-            "skipped_writes": 0,
-        }
-
-        for operation in operations:
-            operation_started_at = time.perf_counter()
-            metric_status = "failed"
-            metric_row_count = 0
-            try:
-                record, skipped = self._prepare_analytics_sink_write(operation)
-                if skipped:
-                    metadata["skipped_writes"] += 1
-                    metric_status = "skipped"
-                    continue
-                try:
-                    operation.execute()
-                except AnalyticsSinkError as exc:
-                    sanitized_error = sanitize_error_message(exc)
-                    self._mark_analytics_sink_write_failed(
-                        write_id=record.id,
-                        error_message=sanitized_error,
-                    )
-                    metadata["failed_writes"] += 1
-                    self.record_audit(
-                        action="analytics_sink.publish_failed",
-                        user_id=user_id,
-                        target_type="analysis_run",
-                        target_id=run_id,
-                        case_id=operation.case_id,
-                        metadata={
-                            "destination": operation.destination,
-                            "error": sanitized_error,
-                            "failure_mode": failure_mode,
-                            "idempotency_key": operation.idempotency_key,
-                            "sink_name": operation.sink_name,
-                        },
-                    )
-                    if failure_mode == "fail":
-                        raise
-                    continue
-
-                self._mark_analytics_sink_write_succeeded(
-                    write_id=record.id,
-                    row_count=operation.row_count,
-                )
-                metadata["succeeded_writes"] += 1
-                self._add_analytics_sink_count(metadata, operation)
-                metric_status = "succeeded"
-                metric_row_count = operation.row_count
-            finally:
-                record_analytics_sink_operation(
-                    sink_name=operation.sink_name,
-                    status=metric_status,
-                    duration_seconds=time.perf_counter() - operation_started_at,
-                    row_count=metric_row_count,
-                )
-
-        self.record_audit(
-            action="analytics_sink.publish",
-            user_id=user_id,
-            target_type="analysis_run",
-            target_id=run_id,
-            case_id=result.case_id,
-            metadata=metadata,
-        )
-
-    def _legacy_analytics_sink_operation(
-        self, publisher: Any, result: AnalysisResult
-    ) -> AnalyticsSinkWriteOperation:
-        sink_name = "clickhouse" if self.settings.clickhouse_url else "opensearch"
-        destinations: list[str] = []
-        if self.settings.clickhouse_url:
-            destinations.append(f"{self.settings.clickhouse_database}.*")
-        if self.settings.opensearch_url:
-            destinations.append("opensearch/_bulk")
-        destination = "+".join(destinations) or "external"
-        payload_hash = _hash_json(
-            {
-                "normalized_logs": len(result.normalized_logs),
-                "temporal_windows": len(result.temporal),
-                "sink_name": sink_name,
-                "destination": destination,
-            }
-        )
-        idempotency_key = _hash_json(
-            {
-                "analysis_run_id": result.analysis_run_id,
-                "case_id": result.case_id,
-                "destination": destination,
-                "payload_hash": payload_hash,
-                "sink_name": sink_name,
-            },
-            prefix="analytics-sink:",
-        )
-
-        def publish_legacy() -> None:
-            publisher.publish(result)
-
-        return AnalyticsSinkWriteOperation(
-            case_id=result.case_id,
-            analysis_run_id=result.analysis_run_id,
-            sink_name=sink_name,
-            destination=destination,
-            idempotency_key=idempotency_key,
-            payload_hash=payload_hash,
-            row_count=0,
-            _publish=publish_legacy,
-        )
-
-    def _prepare_analytics_sink_write(
-        self, operation: AnalyticsSinkWriteOperation
-    ) -> tuple[AnalyticsSinkWriteRecord, bool]:
-        now = _now()
-        with self._session() as session:
-            row = session.scalar(
-                select(tables.AnalyticsSinkWrite).where(
-                    tables.AnalyticsSinkWrite.idempotency_key == operation.idempotency_key
-                )
-            )
-            if row is not None and row.status in {"succeeded", "skipped"}:
-                return self._analytics_sink_write_record(row), True
-            if row is None:
-                row = tables.AnalyticsSinkWrite(
-                    id=str(uuid.uuid4()),
-                    case_id=operation.case_id,
-                    analysis_run_id=operation.analysis_run_id,
-                    sink_name=operation.sink_name,
-                    destination=operation.destination,
-                    idempotency_key=operation.idempotency_key,
-                    payload_hash=operation.payload_hash,
-                    status="pending",
-                    attempt_count=0,
-                    row_count=operation.row_count,
-                    created_at=now,
-                    updated_at=now,
-                )
-                session.add(row)
-            else:
-                row.sink_name = operation.sink_name
-                row.destination = operation.destination
-                row.payload_hash = operation.payload_hash
-                row.row_count = operation.row_count
-
-            row.status = "running"
-            row.attempt_count = int(row.attempt_count or 0) + 1
-            row.last_error = None
-            row.last_attempt_at = now
-            row.next_retry_at = None
-            row.updated_at = now
-            session.flush()
-            return self._analytics_sink_write_record(row), False
-
-    def _mark_analytics_sink_write_succeeded(self, *, write_id: str, row_count: int) -> None:
-        now = _now()
-        with self._session() as session:
-            row = session.get(tables.AnalyticsSinkWrite, write_id)
-            if row is None:
-                raise KeyError(write_id)
-            row.status = "succeeded"
-            row.row_count = row_count
-            row.last_error = None
-            row.next_retry_at = None
-            row.updated_at = now
-
-    def _mark_analytics_sink_write_failed(
-        self, *, write_id: str, error_message: str
-    ) -> None:
-        now = _now()
-        with self._session() as session:
-            row = session.get(tables.AnalyticsSinkWrite, write_id)
-            if row is None:
-                raise KeyError(write_id)
-            row.status = "failed"
-            row.last_error = sanitize_error_message(error_message)
-            row.next_retry_at = now
-            row.updated_at = now
-
-    def _add_analytics_sink_count(
-        self, metadata: dict[str, int], operation: AnalyticsSinkWriteOperation
-    ) -> None:
-        if operation.sink_name == "clickhouse":
-            if operation.destination.endswith(".enriched_log_lines"):
-                metadata["clickhouse_enriched_log_rows"] += operation.row_count
-            elif operation.destination.endswith(".window_aggregates"):
-                metadata["clickhouse_window_rows"] += operation.row_count
-        elif operation.sink_name == "opensearch":
-            metadata["opensearch_documents"] += operation.row_count
 
     def _fan_out_analysis_result(
         self, *, session: Session, run: tables.AnalysisRun, result: AnalysisResult
@@ -3484,7 +2910,9 @@ class SQLAlchemyStore:
             try:
                 return mapping[worker_id]
             except KeyError as exc:
-                raise ValueError(f"analysis result references unknown {label}: {worker_id}") from exc
+                raise ValueError(
+                    f"analysis result references unknown {label}: {worker_id}"
+                ) from exc
 
         def optional_template_id(worker_id: str | None) -> str | None:
             if not worker_id:
@@ -3702,8 +3130,7 @@ class SQLAlchemyStore:
                 customer_update_markdown=summary.customer_update_markdown,
                 next_actions_json=summary.next_actions,
                 evidence_refs_json=[
-                    evidence_ref.model_dump(mode="json")
-                    for evidence_ref in summary.evidence_refs
+                    evidence_ref.model_dump(mode="json") for evidence_ref in summary.evidence_refs
                 ],
                 confidence=summary.confidence,
                 model_provider=run.model_provider,
@@ -3940,7 +3367,6 @@ class SQLAlchemyStore:
             object_uri=row.object_uri,
             sha256=row.sha256,
             completed=row.upload_completed,
-            upload_metadata=dict(row.upload_metadata or {}),
             created_at=_utc(row.created_at) or _now(),
         )
 
@@ -3977,27 +3403,6 @@ class SQLAlchemyStore:
             metadata=row.metadata_json or {},
             error_message=row.error_message,
             created_at=_utc(row.created_at) or _now(),
-        )
-
-    def _analytics_sink_write_record(
-        self, row: tables.AnalyticsSinkWrite
-    ) -> AnalyticsSinkWriteRecord:
-        return AnalyticsSinkWriteRecord(
-            id=row.id,
-            case_id=row.case_id,
-            analysis_run_id=row.analysis_run_id,
-            sink_name=row.sink_name,
-            destination=row.destination,
-            idempotency_key=row.idempotency_key,
-            payload_hash=row.payload_hash,
-            status=row.status,
-            attempt_count=row.attempt_count,
-            row_count=row.row_count,
-            last_error=row.last_error,
-            last_attempt_at=_utc(row.last_attempt_at),
-            next_retry_at=_utc(row.next_retry_at),
-            created_at=_utc(row.created_at) or _now(),
-            updated_at=_utc(row.updated_at) or _now(),
         )
 
     def _analysis_step_artifact_record(

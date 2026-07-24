@@ -10,7 +10,6 @@ from typing import Any, Protocol
 from logan_workers.models import AnalysisResult
 
 from app.config import Settings, settings
-from app.services.object_store import S3ClientFactory
 
 GLOBAL_USER_ROLES = frozenset({"admin", "engineer"})
 CASE_COLLABORATOR_ROLES = frozenset({"owner", "editor", "viewer"})
@@ -53,7 +52,9 @@ _SENSITIVE_ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         "<REDACTED>",
     ),
     (
-        re.compile(r"(?<![A-Za-z0-9_])/(?:root|home|var|tmp|etc|opt|srv|workspace|Users)(?:/[^\s,;:)]+)+"),
+        re.compile(
+            r"(?<![A-Za-z0-9_])/(?:root|home|var|tmp|etc|opt|srv|workspace|Users)(?:/[^\s,;:)]+)+"
+        ),
         "<PATH>",
     ),
     (re.compile(r"\b[A-Za-z]:\\(?:[^\\\s,;:]+\\?)+"), "<PATH>"),
@@ -77,22 +78,6 @@ _SENSITIVE_METADATA_KEY_PARTS = {
     "path",
 }
 _SAFE_STRING_LIST_METADATA = {"export_types"}
-_SECRET_WORKFLOW_KEY_PARTS = {
-    "access_key",
-    "api_key",
-    "authorization",
-    "credential",
-    "database_url",
-    "log_content",
-    "password",
-    "raw_log",
-    "raw_message",
-    "raw_text",
-    "secret",
-    "source_log",
-    "source_token",
-    "token",
-}
 _SENSITIVE_ARTIFACT_KEY_PARTS = {
     "access_key",
     "api_key",
@@ -134,7 +119,6 @@ _SAFE_ARTIFACT_STRING_KEYS = {
     "manifest_version",
     "sha256",
     "status",
-    "storage_backend",
 }
 _SAFE_ARTIFACT_LIST_STRINGS = {"export_types"}
 _SAFE_ARTIFACT_LIST_VALUES = {"html", "json", "markdown"}
@@ -179,9 +163,7 @@ def _sanitize_metadata_value(value: Any, *, parent_key: str) -> Any:
             return value
         return None
     if isinstance(value, list):
-        sanitized_items = [
-            _sanitize_metadata_value(item, parent_key=parent_key) for item in value
-        ]
+        sanitized_items = [_sanitize_metadata_value(item, parent_key=parent_key) for item in value]
         return [item for item in sanitized_items if item is not None]
     if isinstance(value, dict):
         return sanitize_job_metadata(value)
@@ -248,16 +230,12 @@ def _sanitize_artifact_metadata_value(value: Any, *, parent_key: str) -> Any:
             or parent_key.endswith("_sha256")
         ):
             return sanitize_error_message(value, max_length=200)
-        if (
-            parent_key in _SAFE_ARTIFACT_LIST_STRINGS
-            and value in _SAFE_ARTIFACT_LIST_VALUES
-        ):
+        if parent_key in _SAFE_ARTIFACT_LIST_STRINGS and value in _SAFE_ARTIFACT_LIST_VALUES:
             return value
         return None
     if isinstance(value, list):
         sanitized_items = [
-            _sanitize_artifact_metadata_value(item, parent_key=parent_key)
-            for item in value[:50]
+            _sanitize_artifact_metadata_value(item, parent_key=parent_key) for item in value[:50]
         ]
         return [item for item in sanitized_items if item is not None]
     if isinstance(value, dict):
@@ -277,25 +255,6 @@ def sanitize_artifact_metadata(metadata: dict[str, Any] | None) -> dict[str, Any
         if sanitized_value is not None:
             sanitized[key_text] = sanitized_value
     return sanitized
-
-
-def sanitize_workflow_payload(value: Any) -> Any:
-    if value is None or isinstance(value, bool | int | float):
-        return value
-    if isinstance(value, str):
-        return sanitize_error_message(value, max_length=2000)
-    if isinstance(value, list):
-        return [sanitize_workflow_payload(item) for item in value]
-    if isinstance(value, dict):
-        sanitized: dict[str, Any] = {}
-        for key, item in value.items():
-            key_text = str(key)
-            lowered = key_text.lower()
-            if any(part in lowered for part in _SECRET_WORKFLOW_KEY_PARTS):
-                continue
-            sanitized[key_text] = sanitize_workflow_payload(item)
-        return sanitized
-    return None
 
 
 def merge_recorded_progress(
@@ -442,7 +401,6 @@ class UploadRecord:
     object_uri: str
     sha256: str | None = None
     completed: bool = False
-    upload_metadata: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -478,25 +436,6 @@ class JobEventRecord:
     metadata: dict[str, Any] = field(default_factory=dict)
     error_message: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-
-
-@dataclass
-class AnalyticsSinkWriteRecord:
-    id: str
-    case_id: str
-    analysis_run_id: str
-    sink_name: str
-    destination: str
-    idempotency_key: str
-    payload_hash: str
-    status: str
-    attempt_count: int
-    row_count: int
-    last_error: str | None = None
-    last_attempt_at: datetime | None = None
-    next_retry_at: datetime | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -546,18 +485,6 @@ def apply_job_event_progress(
         else event.step_name
     )
     return next_progress
-
-
-def merge_analysis_result_progress(
-    existing_progress: dict[str, Any] | None,
-    result_progress: dict[str, Any],
-) -> dict[str, Any]:
-    progress = dict(result_progress)
-    if "orchestrator" not in progress and isinstance(existing_progress, dict):
-        orchestrator = existing_progress.get("orchestrator")
-        if orchestrator:
-            progress["orchestrator"] = orchestrator
-    return progress
 
 
 @dataclass
@@ -737,9 +664,7 @@ class MetadataStore(Protocol):
         expires_at: datetime | None = None,
     ) -> CredentialRecord: ...
 
-    def get_credential(
-        self, *, user_id: str, credential_type: str
-    ) -> CredentialRecord | None: ...
+    def get_credential(self, *, user_id: str, credential_type: str) -> CredentialRecord | None: ...
 
     def revoke_credentials(
         self, user_id: str, credential_types: set[str] | list[str] | tuple[str, ...] | None = None
@@ -749,9 +674,7 @@ class MetadataStore(Protocol):
 
     def create_case(self, *, user_id: str, data: dict[str, Any]) -> CaseRecord: ...
 
-    def update_case(
-        self, *, case_id: str, data: dict[str, Any], user_id: str
-    ) -> CaseRecord: ...
+    def update_case(self, *, case_id: str, data: dict[str, Any], user_id: str) -> CaseRecord: ...
 
     def delete_case(self, *, case_id: str, user_id: str) -> bool: ...
 
@@ -776,9 +699,7 @@ class MetadataStore(Protocol):
         limit: int | None = None,
     ) -> tuple[list[CaseRecord], int]: ...
 
-    def user_can_access_case(
-        self, user_id: str, case_id: str, permission: str
-    ) -> bool: ...
+    def user_can_access_case(self, user_id: str, case_id: str, permission: str) -> bool: ...
 
     def list_case_collaborators(self, case_id: str) -> list[CaseCollaboratorRecord]: ...
 
@@ -786,9 +707,7 @@ class MetadataStore(Protocol):
         self, *, case_id: str, user_id: str, role: str, added_by: str
     ) -> CaseCollaboratorRecord: ...
 
-    def remove_case_collaborator(
-        self, *, case_id: str, user_id: str, removed_by: str
-    ) -> bool: ...
+    def remove_case_collaborator(self, *, case_id: str, user_id: str, removed_by: str) -> bool: ...
 
     def create_policy_group(
         self,
@@ -844,10 +763,6 @@ class MetadataStore(Protocol):
 
     def get_upload(self, upload_id: str) -> UploadRecord | None: ...
 
-    def update_upload_metadata(
-        self, *, upload_id: str, metadata: dict[str, Any]
-    ) -> UploadRecord: ...
-
     def complete_upload(self, *, upload_id: str, sha256: str) -> UploadRecord: ...
 
     async def start_analysis(
@@ -858,7 +773,6 @@ class MetadataStore(Protocol):
         input_paths: list[str],
         config: dict[str, Any],
         gateway: Any | None = None,
-        s3_client_factory: S3ClientFactory | None = None,
     ) -> AnalysisRunRecord: ...
 
     def create_analysis_run(
@@ -873,7 +787,6 @@ class MetadataStore(Protocol):
         input_paths: list[str],
         config: dict[str, Any],
         gateway: Any | None = None,
-        s3_client_factory: S3ClientFactory | None = None,
     ) -> AnalysisRunRecord: ...
 
     def get_analysis_run(self, run_id: str) -> AnalysisRunRecord | None: ...
@@ -896,9 +809,7 @@ class MetadataStore(Protocol):
         error_message: str | None = None,
     ) -> JobEventRecord: ...
 
-    def apply_analysis_job_event(
-        self, *, run_id: str, event: dict[str, Any]
-    ) -> JobEventRecord: ...
+    def apply_analysis_job_event(self, *, run_id: str, event: dict[str, Any]) -> JobEventRecord: ...
 
     def complete_analysis_run(
         self, *, run_id: str, result: AnalysisResult, user_id: str
@@ -1017,23 +928,10 @@ def create_ephemeral_store(app_settings: Settings = settings) -> MetadataStore:
     )
 
 
-class InMemoryStore:
-    """Backward-compatible constructor for the former dictionary-backed store."""
-
-    def __new__(cls, app_settings: Settings = settings) -> MetadataStore:
-        return create_ephemeral_store(app_settings)
-
-
 def create_store(app_settings: Settings = settings) -> MetadataStore:
-    backend = (app_settings.store_backend or "auto").lower()
-    if backend not in {"auto", "memory", "sqlalchemy"}:
-        raise ValueError("LOGAN_STORE_BACKEND must be one of: auto, memory, sqlalchemy")
-    if backend == "memory":
-        return create_ephemeral_store(app_settings)
-    if backend == "sqlalchemy" or (backend == "auto" and app_settings.database_url):
-        if not app_settings.database_url:
-            raise ValueError("LOGAN_DATABASE_URL is required when LOGAN_STORE_BACKEND=sqlalchemy")
-        from app.sqlalchemy_store import SQLAlchemyStore
+    from app.sqlalchemy_store import SQLAlchemyStore
 
-        return SQLAlchemyStore(app_settings=app_settings, database_url=app_settings.database_url)
-    return create_ephemeral_store(app_settings)
+    return SQLAlchemyStore(
+        app_settings=app_settings,
+        database_url=app_settings.database_url,
+    )

@@ -2,16 +2,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
+from logan_workers.activities.broadcasting import broadcast_annotations
+from logan_workers.activities.sampling import select_samples
 from logan_workers.algorithms.drain_adapter import (
-    Drain3Adapter,
-    DrainConfig,
     StableDrainAdapter,
     build_drain_adapter,
 )
-from logan_workers.activities.broadcasting import broadcast_annotations
-from logan_workers.activities.sampling import select_samples
 from logan_workers.models import NormalizedLogLine, TemplateAnnotation
 
 
@@ -35,34 +31,32 @@ def _line(index: int, message: str, *, service: str = "api") -> NormalizedLogLin
     )
 
 
-@pytest.mark.skipif(not Drain3Adapter().available, reason="drain3 is not installed")
-def test_drain3_groups_variable_values_and_masks_high_cardinality_fields() -> None:
+def test_stable_drain_groups_variable_values_and_masks_high_cardinality_fields() -> None:
     logs = [
         _line(1, "cache-service connection pool exhausted active=40 max=40 request_id=req-a"),
         _line(2, "cache-service connection pool exhausted active=39 max=40 request_id=req-b"),
         _line(3, "cache-service connection pool exhausted active=38 max=40 request_id=req-c"),
     ]
 
-    _, templates = Drain3Adapter().cluster(
+    _, templates = StableDrainAdapter().cluster(
         case_id="case-drain", analysis_run_id="run-drain", logs=logs
     )
 
     assert len(templates) == 1
-    assert templates[0].sample_values["parser"] == "drain3"
+    assert templates[0].sample_values["parser"] == "stable"
     assert templates[0].occurrence_count == 3
     assert "active=<*>" in templates[0].template_text
     assert "request_id=<*>" in templates[0].template_text
     assert {line.template_id for line in logs} == {templates[0].template_id}
 
 
-@pytest.mark.skipif(not Drain3Adapter().available, reason="drain3 is not installed")
-def test_drain3_templates_feed_sampling_and_label_broadcasting() -> None:
+def test_stable_drain_templates_feed_sampling_and_label_broadcasting() -> None:
     logs = [
         _line(1, "worker timeout calling scheduler-service job_id=job-1 after 5000ms"),
         _line(2, "worker timeout calling scheduler-service job_id=job-2 after 6000ms"),
     ]
 
-    _, templates = Drain3Adapter(config=DrainConfig(sim_th=0.35)).cluster(
+    _, templates = StableDrainAdapter().cluster(
         case_id="case-drain", analysis_run_id="run-drain", logs=logs
     )
     samples = select_samples(logs, templates)
@@ -87,11 +81,10 @@ def test_drain3_templates_feed_sampling_and_label_broadcasting() -> None:
     assert all(line.fault_categories == ["timeout"] for line in enriched)
 
 
-def test_stable_drain_adapter_remains_explicit_fallback() -> None:
-    adapter = build_drain_adapter(config={"engine": "stable"})
+def test_stable_drain_adapter_is_the_single_parser() -> None:
+    adapter = build_drain_adapter()
 
     assert isinstance(adapter, StableDrainAdapter)
-    assert not isinstance(adapter, Drain3Adapter)
     assert "/tenant/acme/private" not in adapter.to_template(
         "GET /tenant/acme/private failed status=500 trace-abc"
     )

@@ -7,13 +7,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_drain3_is_optional_dependency() -> None:
+def test_removed_infrastructure_is_not_packaged() -> None:
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    dependencies = pyproject["project"]["dependencies"]
-    extras = pyproject["project"]["optional-dependencies"]
+    dependencies = "\n".join(pyproject["project"]["dependencies"]).lower()
 
-    assert not any(dependency.lower().startswith("drain3") for dependency in dependencies)
-    assert any(dependency.lower().startswith("drain3") for dependency in extras["drain3"])
+    for removed in ("boto3", "drain3", "opentelemetry", "temporalio"):
+        assert removed not in dependencies
 
 
 def test_analysis_engine_does_not_import_api_package() -> None:
@@ -24,11 +23,7 @@ def test_analysis_engine_does_not_import_api_package() -> None:
         worker_root / "pipeline.py",
         worker_root / "ports.py",
         *(worker_root / "algorithms").glob("*.py"),
-        *(
-            path
-            for path in (worker_root / "activities").glob("*.py")
-            if path.name != "analysis.py"
-        ),
+        *(path for path in (worker_root / "activities").glob("*.py") if path.name != "analysis.py"),
     ]
 
     violations: list[str] = []

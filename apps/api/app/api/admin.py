@@ -37,7 +37,6 @@ from app.store import (
     sanitize_error_message,
 )
 
-
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 _SENSITIVE_AUDIT_METADATA_PARTS = {
@@ -111,18 +110,15 @@ def _safe_audit_metadata(value: Any) -> Any:
         return sanitized
     if isinstance(value, list):
         return [
-            item
-            for item in (_safe_audit_metadata(item) for item in value[:50])
-            if item is not None
+            item for item in (_safe_audit_metadata(item) for item in value[:50]) if item is not None
         ]
     if isinstance(value, dict):
         sanitized: dict[str, Any] = {}
         for key, item in value.items():
             key_text = str(key)
             lowered = key_text.lower()
-            if (
-                lowered not in _SAFE_AUDIT_METADATA_KEYS
-                and any(part in lowered for part in _SENSITIVE_AUDIT_METADATA_PARTS)
+            if lowered not in _SAFE_AUDIT_METADATA_KEYS and any(
+                part in lowered for part in _SENSITIVE_AUDIT_METADATA_PARTS
             ):
                 continue
             sanitized_item = _safe_audit_metadata(item)
@@ -143,11 +139,6 @@ def _audit_response(record: AuditLogRecord) -> AdminAuditLogResponse:
         metadata=_safe_audit_metadata(record.metadata),
         created_at=record.created_at,
     )
-
-
-def _store_backend_name(store: MetadataStore) -> str:
-    name = store.__class__.__name__.lower()
-    return "sqlalchemy" if "sqlalchemy" in name else "memory"
 
 
 def _policy_group_response(
@@ -205,7 +196,9 @@ def _case_group_access_response(
 def _audit_visible_to_admin(
     store: MetadataStore, record: AuditLogRecord, admin: UserRecord
 ) -> bool:
-    metadata_org = record.metadata.get("organization_id") if isinstance(record.metadata, dict) else None
+    metadata_org = (
+        record.metadata.get("organization_id") if isinstance(record.metadata, dict) else None
+    )
     if isinstance(metadata_org, str) and metadata_org != admin.organization_id:
         return False
     if record.case_id:
@@ -218,10 +211,7 @@ def _audit_visible_to_admin(
 
 
 def _audit_export_rows(records: list[AuditLogRecord]) -> list[dict[str, Any]]:
-    return [
-        _audit_response(record).model_dump(mode="json")
-        for record in records
-    ]
+    return [_audit_response(record).model_dump(mode="json") for record in records]
 
 
 @router.get("/users", response_model=AdminUserListResponse)
@@ -485,9 +475,7 @@ def list_audit_logs(
         action=action,
         user_id=user_id,
     )
-    all_items = [
-        item for item in all_items if _audit_visible_to_admin(store, item, user)
-    ]
+    all_items = [item for item in all_items if _audit_visible_to_admin(store, item, user)]
     all_items = sorted(all_items, key=lambda item: (item.created_at, item.id), reverse=True)
     items = all_items[offset : offset + limit]
     return AdminAuditLogListResponse(
@@ -514,9 +502,7 @@ def export_audit_logs(
         action=action,
         user_id=user_id,
     )
-    all_items = [
-        item for item in all_items if _audit_visible_to_admin(store, item, user)
-    ]
+    all_items = [item for item in all_items if _audit_visible_to_admin(store, item, user)]
     all_items = sorted(all_items, key=lambda item: (item.created_at, item.id), reverse=True)
     rows = _audit_export_rows(all_items[offset : offset + limit])
     store.record_audit(
@@ -583,24 +569,12 @@ def settings_summary(
     app_settings = store.settings
     return AdminSettingsResponse(
         env=app_settings.env,
-        store_backend=_store_backend_name(store),
-        configured_store_backend=app_settings.store_backend,
-        object_backend=app_settings.object_store_backend,
-        orchestrator=app_settings.analysis_orchestrator,
         retention_days={
             "audit": app_settings.audit_retention_days,
             "raw_log": app_settings.raw_log_retention_days,
             "report": app_settings.report_retention_days,
         },
-        rate_limit={
-            "enabled": app_settings.rate_limit_enabled,
-            "requests_per_minute": app_settings.rate_limit_requests_per_minute,
-        },
-        analytics={
-            "sinks_enabled": app_settings.analytics_sinks_enabled,
-            "external_queries_enabled": app_settings.external_analytics_queries_enabled,
-            "sink_failure_mode": app_settings.analytics_sink_failure_mode,
-        },
+        metrics_enabled=app_settings.metrics_enabled,
     )
 
 

@@ -35,11 +35,6 @@ _HTTP_REQUESTS_IN_FLIGHT = Gauge(
     "HTTP requests currently in flight.",
     ("method", "route"),
 )
-_RATE_LIMIT_REJECTIONS_TOTAL = Counter(
-    "logan_rate_limit_rejections_total",
-    "HTTP requests rejected by the API rate limiter.",
-    ("key_type",),
-)
 _MODEL_GATEWAY_REQUESTS_TOTAL = Counter(
     "logan_model_gateway_requests_total",
     "Model gateway requests by provider, model, stream mode, and status.",
@@ -49,21 +44,6 @@ _MODEL_GATEWAY_REQUEST_DURATION_SECONDS = Histogram(
     "logan_model_gateway_request_duration_seconds",
     "Model gateway request duration in seconds.",
     ("provider", "model", "stream", "status"),
-)
-_ANALYTICS_SINK_OPERATIONS_TOTAL = Counter(
-    "logan_analytics_sink_operations_total",
-    "Analytics sink operations by sink and status.",
-    ("sink_name", "status"),
-)
-_ANALYTICS_SINK_OPERATION_DURATION_SECONDS = Histogram(
-    "logan_analytics_sink_operation_duration_seconds",
-    "Analytics sink operation duration in seconds.",
-    ("sink_name", "status"),
-)
-_ANALYTICS_SINK_ROWS_TOTAL = Counter(
-    "logan_analytics_sink_rows_total",
-    "Analytics sink rows written by sink and status.",
-    ("sink_name", "status"),
 )
 
 
@@ -122,43 +102,6 @@ def install_metrics(app: FastAPI, app_settings: Settings) -> bool:
     return True
 
 
-def configure_otel(app: FastAPI, app_settings: Settings) -> bool:
-    if not app_settings.otel_enabled:
-        return False
-
-    try:
-        from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    except Exception:
-        return False
-
-    resource = Resource.create(
-        {"service.name": app_settings.otel_service_name or "logan-api"}
-    )
-    tracer_provider = TracerProvider(resource=resource)
-    endpoint = app_settings.otel_exporter_otlp_endpoint
-    if endpoint:
-        tracer_provider.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint))
-        )
-    try:
-        trace.set_tracer_provider(tracer_provider)
-    except Exception:
-        pass
-    FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer_provider)
-    return True
-
-
-def record_rate_limit_rejection(key_type: str) -> None:
-    if key_type not in {"session", "ip", "unknown"}:
-        key_type = "unknown"
-    _RATE_LIMIT_REJECTIONS_TOTAL.labels(key_type=key_type).inc()
-
-
 def record_model_gateway_request(
     *,
     provider: str,
@@ -174,28 +117,7 @@ def record_model_gateway_request(
         "status": _status_label(status),
     }
     _MODEL_GATEWAY_REQUESTS_TOTAL.labels(**labels).inc()
-    _MODEL_GATEWAY_REQUEST_DURATION_SECONDS.labels(**labels).observe(
-        max(0.0, duration_seconds)
-    )
-
-
-def record_analytics_sink_operation(
-    *,
-    sink_name: str,
-    status: str,
-    duration_seconds: float,
-    row_count: int,
-) -> None:
-    labels = {
-        "sink_name": _safe_label(sink_name),
-        "status": _status_label(status),
-    }
-    _ANALYTICS_SINK_OPERATIONS_TOTAL.labels(**labels).inc()
-    _ANALYTICS_SINK_OPERATION_DURATION_SECONDS.labels(**labels).observe(
-        max(0.0, duration_seconds)
-    )
-    if row_count > 0:
-        _ANALYTICS_SINK_ROWS_TOTAL.labels(**labels).inc(row_count)
+    _MODEL_GATEWAY_REQUEST_DURATION_SECONDS.labels(**labels).observe(max(0.0, duration_seconds))
 
 
 def metrics_text() -> str:

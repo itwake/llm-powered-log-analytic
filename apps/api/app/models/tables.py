@@ -15,12 +15,12 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from app.db import Base
-
 
 UUID_TYPE = String(36).with_variant(PG_UUID(as_uuid=False), "postgresql")
 JSON_TYPE = JSON().with_variant(JSONB, "postgresql")
@@ -53,7 +53,11 @@ class User(Base):
 
     id: Mapped[str] = uuid_pk()
     organization_id: Mapped[str] = mapped_column(
-        Text, ForeignKey("organizations.id"), nullable=False, default="default", server_default="default"
+        Text,
+        ForeignKey("organizations.id"),
+        nullable=False,
+        default="default",
+        server_default="default",
     )
     email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     username: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
@@ -99,7 +103,11 @@ class Case(Base):
 
     id: Mapped[str] = uuid_pk()
     organization_id: Mapped[str] = mapped_column(
-        Text, ForeignKey("organizations.id"), nullable=False, default="default", server_default="default"
+        Text,
+        ForeignKey("organizations.id"),
+        nullable=False,
+        default="default",
+        server_default="default",
     )
     case_key: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
@@ -136,7 +144,11 @@ class PolicyGroup(Base):
 
     id: Mapped[str] = uuid_pk()
     organization_id: Mapped[str] = mapped_column(
-        Text, ForeignKey("organizations.id"), nullable=False, default="default", server_default="default"
+        Text,
+        ForeignKey("organizations.id"),
+        nullable=False,
+        default="default",
+        server_default="default",
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     slug: Mapped[str] = mapped_column(Text, nullable=False)
@@ -199,9 +211,7 @@ class AnalysisRun(Base):
 
 class JobEvent(Base):
     __tablename__ = "job_events"
-    __table_args__ = (
-        UniqueConstraint("analysis_run_id", "idempotency_key", "event_type"),
-    )
+    __table_args__ = (UniqueConstraint("analysis_run_id", "idempotency_key", "event_type"),)
 
     id: Mapped[str] = uuid_pk()
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
@@ -220,34 +230,9 @@ class JobEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class AnalyticsSinkWrite(Base):
-    __tablename__ = "analytics_sink_writes"
-    __table_args__ = (UniqueConstraint("idempotency_key"),)
-
-    id: Mapped[str] = uuid_pk()
-    case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(
-        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
-    )
-    sink_name: Mapped[str] = mapped_column(Text, nullable=False)
-    destination: Mapped[str] = mapped_column(Text, nullable=False)
-    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
-    payload_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
-    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    last_error: Mapped[str | None] = mapped_column(Text)
-    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
 class AnalysisStepArtifact(Base):
     __tablename__ = "analysis_step_artifacts"
-    __table_args__ = (
-        UniqueConstraint("analysis_run_id", "step_name", "artifact_type"),
-    )
+    __table_args__ = (UniqueConstraint("analysis_run_id", "step_name", "artifact_type"),)
 
     id: Mapped[str] = uuid_pk()
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
@@ -278,7 +263,6 @@ class RawFile(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str | None] = mapped_column(Text)
     upload_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    upload_metadata: Mapped[dict[str, Any]] = jsonb_default()
     detected_format: Mapped[str | None] = mapped_column(Text)
     file_role: Mapped[str] = mapped_column(Text, default="log")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -289,7 +273,9 @@ class RawLogLine(Base):
 
     id: Mapped[str] = uuid_pk()
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False)
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
     file_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("raw_files.id"), nullable=False)
     line_number: Mapped[int] = mapped_column(Integer, nullable=False)
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -302,9 +288,13 @@ class NormalizedLogLine(Base):
     __tablename__ = "normalized_log_lines"
 
     id: Mapped[str] = uuid_pk()
-    raw_log_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("raw_log_lines.id"), nullable=False)
+    raw_log_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("raw_log_lines.id"), nullable=False
+    )
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False)
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
     timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     timestamp_quality: Mapped[str] = mapped_column(Text, default="parsed")
     level: Mapped[str | None] = mapped_column(Text)
@@ -325,7 +315,9 @@ class LogTemplate(Base):
 
     id: Mapped[str] = uuid_pk()
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False)
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
     template_key: Mapped[str] = mapped_column(Text, nullable=False)
     template_text: Mapped[str] = mapped_column(Text, nullable=False)
     normalized_template_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -344,8 +336,12 @@ class RepresentativeSample(Base):
     __tablename__ = "representative_samples"
 
     id: Mapped[str] = uuid_pk()
-    template_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("log_templates.id"), nullable=False)
-    log_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("normalized_log_lines.id"), nullable=False)
+    template_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("log_templates.id"), nullable=False
+    )
+    log_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("normalized_log_lines.id"), nullable=False
+    )
     sample_reason: Mapped[str] = mapped_column(Text, nullable=False)
     sample_rank: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -356,8 +352,12 @@ class TemplateAnnotation(Base):
     __table_args__ = (UniqueConstraint("template_id", "prompt_version", "model_name"),)
 
     id: Mapped[str] = uuid_pk()
-    template_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("log_templates.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False)
+    template_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("log_templates.id"), nullable=False
+    )
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
     golden_signal: Mapped[str] = mapped_column(Text, nullable=False)
     fault_categories: Mapped[list[Any]] = json_list_default()
     entities: Mapped[dict[str, Any]] = jsonb_default()
@@ -376,7 +376,9 @@ class TimeWindowSignal(Base):
 
     id: Mapped[str] = uuid_pk()
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False)
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
     window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     window_size_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -393,8 +395,12 @@ class CausalNode(Base):
 
     id: Mapped[str] = uuid_pk()
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False)
-    template_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("log_templates.id"), nullable=False)
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
+    template_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("log_templates.id"), nullable=False
+    )
     node_type: Mapped[str] = mapped_column(Text, default="template")
     rank_score: Mapped[float] = mapped_column(Float, default=0)
     pagerank_score: Mapped[float] = mapped_column(Float, default=0)
@@ -411,9 +417,15 @@ class CausalEdge(Base):
 
     id: Mapped[str] = uuid_pk()
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False)
-    source_template_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("log_templates.id"), nullable=False)
-    target_template_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("log_templates.id"), nullable=False)
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
+    source_template_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("log_templates.id"), nullable=False
+    )
+    target_template_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("log_templates.id"), nullable=False
+    )
     edge_type: Mapped[str] = mapped_column(Text, default="candidate_cause")
     method: Mapped[str] = mapped_column(Text, nullable=False)
     lag_seconds: Mapped[int | None] = mapped_column(Integer)
@@ -432,7 +444,9 @@ class CausalSummary(Base):
 
     id: Mapped[str] = uuid_pk()
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False)
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
     summary_markdown: Mapped[str] = mapped_column(Text, nullable=False)
     customer_update_markdown: Mapped[str] = mapped_column(Text, nullable=False)
     next_actions_json: Mapped[list[Any]] = json_list_default()
@@ -468,7 +482,9 @@ class Export(Base):
 
     id: Mapped[str] = uuid_pk()
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False)
+    analysis_run_id: Mapped[str] = mapped_column(
+        UUID_TYPE, ForeignKey("analysis_runs.id"), nullable=False
+    )
     export_type: Mapped[str] = mapped_column(Text, nullable=False)
     object_uri: Mapped[str] = mapped_column(Text, nullable=False)
     created_by: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("users.id"), nullable=False)
@@ -486,5 +502,7 @@ class AuditLog(Base):
     case_id: Mapped[str | None] = mapped_column(UUID_TYPE, ForeignKey("cases.id"))
     ip_address: Mapped[str | None] = mapped_column(Text)
     user_agent: Mapped[str | None] = mapped_column(Text)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON_TYPE, nullable=False, default=dict, server_default="{}")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON_TYPE, nullable=False, default=dict, server_default="{}"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

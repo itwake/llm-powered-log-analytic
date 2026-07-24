@@ -11,6 +11,7 @@ Usage:
     python scripts/seed_demo_case.py
     python scripts/seed_demo_case.py --api-base-url http://localhost:8000
 """
+
 from __future__ import annotations
 
 import argparse
@@ -155,12 +156,6 @@ def main(argv: list[str] | None = None) -> int:
             if upload.status_code != 200:
                 return _fail(f"upload request for {name} failed: HTTP {upload.status_code}")
             info = upload.json()
-            if info.get("upload_backend") != "local":
-                return _fail(
-                    "this demo only supports the local object store "
-                    f"(got backend {info.get('upload_backend')!r}); for S3/MinIO use "
-                    "scripts/full_stack_smoke.py instead."
-                )
             put = client.put(
                 info["upload_url"],
                 content=content,

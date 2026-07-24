@@ -49,13 +49,8 @@ class AdminAuditLogListResponse(BaseModel):
 
 class AdminSettingsResponse(BaseModel):
     env: str
-    store_backend: str
-    configured_store_backend: str
-    object_backend: str
-    orchestrator: str
     retention_days: dict[str, int]
-    rate_limit: dict[str, int | bool]
-    analytics: dict[str, str | bool]
+    metrics_enabled: bool
 
 
 class RetentionRunResponse(BaseModel):

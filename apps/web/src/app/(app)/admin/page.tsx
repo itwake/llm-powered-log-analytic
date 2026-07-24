@@ -321,28 +321,10 @@ export default function AdminPage() {
 
       {!loading && settings && (
         <>
-          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" } }}>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" } }}>
             <Metric label="Environment" value={settings.env} />
-            <Metric label="Store" value={settings.store_backend} />
-            <Metric label="Object backend" value={settings.object_backend} />
+            <Metric label="Metrics" value={settings.metrics_enabled ? "enabled" : "disabled"} />
           </Box>
-
-          <Card>
-            <Typography component="h2" gutterBottom sx={{ fontWeight: 800 }} variant="h6">
-              Settings
-            </Typography>
-            <InfoGrid
-              rows={[
-                { label: "Configured store", value: settings.configured_store_backend },
-                { label: "Orchestrator", value: settings.orchestrator },
-                {
-                  label: "Rate limit",
-                  value: settings.rate_limit.enabled ? `${settings.rate_limit.requests_per_minute}/min` : "disabled",
-                },
-                { label: "Analytics", value: JSON.stringify(settings.analytics) },
-              ]}
-            />
-          </Card>
 
           <Card>
             <Stack spacing={2}>
