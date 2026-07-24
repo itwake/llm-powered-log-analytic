@@ -26,6 +26,14 @@ def test_compose_is_the_single_local_stack() -> None:
     assert "worker:" not in compose
 
 
+def test_ci_validates_the_single_compose_stack() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "docker compose config -q" in workflow
+    assert "docker compose build" in workflow
+    assert "full-stack-smoke" not in workflow
+
+
 def test_api_container_can_enable_debug_logging() -> None:
     dockerfile = (REPO_ROOT / "infra" / "docker" / "api.Dockerfile").read_text(encoding="utf-8")
 
