@@ -7,7 +7,6 @@ from urllib.parse import unquote
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 STALE_REFERENCES = (
-    ".env.full.example",
     "docker-compose.quickstart.yml",
     "scripts/full_stack_smoke.py",
     "infra/k8s/",
@@ -29,11 +28,19 @@ REMOTE_STORAGE_REFERENCES = (
     "AWS_SECRET_ACCESS_KEY",
     "MINIO_",
 )
+ENV_ASSIGNMENT_RE = re.compile(r"^\s*#?\s*([A-Z][A-Z0-9_]*)=", flags=re.MULTILINE)
+AUXILIARY_ENV_NAMES = {
+    "LOGAN_API_WORKERS",
+    "LOGAN_DEMO_API_BASE_URL",
+    "LOGAN_DEMO_WEB_BASE_URL",
+    "NEXT_PUBLIC_API_BASE_URL",
+}
 
 
 def _documentation_script_and_config_files() -> list[Path]:
     files = [
         REPO_ROOT / ".env.example",
+        REPO_ROOT / ".env.full.example",
         REPO_ROOT / "CLAUDE.md",
         REPO_ROOT / "CONTRIBUTING.md",
         REPO_ROOT / "Makefile",
@@ -130,6 +137,31 @@ def test_documented_python_lint_command_matches_ci() -> None:
     ]
 
     assert violations == []
+
+
+def _active_env_values(content: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, value = stripped.split("=", 1)
+        values[name] = value
+    return values
+
+
+def test_complete_environment_reference_tracks_settings() -> None:
+    config = (REPO_ROOT / "apps" / "api" / "app" / "config.py").read_text(encoding="utf-8")
+    minimal = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    complete = (REPO_ROOT / ".env.full.example").read_text(encoding="utf-8")
+
+    settings_env_names = set(re.findall(r'"(LOGAN_[A-Z0-9_]+)"', config))
+    documented_env_names = set(ENV_ASSIGNMENT_RE.findall(complete))
+
+    assert settings_env_names <= documented_env_names
+    assert AUXILIARY_ENV_NAMES <= documented_env_names
+    assert _active_env_values(complete) == _active_env_values(minimal)
+    assert "LOGAN_LOCAL_OBJECT_STORE_DIR=.logan/object-store" in minimal
 
 
 def test_python_sources_live_under_the_api_application() -> None:

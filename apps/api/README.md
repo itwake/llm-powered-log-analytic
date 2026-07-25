@@ -13,6 +13,9 @@ normalized result through the same store.
 SQLite is the default database. A PostgreSQL SQLAlchemy URL uses the same implementation and
 migrations; it is not a separate store backend.
 
+The repository root `.env.example` is the copy-ready local minimum. `.env.full.example` documents
+every current API setting plus the small set of frontend, process, and demo-tool variables.
+
 ## Development
 
 ```bash

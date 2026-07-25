@@ -98,7 +98,9 @@ Repository layout:
 
 ## Configuration
 
-The smallest useful local configuration is in `.env.example`. Important settings:
+The copy-ready minimum is in [`.env.example`](.env.example). The current complete reference,
+including defaults and production-only options, is in
+[`.env.full.example`](.env.full.example). Important settings:
 
 - `LOGAN_DATABASE_URL` — SQLAlchemy URL; defaults to `sqlite:///.logan/logan.db`
 - `LOGAN_LOCAL_OBJECT_STORE_DIR` — upload and step-artifact root
