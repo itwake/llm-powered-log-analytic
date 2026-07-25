@@ -17,7 +17,7 @@ from app.store import (
     create_ephemeral_store,
 )
 from httpx import ASGITransport, AsyncClient
-from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
+from logan_analysis.activities.inference import MockAIPlatformAnnotationGateway
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 PIPELINE_STEPS = [

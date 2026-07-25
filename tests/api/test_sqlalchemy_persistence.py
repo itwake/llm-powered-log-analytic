@@ -22,7 +22,7 @@ from app.store import (
     create_store,
 )
 from httpx import ASGITransport, AsyncClient
-from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
+from logan_analysis.activities.inference import MockAIPlatformAnnotationGateway
 from sqlalchemy import delete, func, select
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")

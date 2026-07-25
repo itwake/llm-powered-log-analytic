@@ -15,7 +15,7 @@ npm run lint
 
 - `apps/web` is presentation and API-client code.
 - `apps/api` owns HTTP, auth, configuration, persistence, and runtime composition.
-- `logan_workers` owns analysis algorithms and must not import `app`.
+- `apps/api/logan_analysis` owns analysis algorithms and must not import `app`.
 - `SQLAlchemyStore` is the only persistence implementation. Tests use it through
   `create_ephemeral_store`.
 - Uploads and step artifacts use the local filesystem implementation.

@@ -49,7 +49,7 @@ if not exist "%VENV_PYTHON%" (
     python -m venv .venv
     if errorlevel 1 exit /b 1
 )
-"%VENV_PYTHON%" -c "import app, logan_workers, uvicorn" >nul 2>nul
+"%VENV_PYTHON%" -c "import app, logan_analysis, uvicorn" >nul 2>nul
 if errorlevel 1 (
     echo Installing Python dependencies - the first run takes a few minutes ...
     "%VENV_PYTHON%" -m pip install --upgrade pip

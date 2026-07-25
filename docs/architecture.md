@@ -1,6 +1,6 @@
 # Architecture
 
-LogAn has two runtime processes and one shared Python analysis package:
+LogAn has two runtime processes. The API contains an internal Python analysis package:
 
 ```text
 Next.js web ──HTTP──> FastAPI
@@ -40,7 +40,7 @@ logs, prompts, model inputs, credentials, tokens, cookies, database URLs, and fu
 - `apps/web` contains presentation and API clients only.
 - `apps/api` owns HTTP, authentication, authorization, configuration, persistence, and runtime
   composition.
-- `logan_workers` owns analysis models and algorithms and has no dependency on `app`.
+- `apps/api/logan_analysis` owns analysis models and algorithms and has no dependency on `app`.
 - `ModelGateway` is the only model-provider port.
 - `MetadataStore` has one implementation: `SQLAlchemyStore`.
 

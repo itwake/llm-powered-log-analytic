@@ -8,8 +8,8 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from logan_workers.activities.export import export_analysis
-from logan_workers.models import OFFENDING_SIGNALS, ExportArtifact
+from logan_analysis.activities.export import export_analysis
+from logan_analysis.models import OFFENDING_SIGNALS, ExportArtifact
 
 from app.dependencies import current_user, get_store, require_case_permission
 from app.schemas.case import (
@@ -59,10 +59,8 @@ def _causal_summary_export_artifact(
         content = summary_markdown
     elif export_type == "html":
         content = (
-            "<!doctype html><html><head><meta charset=\"utf-8\"><title>LogAn Export</title></head>"
-            "<body><main><pre>"
-            + html.escape(summary_markdown)
-            + "</pre></main></body></html>"
+            '<!doctype html><html><head><meta charset="utf-8"><title>LogAn Export</title></head>'
+            "<body><main><pre>" + html.escape(summary_markdown) + "</pre></main></body></html>"
         )
     elif export_type == "json":
         content = json.dumps(
@@ -160,11 +158,7 @@ def data_summary(
             continue
         if golden_signal and signal != golden_signal:
             continue
-        if (
-            not golden_signal
-            and summary_scope == "attention"
-            and signal not in OFFENDING_SIGNALS
-        ):
+        if not golden_signal and summary_scope == "attention" and signal not in OFFENDING_SIGNALS:
             continue
         sample = samples.get(template.template_id)
         items.append(
@@ -174,9 +168,7 @@ def data_summary(
                     sample.log_id if sample else template.representative_log_id
                 ),
                 "template_text": template.template_text,
-                "representative_message": (
-                    sample.message if sample else template.template_text
-                ),
+                "representative_message": (sample.message if sample else template.template_text),
                 "golden_signal": signal,
                 "fault_categories": annotation.fault_categories if annotation else [],
                 "entities": annotation.entities if annotation else {},
@@ -193,9 +185,7 @@ def data_summary(
     raw_count = sum(len(file.lines) for file in result.files)
     total = len(items)
     offending_total = sum(
-        1
-        for annotation in annotations.values()
-        if annotation.golden_signal in OFFENDING_SIGNALS
+        1 for annotation in annotations.values() if annotation.golden_signal in OFFENDING_SIGNALS
     )
     return {
         "items": items[offset : offset + limit],
@@ -251,9 +241,7 @@ def temporal(
             name = aggregate.golden_signal
         grouped[name][aggregate.window_start.isoformat()] += aggregate.count
     return {
-        "window_size_seconds": (
-            result.temporal[0].window_size_seconds if result.temporal else 60
-        ),
+        "window_size_seconds": (result.temporal[0].window_size_seconds if result.temporal else 60),
         "series": [
             {
                 "name": name,
@@ -345,9 +333,7 @@ def logs(
             if lowered in line.redacted_message.lower()
             or lowered in (line.template_text or "").lower()
             or any(
-                lowered in value.lower()
-                for values in line.entities.values()
-                for value in values
+                lowered in value.lower() for values in line.entities.values() for value in values
             )
         ]
     if service:
@@ -364,9 +350,7 @@ def logs(
         "fault_category": [
             {"value": key, "count": count}
             for key, count in Counter(
-                category
-                for line in rows
-                for category in line.fault_categories
+                category for line in rows for category in line.fault_categories
             ).items()
         ],
     }
@@ -437,8 +421,7 @@ def causal_graph(
         "nodes": [node.model_dump(mode="json") for node in graph.nodes[:max_nodes]],
         "edges": [edge.model_dump(mode="json") for edge in edges],
         "root_cause_candidates": [
-            candidate.model_dump(mode="json")
-            for candidate in graph.root_cause_candidates
+            candidate.model_dump(mode="json") for candidate in graph.root_cause_candidates
         ],
     }
 

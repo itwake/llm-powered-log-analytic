@@ -58,7 +58,7 @@ if (-not $SkipInstall) {
             if ($LASTEXITCODE -ne 0) { throw "python -m venv .venv failed." }
         }
         $probe = Start-Process -FilePath $venvPython `
-            -ArgumentList "-c", "import app, logan_workers, uvicorn" `
+            -ArgumentList "-c", "import app, logan_analysis, uvicorn" `
             -Wait -PassThru -WindowStyle Hidden
         if ($probe.ExitCode -ne 0) {
             Write-Host "Installing Python dependencies (first run takes a few minutes) ..."

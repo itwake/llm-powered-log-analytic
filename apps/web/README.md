@@ -31,7 +31,7 @@ health routes live outside that group.
 
 Response interfaces are maintained alongside the frontend client and must track
 `docs/openapi.snapshot.json`. Pipeline step names must track
-`logan_workers.observability.PIPELINE_STEP_NAMES`.
+`logan_analysis.observability.PIPELINE_STEP_NAMES`.
 
 ## Configuration
 

@@ -14,6 +14,9 @@ STALE_REFERENCES = (
     "infra/eks/",
     "apps/api/alembic.ini",
     "scripts/evaluate_benchmarks.py",
+    "apps/workers",
+    "tests/workers",
+    "logan_workers",
     "LOGAN_STORE_BACKEND",
     "LOGAN_OBJECT_STORE_BACKEND",
     "LOGAN_ANALYSIS_ORCHESTRATOR",
@@ -39,6 +42,7 @@ def _documentation_script_and_config_files() -> list[Path]:
         REPO_ROOT / "package.json",
         REPO_ROOT / "pyproject.toml",
         *(REPO_ROOT / ".github" / "workflows").glob("*.yml"),
+        *(REPO_ROOT / "docs").glob("*.html"),
         *(REPO_ROOT / "docs").glob("*.md"),
         *(REPO_ROOT / "infra" / "docker").glob("*.Dockerfile"),
         *(REPO_ROOT / "scripts").glob("*.py"),
@@ -126,3 +130,14 @@ def test_documented_python_lint_command_matches_ci() -> None:
     ]
 
     assert violations == []
+
+
+def test_python_sources_live_under_the_api_application() -> None:
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    dockerfile = (REPO_ROOT / "infra" / "docker" / "api.Dockerfile").read_text(encoding="utf-8")
+
+    assert 'where = ["apps/api"]' in pyproject
+    assert 'pythonpath = ["apps/api"]' in pyproject
+    assert dockerfile.count("COPY apps/api ./apps/api") == 1
+    assert not (REPO_ROOT / "apps" / "workers").exists()
+    assert not (REPO_ROOT / "tests" / "workers").exists()

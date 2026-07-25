@@ -13,7 +13,7 @@ redaction guarantees see [`security.md`](security.md); for the benchmark runbook
 
 ## Design stance: the model explains, the algorithms decide
 
-The analysis pipeline (`apps/workers/logan_workers/pipeline.py`) has 11 steps. Only **two** call the
+The analysis pipeline (`apps/api/logan_analysis/pipeline.py`) has 11 steps. Only **two** call the
 model gateway; the rest are deterministic:
 
 | # | Step | Model? | Produces |
@@ -34,7 +34,7 @@ A third model touchpoint, case chat (`POST /api/chat/stream`, `apps/api/app/api/
 questions over an already-computed, redacted analysis result and never re-reads raw logs.
 
 Because causal direction, edge confidence, and root-cause rank are computed by step 9
-(`infer_causal_graph` in `apps/workers/logan_workers/activities/causal.py`) and not by the model, a
+(`infer_causal_graph` in `apps/api/logan_analysis/activities/causal.py`) and not by the model, a
 wrong or hallucinated model response cannot invent a causal link or inflate a confidence score.
 
 ## Reliability
@@ -47,7 +47,7 @@ packet. Neither step is allowed to introduce facts that are not already in the s
 
 ### 2. Quality is measured by a threshold-gated benchmark
 
-`apps/workers/logan_workers/evaluation/` runs the whole pipeline against a hand-labeled incident
+`apps/api/logan_analysis/evaluation/` runs the whole pipeline against a hand-labeled incident
 (`benchmarks/logan/checkout_incident/labels.json`) and scores it with standard metrics. Each metric
 has a threshold; the run reports `passed` only if **all** thresholds are met, and the CLI exits
 non-zero otherwise — a release blocker per [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
@@ -66,7 +66,7 @@ Metric math lives in `evaluation/metrics.py` and the scoring in `evaluation/eval
 are intentionally compact and redaction-safe (see [`operations.md`](operations.md)). Run it with:
 
 ```bash
-python -m logan_workers.evaluation.run --benchmark benchmarks/logan/checkout_incident \
+python -m logan_analysis.evaluation.run --benchmark benchmarks/logan/checkout_incident \
   --out .logan/evaluation/report.json --markdown .logan/evaluation/report.md
 ```
 
@@ -79,7 +79,7 @@ python -m logan_workers.evaluation.run --benchmark benchmarks/logan/checkout_inc
 
 ### 3. Deterministic and reproducible
 
-The mock provider (`MockAIPlatformAnnotationGateway`, `apps/workers/logan_workers/activities/inference.py`)
+The mock provider (`MockAIPlatformAnnotationGateway`, `apps/api/logan_analysis/activities/inference.py`)
 is pure keyword/regex logic — no randomness, no network, no time dependence — so identical input
 yields identical output. Unit tests inject fakes through `create_app(store=..., model_gateway=...)`
 and never touch the network. Repeatable output is what makes regressions detectable.
@@ -132,7 +132,7 @@ the exact log line that produced it.**
 
 Claims and next actions carry `evidence_refs`, and an `EvidenceRef` (`models.py`) is a precise
 pointer: `case_id`, `analysis_run_id`, `template_id`, `log_id`, `file_path`, `line_number`,
-`timestamp`. The summary prompt (`apps/workers/logan_workers/prompts/causal_summary_prompt.md`)
+`timestamp`. The summary prompt (`apps/api/logan_analysis/prompts/causal_summary_prompt.md`)
 requires that *every causal statement refer to evidence_refs*, and the parser rejects claims that do
 not. The workbench renders these as clickable evidence chips that jump to the referenced line.
 
@@ -189,15 +189,15 @@ Stated plainly, because acknowledging them strengthens the reliability claim:
 
 | Guarantee | Code |
 | --- | --- |
-| LLM confined to 2 of 11 steps | `apps/workers/logan_workers/pipeline.py` |
-| Causal facts are algorithmic | `apps/workers/logan_workers/activities/causal.py`, `algorithms/causal_*.py`, `algorithms/pagerank.py` |
-| Gated benchmark + metrics | `apps/workers/logan_workers/evaluation/`, `benchmarks/logan/checkout_incident/labels.json` |
-| Deterministic mock provider | `apps/workers/logan_workers/activities/inference.py` |
-| Annotation schema fallback | `apps/workers/logan_workers/activities/inference.py` |
-| Summary evidence validation + fallback | `apps/workers/logan_workers/activities/summary.py` |
-| Enforced cautious language | `apps/workers/logan_workers/activities/summary.py`, `prompts/causal_summary_prompt.md` |
-| Evidence pointers | `EvidenceRef` in `apps/workers/logan_workers/models.py` |
-| White-box causal evidence | `CausalEdge` in `apps/workers/logan_workers/models.py` |
-| Annotation provenance | `TemplateAnnotation` in `apps/workers/logan_workers/models.py` |
+| LLM confined to 2 of 11 steps | `apps/api/logan_analysis/pipeline.py` |
+| Causal facts are algorithmic | `apps/api/logan_analysis/activities/causal.py`, `algorithms/causal_*.py`, `algorithms/pagerank.py` |
+| Gated benchmark + metrics | `apps/api/logan_analysis/evaluation/`, `benchmarks/logan/checkout_incident/labels.json` |
+| Deterministic mock provider | `apps/api/logan_analysis/activities/inference.py` |
+| Annotation schema fallback | `apps/api/logan_analysis/activities/inference.py` |
+| Summary evidence validation + fallback | `apps/api/logan_analysis/activities/summary.py` |
+| Enforced cautious language | `apps/api/logan_analysis/activities/summary.py`, `prompts/causal_summary_prompt.md` |
+| Evidence pointers | `EvidenceRef` in `apps/api/logan_analysis/models.py` |
+| White-box causal evidence | `CausalEdge` in `apps/api/logan_analysis/models.py` |
+| Annotation provenance | `TemplateAnnotation` in `apps/api/logan_analysis/models.py` |
 | Human-in-the-loop | `apps/api/app/api/reports.py` (feedback, causal-summary edit) |
-| Redaction before model calls | `apps/workers/logan_workers/activities/preprocessing.py`, `algorithms/redactors.py` |
+| Redaction before model calls | `apps/api/logan_analysis/activities/preprocessing.py`, `algorithms/redactors.py` |

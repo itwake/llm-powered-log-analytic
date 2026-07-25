@@ -8,9 +8,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
-from logan_workers.activities.export import export_analysis
-from logan_workers.models import OFFENDING_SIGNALS, AnalysisResult
-from logan_workers.pipeline import AnalyzeCasePipeline
+from logan_analysis.activities.export import export_analysis
+from logan_analysis.models import OFFENDING_SIGNALS, AnalysisResult
+from logan_analysis.pipeline import AnalyzeCasePipeline
 from sqlalchemy import and_, create_engine, delete, func, or_, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import IntegrityError
@@ -2883,7 +2883,7 @@ class SQLAlchemyStore:
         case_id = run.case_id
         created_at = _now()
 
-        # Worker file IDs are deterministic from source paths, so raw_files IDs must be run scoped.
+        # Analysis file IDs derive from source paths, so raw_files IDs must be run scoped.
         file_ids = {
             file.file_id: str(uuid.uuid5(uuid.NAMESPACE_URL, f"{run.id}:{file.file_id}"))
             for file in result.files

@@ -23,13 +23,13 @@ test:
 	$(PYTHON) -m pytest tests
 
 evaluate:
-	$(PYTHON) -m logan_workers.evaluation.run \
+	$(PYTHON) -m logan_analysis.evaluation.run \
 		--benchmark benchmarks/logan/checkout_incident \
 		--out .logan/evaluation/report.json \
 		--markdown .logan/evaluation/report.md
 
 scale-benchmark:
-	$(PYTHON) -m logan_workers.evaluation.scale \
+	$(PYTHON) -m logan_analysis.evaluation.scale \
 		--profile $(SCALE_PROFILE) \
 		--fixture-dir .logan/scale-fixtures \
 		--out .logan/evaluation/scale-$(SCALE_PROFILE).json \

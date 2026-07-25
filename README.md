@@ -90,9 +90,8 @@ The UI name “Temporal View” means a time-window chart; it does not refer to 
 
 Repository layout:
 
-- `apps/api` — HTTP API, auth, persistence, uploads, reports, admin, and model integration
-- `apps/workers` — importable analysis engine; despite the historical directory name, it runs
-  in the API process
+- `apps/api` — FastAPI runtime, persistence, local files, model integration, and the internal
+  `logan_analysis` pipeline package
 - `apps/web` — Next.js workbench
 - `tests` — API, engine, persistence, contract, and browser tests
 - `docs` — focused architecture, API, operations, and security references
@@ -131,7 +130,7 @@ python -m pytest tests/api/test_openapi_contract.py
 The offline quality benchmark is also deterministic:
 
 ```bash
-python -m logan_workers.evaluation.run \
+python -m logan_analysis.evaluation.run \
   --benchmark benchmarks/logan/checkout_incident \
   --out .logan/evaluation/report.json \
   --markdown .logan/evaluation/report.md

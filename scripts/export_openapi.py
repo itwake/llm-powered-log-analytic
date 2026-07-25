@@ -7,7 +7,7 @@ from typing import Any
 
 from app.main import create_app
 from app.store import create_ephemeral_store
-from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
+from logan_analysis.activities.inference import MockAIPlatformAnnotationGateway
 
 
 def current_openapi_schema() -> dict[str, Any]:

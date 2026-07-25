@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from logan_workers.models import AnalysisResult
+from logan_analysis.models import AnalysisResult
 
 from app.config import Settings, settings
 

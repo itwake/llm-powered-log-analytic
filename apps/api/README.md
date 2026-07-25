@@ -7,7 +7,7 @@ persistence, reports, feedback, chat, admin APIs, and Prometheus metrics.
 
 `app.main:create_app` creates one SQLAlchemy-backed store and one model gateway. Upload bytes and
 step manifests are written below `LOGAN_LOCAL_OBJECT_STORE_DIR`. Starting an analysis calls
-`logan_workers.pipeline.AnalyzeCasePipeline` in process, records progress events, and writes the
+`logan_analysis.pipeline.AnalyzeCasePipeline` in process, records progress events, and writes the
 normalized result through the same store.
 
 SQLite is the default database. A PostgreSQL SQLAlchemy URL uses the same implementation and
@@ -25,11 +25,26 @@ Useful commands:
 ```bash
 python scripts/run_migrations.py
 python scripts/export_openapi.py --out docs/openapi.snapshot.json
-python -m pytest tests/api
+python -m pytest tests/api tests/analysis
 ```
 
 Tests use `create_ephemeral_store`, which is the production SQLAlchemy store over an isolated
 in-memory SQLite database. Model behavior is injected through `create_app(model_gateway=...)`.
+
+## Analysis package
+
+`logan_analysis` is internal to the API application but remains independent from HTTP,
+authentication, and persistence code. The dependency direction is `app -> logan_analysis`; the
+analysis package must not import `app`.
+
+Run its deterministic benchmark with:
+
+```bash
+python -m logan_analysis.evaluation.run \
+  --benchmark benchmarks/logan/checkout_incident \
+  --out .logan/evaluation/report.json \
+  --markdown .logan/evaluation/report.md
+```
 
 ## Important modules
 
@@ -41,6 +56,10 @@ in-memory SQLite database. Model behavior is injected through `create_app(model_
 - `app/services/model_gateway_factory.py` — configured real or mock model gateway
 - `app/observability.py` — HTTP/model Prometheus metrics
 - `app/config.py` — authoritative runtime settings
+- `logan_analysis/pipeline.py` — in-process analysis orchestration
+- `logan_analysis/activities/` and `logan_analysis/algorithms/` — analysis steps and algorithms
+- `logan_analysis/evaluation/` — deterministic benchmark and scale tooling
 
 The API never returns storage filesystem paths in the upload-start response. Clients receive a
-single authenticated content URL, upload bytes, then complete the upload with its SHA-256 digest.
+single authenticated content URL; that request validates the size, computes SHA-256, and completes
+the upload.
