@@ -44,9 +44,6 @@ logs, prompts, model inputs, credentials, tokens, cookies, database URLs, and fu
 - `ModelGateway` is the only model-provider port.
 - `MetadataStore` has one implementation: `SQLAlchemyStore`.
 
-The UI’s “Temporal View” is a time-window visualization and is unrelated to workflow
-orchestration.
-
 ## Evidence
 
 Every causal relationship is candidate evidence with confidence and `needs_validation`. Time

@@ -21,5 +21,4 @@ Raw text has shorter retention than normalized reports. Events, audits, metrics,
 allow only sanitized metadata. Model inputs, prompts, credentials, tokens, cookies, and encryption
 material are never persisted in those surfaces.
 
-Migration `0001_initial.sql` remains historical and immutable. Later migrations add schema
-changes without rewriting checksummed deployed migrations.
+PostgreSQL applies numbered, checksummed migrations in order.

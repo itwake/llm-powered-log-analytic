@@ -8,10 +8,9 @@
 - **Representative sample** — selected redacted example used for template annotation.
 - **Golden signal** — latency, traffic, error, availability, saturation, information, or unknown.
 - **Offending signal** — a signal eligible for causal candidate analysis.
-- **Time-window aggregate** — count grouped by window and signal/service; rendered in the UI’s
-  “Temporal View.”
-- **Temporal precedence** — evidence that one template tends to occur before another; unrelated to
-  workflow orchestration.
+- **Time-window aggregate** — count grouped by window and signal/service; rendered as a time-window
+  chart.
+- **Temporal precedence** — evidence that one template tends to occur before another.
 - **Causal edge** — directed candidate relationship with evidence, confidence, and validation
   state.
 - **Root-cause candidate** — ranked graph node requiring operator validation.

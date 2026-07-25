@@ -51,15 +51,15 @@ def test_postgres_migration_metadata_helpers_are_stable() -> None:
     assert _postgres_migration_checksum(sql) != changed_checksum
 
 
-def test_postgres_incremental_migration_paths_skip_initial_schema() -> None:
+def test_postgres_incremental_migration_paths_are_ordered() -> None:
     names = [
         path.name for path in _postgres_incremental_migration_paths(Path("apps/api/migrations"))
     ]
 
-    assert "0001_initial.sql" not in names
-    assert "0002_analysis_step_artifacts.sql" in names
-    assert "0003_enterprise_policy_scim.sql" in names
-    assert "0004_simplify_core.sql" in names
+    assert names == [
+        "0002_analysis_step_artifacts.sql",
+        "0003_enterprise_policy_scim.sql",
+    ]
 
 
 async def _client(store: SQLAlchemyStore) -> AsyncClient:

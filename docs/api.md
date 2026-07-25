@@ -39,8 +39,7 @@ filesystem `input_paths`.
 - causal summary
 - exports and feedback
 
-All report reads use normalized SQL rows, with the retained result JSON as a compatibility
-fallback where appropriate.
+Report reads use normalized SQL rows scoped by case, run, and organization.
 
 ## Admin and platform
 

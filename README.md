@@ -86,8 +86,6 @@ browser
               └─ summary and exports
 ```
 
-The UI name “Temporal View” means a time-window chart; it does not refer to a workflow service.
-
 Repository layout:
 
 - `apps/api` — FastAPI runtime, persistence, local files, model integration, and the internal
