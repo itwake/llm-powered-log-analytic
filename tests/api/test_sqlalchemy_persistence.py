@@ -22,8 +22,8 @@ from app.store import (
     create_store,
 )
 from httpx import ASGITransport, AsyncClient
-from logan_analysis.activities.inference import MockAIPlatformAnnotationGateway
 from sqlalchemy import delete, func, select
+from tests.model_gateway_stub import StubModelGateway
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 PIPELINE_STEPS = [
@@ -65,7 +65,7 @@ def test_postgres_incremental_migration_paths_are_ordered() -> None:
 async def _client(store: SQLAlchemyStore) -> AsyncClient:
     app = create_app(
         store=store,
-        model_gateway=MockAIPlatformAnnotationGateway(),
+        model_gateway=StubModelGateway(),
     )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
 
@@ -511,6 +511,7 @@ async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Pa
         database_url=database_url,
         local_object_store_dir=str(tmp_path / "object-store"),
         step_artifact_failure_mode="fail",
+        llm_provider="ai_platform",
     )
     store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     client = await _client(store)
@@ -852,14 +853,14 @@ async def test_sqlalchemy_fanout_scopes_raw_file_ids_per_run(tmp_path: Path) -> 
         user_id=user.id,
         input_paths=input_paths,
         config={"default_window_size_seconds": 60},
-        gateway=MockAIPlatformAnnotationGateway(),
+        gateway=StubModelGateway(),
     )
     second = await store.start_analysis(
         case_id=case.id,
         user_id=user.id,
         input_paths=input_paths,
         config={"default_window_size_seconds": 60},
-        gateway=MockAIPlatformAnnotationGateway(),
+        gateway=StubModelGateway(),
     )
 
     assert first.status == "completed"
@@ -914,7 +915,7 @@ async def test_sqlalchemy_report_endpoints_read_fanout_without_result_json(
         user_id=user.id,
         input_paths=input_paths,
         config={"default_window_size_seconds": 60},
-        gateway=MockAIPlatformAnnotationGateway(),
+        gateway=StubModelGateway(),
     )
     assert run.status == "completed"
     assert store.get_analysis_result(case.id, run.id) is not None
@@ -1074,7 +1075,7 @@ async def test_sqlalchemy_retention_scrubs_raw_text_and_preserves_reports(
         user_id=user.id,
         input_paths=[str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
         config={"default_window_size_seconds": 60},
-        gateway=MockAIPlatformAnnotationGateway(),
+        gateway=StubModelGateway(),
     )
     assert run.status == "completed"
     result = store.get_analysis_result(case.id, run.id)

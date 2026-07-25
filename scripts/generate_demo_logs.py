@@ -7,13 +7,9 @@ starts timing out calling auth-service at 10:11, and the gateway returns 500s
 on POST /checkout from 10:12 until recovery at about 10:33. Healthy traffic
 runs before and after, so the Temporal View shows a clear incident wave.
 
-The line wording is deliberately aligned with the deterministic mock
-annotation gateway's keyword rules (connection pool exhausted -> saturation,
-timeout calling <service> -> availability, failed status=500 -> error, disk
-error -> infrastructure error), so the demo works fully offline with
-LOGAN_LLM_PROVIDER=mock. The set also includes multi-line Java stack traces
-(multi-line merge), lines with emails/IPs/tokens/card numbers (redaction),
-and a gzip-compressed batch log (archive ingestion).
+The set includes multi-line Java stack traces (multi-line merge), lines with
+emails/IPs/tokens/card numbers (redaction), and a gzip-compressed batch log
+(archive ingestion).
 
 Usage:
     python scripts/generate_demo_logs.py [--out-dir demo/logs]

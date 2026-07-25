@@ -1514,6 +1514,8 @@ class SQLAlchemyStore:
                         "product": case.product,
                         "environment": case.environment,
                         "user_id": user_id,
+                        "model": run.model_name,
+                        "reasoning_effort": run.model_reasoning_effort,
                     },
                     config=config,
                     gateway=gateway,
@@ -2758,18 +2760,27 @@ class SQLAlchemyStore:
                 )
                 or 0
             ) + 1
+            model_provider = self.settings.normalized_llm_provider
+            llm_enabled = model_provider == "ai_platform"
+            model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
             run = tables.AnalysisRun(
                 id=str(uuid.uuid4()),
                 case_id=case_id,
                 run_number=run_number,
                 status="processing",
                 config_json=config,
-                model_provider=self.settings.llm_provider,
-                model_name=config.get("model", {}).get("model", self.settings.ai_platform_model),
-                model_reasoning_effort=config.get("model", {}).get(
-                    "reasoning_effort", self.settings.ai_platform_reasoning_effort
+                model_provider=model_provider,
+                model_name=(
+                    model_config.get("model", self.settings.ai_platform_model)
+                    if llm_enabled
+                    else ""
                 ),
-                prompt_version="annotation_v1",
+                model_reasoning_effort=(
+                    model_config.get("reasoning_effort", self.settings.ai_platform_reasoning_effort)
+                    if llm_enabled
+                    else ""
+                ),
+                prompt_version="annotation_v1" if llm_enabled else "",
                 drain_config_json={},
                 causal_config_json={},
                 progress_json={},
@@ -2828,28 +2839,32 @@ class SQLAlchemyStore:
             run.progress_json = dict(result.progress)
             run.result_json = result_json
             self._fan_out_analysis_result(session=session, run=run, result=result)
-            model_invocation_audit_count = (
-                session.scalar(
-                    select(func.count())
-                    .select_from(tables.AuditLog)
-                    .where(
-                        tables.AuditLog.action == MODEL_INVOCATION_AUDIT_ACTION,
-                        tables.AuditLog.target_type == "analysis_run",
-                        tables.AuditLog.target_id == run.id,
-                    )
-                )
-                or 0
+            llm_invoked = bool(result.model_inputs) or (
+                result.causal_summary.details.get("source") == "llm"
             )
-            if model_invocation_audit_count == 0:
-                self._add_audit(
-                    session,
-                    action=MODEL_INVOCATION_AUDIT_ACTION,
-                    user_id=user_id,
-                    target_type="analysis_run",
-                    target_id=run.id,
-                    case_id=run.case_id,
-                    metadata=model_invocation_audit_metadata(run=run, result=result),
+            if llm_invoked:
+                model_invocation_audit_count = (
+                    session.scalar(
+                        select(func.count())
+                        .select_from(tables.AuditLog)
+                        .where(
+                            tables.AuditLog.action == MODEL_INVOCATION_AUDIT_ACTION,
+                            tables.AuditLog.target_type == "analysis_run",
+                            tables.AuditLog.target_id == run.id,
+                        )
+                    )
+                    or 0
                 )
+                if model_invocation_audit_count == 0:
+                    self._add_audit(
+                        session,
+                        action=MODEL_INVOCATION_AUDIT_ACTION,
+                        user_id=user_id,
+                        target_type="analysis_run",
+                        target_id=run.id,
+                        case_id=run.case_id,
+                        metadata=model_invocation_audit_metadata(run=run, result=result),
+                    )
 
         with self._session() as session:
             run = session.get(tables.AnalysisRun, run_id)

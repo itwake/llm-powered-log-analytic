@@ -22,7 +22,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        "python -m uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port 8000",
+        "python -m uvicorn tests.e2e_app:app --app-dir apps/api --host 127.0.0.1 --port 8000",
       url: "http://127.0.0.1:8000/docs",
       reuseExistingServer: !isCI,
       timeout: 120_000,
@@ -32,7 +32,7 @@ export default defineConfig({
         LOGAN_METRICS_ENABLED: "true",
         LOGAN_SECRET_KEY: "e2e-local-secret",
         LOGAN_CREDENTIAL_ENCRYPTION_KEY: "e2e-local-credential-key",
-        LOGAN_LLM_PROVIDER: "mock",
+        LOGAN_LLM_PROVIDER: "ai_platform",
         LOGAN_SSO_ENABLED: "true",
         LOGAN_SSO_MOCK_ENABLED: "true",
         LOGAN_SSO_AUTHORIZE_URL: "http://localhost:8000/api/auth/sso/mock/authorize",

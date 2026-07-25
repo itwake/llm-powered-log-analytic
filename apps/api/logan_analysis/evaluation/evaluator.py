@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from logan_analysis.activities.inference import MockAIPlatformAnnotationGateway
 from logan_analysis.evaluation.benchmark import load_benchmark
 from logan_analysis.evaluation.metrics import (
     flatten_entities,
@@ -28,6 +27,7 @@ from logan_analysis.evaluation.schemas import (
 )
 from logan_analysis.models import AnalysisResult, CausalEdge, LogTemplate, TemplateAnnotation
 from logan_analysis.pipeline import AnalyzeCasePipeline
+from logan_analysis.ports import ModelGateway
 
 
 def _matches(pattern: str, text: str) -> bool:
@@ -234,19 +234,27 @@ def _evaluate_summary_rubric(
     return evaluations, weighted_average(weighted_scores)
 
 
-async def run_benchmark_pipeline(benchmark: LoadedBenchmark) -> AnalysisResult:
+async def run_benchmark_pipeline(
+    benchmark: LoadedBenchmark,
+    *,
+    gateway: ModelGateway,
+) -> AnalysisResult:
     return await AnalyzeCasePipeline().run(
         case_id=benchmark.manifest.case_id,
         analysis_run_id=benchmark.manifest.analysis_run_id,
         paths=[str(path) for path in benchmark.input_paths],
         case_context=benchmark.manifest.case_context,
         config=benchmark.manifest.config,
-        gateway=MockAIPlatformAnnotationGateway(),
+        gateway=gateway,
     )
 
 
-async def evaluate_benchmark(benchmark: LoadedBenchmark) -> BenchmarkEvaluationReport:
-    result = await run_benchmark_pipeline(benchmark)
+async def evaluate_benchmark(
+    benchmark: LoadedBenchmark,
+    *,
+    gateway: ModelGateway,
+) -> BenchmarkEvaluationReport:
+    result = await run_benchmark_pipeline(benchmark, gateway=gateway)
     labels = benchmark.labels
 
     (
@@ -396,5 +404,9 @@ async def evaluate_benchmark(benchmark: LoadedBenchmark) -> BenchmarkEvaluationR
     )
 
 
-async def evaluate_benchmark_path(benchmark_dir: str | Path) -> BenchmarkEvaluationReport:
-    return await evaluate_benchmark(load_benchmark(benchmark_dir))
+async def evaluate_benchmark_path(
+    benchmark_dir: str | Path,
+    *,
+    gateway: ModelGateway,
+) -> BenchmarkEvaluationReport:
+    return await evaluate_benchmark(load_benchmark(benchmark_dir), gateway=gateway)

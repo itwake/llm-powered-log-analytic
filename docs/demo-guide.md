@@ -85,8 +85,8 @@ Two invariants hold end to end:
   not the log stream.
 - Progress events, artifacts, metrics, and reports are **count-only** by design; raw log
   text never leaks into them.
-- Fully offline demo mode: a deterministic mock stands in for the LLM, so results are
-  identical on every run.
+- With `LOGAN_LLM_PROVIDER=none`, the pipeline makes no model calls. Parsing, redaction,
+  templates, and time windows remain available; semantic annotations require AI Platform.
 
 ---
 
@@ -108,8 +108,7 @@ traffic before and after.
 
 <!--
 Regenerate anytime with: python scripts/generate_demo_logs.py
-The wording is aligned with the mock annotator's rules, so the analysis
-below is fully reproducible offline.
+The semantic analysis shown below requires LOGAN_LLM_PROVIDER=ai_platform.
 -->
 
 ---
@@ -273,23 +272,22 @@ image: images/demo/09-causal-summary.png
 
 # From Demo to Production
 
-| Demo (this deck) | Production |
+| Local default | Model-enabled runtime |
 | --- | --- |
-| Deterministic mock annotator | AI Platform LLM (same pipeline, same UI) |
+| LLM disabled (`none`) | AI Platform LLM |
 | SQLite metadata | PostgreSQL |
 | Local object store | Persistent local volume |
 | In-process analysis | One deterministic pipeline |
 | SQL-backed reports | SQLite or PostgreSQL through SQLAlchemy |
 
-All switches are configuration - no code changes between the two worlds.
+LLM behavior is selected by `LOGAN_LLM_PROVIDER`; no code change is required.
 
 ---
 
 # Frequently Asked
 
-**Is this real AI?** Locally it is a deterministic mock (reproducible, offline).
-In production the same pipeline calls AI Platform models; pipeline, UI, and
-redaction guarantees are identical.
+**Is this real AI?** The semantic views in this deck use AI Platform. Set
+`LOGAN_LLM_PROVIDER=none` to run without model annotation, model summaries, or model chat.
 
 **Is our log data safe?** Models only ever see a few redacted representative lines
 per pattern. Metrics, events, and reports are count-only by design.

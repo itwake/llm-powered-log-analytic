@@ -449,8 +449,9 @@ export interface AdminAuditLogListResponse {
 
 export interface CapabilitiesResponse {
   models: {
+    enabled: boolean;
     provider: string;
-    default_model: string;
+    default_model: string | null;
     supported_models: string[];
   };
   views: string[];

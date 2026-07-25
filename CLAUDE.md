@@ -22,6 +22,7 @@ docker compose up -d --build
 - Treat causal relationships as candidate evidence requiring validation.
 - Regenerate the OpenAPI snapshot after route or schema changes.
 - Update pipeline step lists and tests together.
-- Keep local and CI behavior deterministic with the mock model gateway and mock SSO provider.
+- Keep tests deterministic with injected model-gateway stubs; mock SSO is limited to local and test
+  sign-in.
 
 See `README.md`, `CONTRIBUTING.md`, and `docs/architecture.md`.

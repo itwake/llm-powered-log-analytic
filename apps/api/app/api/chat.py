@@ -4,7 +4,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.dependencies import current_user, get_model_gateway, get_store, require_case_permission
@@ -64,6 +64,8 @@ async def chat_stream(
             permission="view",
             hide_forbidden=True,
         )
+    if gateway is None:
+        raise HTTPException(status_code=409, detail="LLM is disabled")
 
     async def events() -> AsyncIterator[str]:
         context = _analysis_chat_context(store, payload)
@@ -129,11 +131,15 @@ async def chat_stream(
 def execute_task(
     payload: TaskExecuteRequest,
     user: UserRecord = Depends(current_user),
+    store: MetadataStore = Depends(get_store),
 ) -> dict[str, object]:
+    provider = store.settings.normalized_llm_provider
+    if provider == "none":
+        raise HTTPException(status_code=409, detail="LLM is disabled")
     return {
         "task_id": f"task-{payload.task_name}",
         "status": "accepted",
-        "runtime_type": "ai_platform",
+        "runtime_type": provider,
         "created_by": user.id,
         "arguments": payload.arguments,
     }
@@ -153,9 +159,7 @@ def _analysis_chat_context(
     if result is None:
         return None
 
-    evidence_refs = [
-        ref.model_dump(mode="json") for ref in result.causal_summary.evidence_refs[:5]
-    ]
+    evidence_refs = [ref.model_dump(mode="json") for ref in result.causal_summary.evidence_refs[:5]]
     return {
         "user_message": _compact_context_text(payload.message, max_length=1000),
         "case_id": payload.case_id,

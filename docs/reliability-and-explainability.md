@@ -1,11 +1,10 @@
 # Reliability and Explainability
 
-LogAn uses an LLM, but its trustworthiness does not rest on trusting model output. The platform
-is built so that **deterministic algorithms decide the facts and the model only classifies and
-narrates**, every user-facing claim is **traceable to a specific redacted log line**, quality is
-**measured by a threshold-gated benchmark**, and every model call has a **deterministic fallback**.
-This document explains how to state that reliability story and how the explainability is realized in
-code, with pointers for auditors and reviewers.
+LogAn can use an LLM, but its trustworthiness does not rest on trusting model output. The platform
+is built so that **deterministic algorithms decide the facts and an enabled model only classifies
+and narrates**, every user-facing claim is **traceable to a specific redacted log line**, and model
+quality is **measured by a threshold-gated benchmark**. This document explains how that reliability
+story is realized in code, with pointers for auditors and reviewers.
 
 For where these steps sit in the flow, see [`life-of-a-log-line.md`](life-of-a-log-line.md); for the
 redaction guarantees see [`security.md`](security.md); for the benchmark runbook see
@@ -23,15 +22,16 @@ model gateway; the rest are deterministic:
 | 3 | `preprocess_redact` | no | redacted / normalized message (before any model payload) |
 | 4 | `drain_templating` | no | Drain-style templates over redacted text |
 | 5 | `representative_sampling` | no | a small sample set per template |
-| 6 | `ai_platform_annotation` | **yes** | per-template golden signal / fault categories / entities |
+| 6 | `ai_platform_annotation` | AI Platform only | per-template golden signal / fault categories / entities |
 | 7 | `broadcast_annotations` | no | template labels copied to every line in the group |
 | 8 | `temporal_aggregation` | no | fixed time-window counts |
 | 9 | `causal_graph` | no | candidate edges + confidence + root-cause ranking |
-| 10 | `causal_summary` | **yes** | evidence-first RCA narrative |
+| 10 | `causal_summary` | AI Platform or structured rules | evidence-first RCA narrative |
 | 11 | `export_artifacts` | no | Markdown / HTML / JSON exports |
 
 A third model touchpoint, case chat (`POST /api/chat/stream`, `apps/api/app/api/chat.py`), answers
-questions over an already-computed, redacted analysis result and never re-reads raw logs.
+questions over an already-computed, redacted analysis result and never re-reads raw logs. It is
+unavailable when `LOGAN_LLM_PROVIDER=none`.
 
 Because causal direction, edge confidence, and root-cause rank are computed by step 9
 (`infer_causal_graph` in `apps/api/logan_analysis/activities/causal.py`) and not by the model, a
@@ -41,9 +41,11 @@ wrong or hallucinated model response cannot invent a causal link or inflate a co
 
 ### 1. The model's role is confined
 
-Steps 6 and 10 are the only places the model shapes output. Annotation is a bounded classification
-task (choose exactly one of seven golden signals). Summary is a rewriting task over a fixed evidence
-packet. Neither step is allowed to introduce facts that are not already in the structured evidence.
+When `LOGAN_LLM_PROVIDER=ai_platform`, steps 6 and 10 are the only places the model shapes output.
+Annotation is a bounded classification task (choose exactly one of seven golden signals). Summary
+is a rewriting task over a fixed evidence packet. Neither step is allowed to introduce facts that
+are not already in the structured evidence. With `LOGAN_LLM_PROVIDER=none`, annotation is skipped
+and the summary is rendered from structured evidence without a model call.
 
 ### 2. Quality is measured by a threshold-gated benchmark
 
@@ -66,23 +68,19 @@ Metric math lives in `evaluation/metrics.py` and the scoring in `evaluation/eval
 are intentionally compact and redaction-safe (see [`operations.md`](operations.md)). Run it with:
 
 ```bash
+LOGAN_LLM_PROVIDER=ai_platform \
 python -m logan_analysis.evaluation.run --benchmark benchmarks/logan/checkout_incident \
   --out .logan/evaluation/report.json --markdown .logan/evaluation/report.md
 ```
 
-> **Scope caveat.** The benchmark currently runs the pipeline with the deterministic
-> `MockAIPlatformAnnotationGateway`, so it validates the pipeline, the scoring rubric, and the
-> caution/evidence invariants reproducibly — not `gpt-5.4`'s live accuracy. To measure the production
-> model, run the same harness against the `ai_platform` gateway and expand the labeled corpus beyond
-> the single checkout incident. `useful_causal_edge_precision` is reported but intentionally not
-> gated.
+The benchmark uses the configured AI Platform model, so its scores measure that model and prompt
+combination. Expand the labeled corpus beyond the single checkout incident before treating the
+scores as representative. `useful_causal_edge_precision` is reported but intentionally not gated.
 
-### 3. Deterministic and reproducible
+### 3. Deterministic tests
 
-The mock provider (`MockAIPlatformAnnotationGateway`, `apps/api/logan_analysis/activities/inference.py`)
-is pure keyword/regex logic — no randomness, no network, no time dependence — so identical input
-yields identical output. Unit tests inject fakes through `create_app(store=..., model_gateway=...)`
-and never touch the network. Repeatable output is what makes regressions detectable.
+Unit tests inject stubs through `create_app(store=..., model_gateway=...)` and never touch the
+network.
 
 ### 4. Layered validation keeps bad output away from users
 
@@ -93,12 +91,12 @@ and never touch the network. Repeatable output is what makes regressions detecta
   `log_id` that was actually provided in the packet; a claim that cites nothing raises and the run
   falls back. This structurally blocks fabricated citations.
 
-### 5. Deterministic fallback: the system works without the model
+### 5. Explicit no-LLM mode
 
-If the gateway is unavailable or the model output fails schema/evidence validation,
-`_fallback_summary` (`activities/summary.py`) renders a cautious RCA **from the structured evidence
-alone**, tagged `details.source="fallback"` (vs `"llm"`). The LLM augments the system; it is not a
-hard dependency.
+With `LOGAN_LLM_PROVIDER=none`, the annotation step is recorded as skipped, no model payloads or
+model-invocation audits are created, and `_fallback_summary` (`activities/summary.py`) renders a
+cautious RCA from structured evidence. The result is tagged `details.source="structured"` and
+`details.generation_reason="llm_disabled"`.
 
 ### 6. Calibrated caution, enforced in code
 
@@ -176,13 +174,11 @@ Summary, Temporal, Logs, Causal Graph, Causal Summary — so the explanation is 
 
 Stated plainly, because acknowledging them strengthens the reliability claim:
 
-1. **Benchmark uses the mock gateway.** It validates scaffolding and invariants, not the production
-   model's accuracy. Run the harness against `ai_platform` to measure `gpt-5.4`.
-2. **Narrow labeled set.** One synthetic checkout incident with six templates. Broaden the corpus
+1. **Narrow labeled set.** One synthetic checkout incident with six templates. Broaden the corpus
    across fault types and service topologies before claiming generalized accuracy.
-3. **`summary_rubric_score` is term coverage, not semantic correctness.** Consider an LLM-as-judge or
+2. **`summary_rubric_score` is term coverage, not semantic correctness.** Consider an LLM-as-judge or
    human review pass for semantic quality.
-4. **Single attempt, no retry.** A transient model error goes straight to the deterministic fallback;
+3. **Single attempt, no retry.** A transient model error goes straight to the structured summary;
    add backoff/retry if the SLA requires it.
 
 ## Where the guarantees live (quick reference)
@@ -192,7 +188,7 @@ Stated plainly, because acknowledging them strengthens the reliability claim:
 | LLM confined to 2 of 11 steps | `apps/api/logan_analysis/pipeline.py` |
 | Causal facts are algorithmic | `apps/api/logan_analysis/activities/causal.py`, `algorithms/causal_*.py`, `algorithms/pagerank.py` |
 | Gated benchmark + metrics | `apps/api/logan_analysis/evaluation/`, `benchmarks/logan/checkout_incident/labels.json` |
-| Deterministic mock provider | `apps/api/logan_analysis/activities/inference.py` |
+| Explicit `ai_platform` / `none` selection | `apps/api/app/services/model_gateway_factory.py` |
 | Annotation schema fallback | `apps/api/logan_analysis/activities/inference.py` |
 | Summary evidence validation + fallback | `apps/api/logan_analysis/activities/summary.py` |
 | Enforced cautious language | `apps/api/logan_analysis/activities/summary.py`, `prompts/causal_summary_prompt.md` |

@@ -20,6 +20,7 @@ from logan_analysis.evaluation.reporting import (
 )
 from logan_analysis.evaluation.run import main as evaluation_main
 from logan_analysis.evaluation.schemas import BenchmarkLabels
+from tests.model_gateway_stub import StubModelGateway
 
 
 BENCHMARK_DIR = Path("benchmarks/logan/checkout_incident")
@@ -99,10 +100,17 @@ def test_benchmark_label_loading_and_regex_validation() -> None:
         )
 
 
-def test_checkout_benchmark_cli_writes_safe_reports(tmp_path: Path) -> None:
+def test_checkout_benchmark_cli_writes_safe_reports(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     json_path = tmp_path / "report.json"
     markdown_path = tmp_path / "report.md"
 
+    monkeypatch.setattr(
+        "logan_analysis.evaluation.run.create_model_gateway",
+        lambda _: StubModelGateway(),
+    )
     exit_code = evaluation_main(
         [
             "--benchmark",
@@ -149,7 +157,7 @@ async def test_report_renderers_reject_sensitive_content() -> None:
     benchmark = load_benchmark(BENCHMARK_DIR)
     from logan_analysis.evaluation.evaluator import evaluate_benchmark
 
-    report = await evaluate_benchmark(benchmark)
+    report = await evaluate_benchmark(benchmark, gateway=StubModelGateway())
     assert report_to_json(report)
     assert report_to_markdown(report)
 

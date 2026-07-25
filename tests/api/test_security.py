@@ -5,6 +5,7 @@ import pytest
 
 from app.config import Settings
 from app.core import security
+from app.services.model_gateway_factory import create_model_gateway
 
 
 def _clear_proxy_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,8 +105,31 @@ def test_production_settings_accept_non_default_runtime_secrets() -> None:
     ).validate_for_runtime()
 
 
+def test_llm_provider_defaults_to_none() -> None:
+    app_settings = Settings()
+
+    assert app_settings.llm_provider == "none"
+    assert create_model_gateway(app_settings) is None
+
+
+def test_llm_provider_rejects_unknown_values() -> None:
+    with pytest.raises(ValueError, match="LOGAN_LLM_PROVIDER must be ai_platform or none"):
+        Settings(llm_provider="mock").validate_for_runtime()
+
+
+def test_llm_provider_is_normalized_before_selection() -> None:
+    app_settings = Settings(llm_provider=" AI_PLATFORM ")
+
+    app_settings.validate_for_runtime()
+
+    assert app_settings.normalized_llm_provider == "ai_platform"
+
+
 def test_ai_platform_httpx_verify_defaults_to_enabled_tls_verification() -> None:
-    assert Settings(ai_platform_ca_bundle=None, ai_platform_tls_verify=True).ai_platform_httpx_verify() is True
+    assert (
+        Settings(ai_platform_ca_bundle=None, ai_platform_tls_verify=True).ai_platform_httpx_verify()
+        is True
+    )
 
 
 def test_ai_platform_httpx_verify_uses_configured_ca_bundle() -> None:
@@ -174,7 +198,9 @@ def test_ai_platform_httpx_client_kwargs_can_ignore_env_proxy(
     _clear_proxy_env(monkeypatch)
     monkeypatch.setenv("HTTPS_PROXY", "http://env-proxy.example:8080")
 
-    kwargs = Settings(ai_platform_proxy_url=None, ai_platform_trust_env=False).ai_platform_httpx_client_kwargs()
+    kwargs = Settings(
+        ai_platform_proxy_url=None, ai_platform_trust_env=False
+    ).ai_platform_httpx_client_kwargs()
 
     assert "proxy" not in kwargs
     assert kwargs["trust_env"] is False

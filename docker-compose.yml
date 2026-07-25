@@ -5,8 +5,8 @@
 #   docker compose down
 #
 # The API uses SQLite metadata and the local object store on the
-# logan-data volume, the deterministic mock LLM provider, and mock
-# SSO sign-in. Case data survives restarts; remove it with `down -v`.
+# logan-data volume. LLM calls are disabled; mock SSO provides local
+# sign-in. Case data survives restarts; remove it with `down -v`.
 name: logan
 
 services:
@@ -18,7 +18,7 @@ services:
       - "8000:8000"
     environment:
       LOGAN_ENV: development
-      LOGAN_LLM_PROVIDER: mock
+      LOGAN_LLM_PROVIDER: none
       LOGAN_DATABASE_URL: sqlite:////data/logan.db
       LOGAN_LOCAL_OBJECT_STORE_DIR: /data/object-store
       LOGAN_SSO_ENABLED: "true"

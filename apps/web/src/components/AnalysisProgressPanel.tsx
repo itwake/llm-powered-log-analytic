@@ -31,7 +31,7 @@ const PROGRESS_METRICS = [
   ["windows", "Windows"],
 ] as const;
 
-type StepStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
+type StepStatus = "pending" | "processing" | "completed" | "failed" | "cancelled" | "skipped";
 
 function latestEventsByStep(events: JobEventResponse[]): Map<string, JobEventResponse> {
   const byStep = new Map<string, JobEventResponse>();
@@ -54,6 +54,9 @@ function stepStatus(
   }
   if (latestEvent?.status === "cancelled" || latestEvent?.event_type === "cancelled") {
     return "cancelled";
+  }
+  if (latestEvent?.status === "skipped" || latestEvent?.event_type === "skipped") {
+    return "skipped";
   }
   if (run.status === "cancelled") {
     return "pending";
@@ -107,6 +110,9 @@ function stepColor(status: StepStatus): string {
   }
   if (status === "cancelled") {
     return "info.main";
+  }
+  if (status === "skipped") {
+    return "text.disabled";
   }
   return "divider";
 }

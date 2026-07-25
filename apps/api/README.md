@@ -5,8 +5,9 @@ persistence, reports, feedback, chat, admin APIs, and Prometheus metrics.
 
 ## Runtime
 
-`app.main:create_app` creates one SQLAlchemy-backed store and one model gateway. Upload bytes and
-step manifests are written below `LOGAN_LOCAL_OBJECT_STORE_DIR`. Starting an analysis calls
+`app.main:create_app` creates one SQLAlchemy-backed store and, when configured, an AI Platform
+model gateway. Upload bytes and step manifests are written below `LOGAN_LOCAL_OBJECT_STORE_DIR`.
+Starting an analysis calls
 `logan_analysis.pipeline.AnalyzeCasePipeline` in process, records progress events, and writes the
 normalized result through the same store.
 
@@ -40,7 +41,7 @@ in-memory SQLite database. Model behavior is injected through `create_app(model_
 authentication, and persistence code. The dependency direction is `app -> logan_analysis`; the
 analysis package must not import `app`.
 
-Run its deterministic benchmark with:
+Run its model-quality benchmark with `LOGAN_LLM_PROVIDER=ai_platform`:
 
 ```bash
 python -m logan_analysis.evaluation.run \
@@ -56,12 +57,12 @@ python -m logan_analysis.evaluation.run \
 - `app/sqlalchemy_store.py` — the single persistence implementation
 - `app/services/object_store.py` — local file URI/path and digest helpers
 - `app/services/analysis_artifacts.py` — safe local step manifests
-- `app/services/model_gateway_factory.py` — configured real or mock model gateway
+- `app/services/model_gateway_factory.py` — AI Platform gateway selection
 - `app/observability.py` — HTTP/model Prometheus metrics
 - `app/config.py` — authoritative runtime settings
 - `logan_analysis/pipeline.py` — in-process analysis orchestration
 - `logan_analysis/activities/` and `logan_analysis/algorithms/` — analysis steps and algorithms
-- `logan_analysis/evaluation/` — deterministic benchmark and scale tooling
+- `logan_analysis/evaluation/` — model-quality benchmark and structural scale tooling
 
 The API never returns storage filesystem paths in the upload-start response. Clients receive a
 single authenticated content URL; that request validates the size, computes SHA-256, and completes

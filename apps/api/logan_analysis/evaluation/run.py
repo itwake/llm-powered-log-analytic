@@ -4,8 +4,11 @@ import argparse
 import asyncio
 from pathlib import Path
 
+from app.config import settings
+from app.services.model_gateway_factory import create_model_gateway
 from logan_analysis.evaluation.evaluator import evaluate_benchmark_path
 from logan_analysis.evaluation.reporting import report_to_json, report_to_markdown
+from logan_analysis.ports import ModelGateway
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -20,8 +23,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def _run(args: argparse.Namespace) -> int:
-    report = await evaluate_benchmark_path(args.benchmark)
+async def _run(args: argparse.Namespace, *, gateway: ModelGateway) -> int:
+    report = await evaluate_benchmark_path(args.benchmark, gateway=gateway)
     json_text = report_to_json(report)
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -39,7 +42,10 @@ async def _run(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return asyncio.run(_run(args))
+    gateway = create_model_gateway(settings)
+    if gateway is None:
+        parser.error("benchmark evaluation requires LOGAN_LLM_PROVIDER=ai_platform")
+    return asyncio.run(_run(args, gateway=gateway))
 
 
 if __name__ == "__main__":

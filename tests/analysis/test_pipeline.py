@@ -7,11 +7,11 @@ import pytest
 
 from app.observability import metrics_text
 from logan_analysis.activities.ingestion import ingest_paths
-from logan_analysis.activities.inference import MockAIPlatformAnnotationGateway
 from logan_analysis.activities.preprocessing import merge_entries, preprocess_entries
 from logan_analysis.algorithms.redactors import redact_text
 from logan_analysis.models import OFFENDING_SIGNALS
 from logan_analysis.pipeline import AnalyzeCasePipeline
+from tests.model_gateway_stub import StubModelGateway
 
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
@@ -42,12 +42,12 @@ def _write_scheduler_fixture(tmp_path: Path) -> list[str]:
     return [str(log_file)]
 
 
-class FailingAnnotationGateway(MockAIPlatformAnnotationGateway):
+class FailingAnnotationGateway(StubModelGateway):
     async def responses(self, **kwargs):
         raise RuntimeError("annotation failed token=gho_pipeline_secret_token password=hunter2")
 
 
-class FailingSummaryGateway(MockAIPlatformAnnotationGateway):
+class FailingSummaryGateway(StubModelGateway):
     async def responses(self, **kwargs):
         metadata = kwargs.get("metadata") if isinstance(kwargs.get("metadata"), dict) else {}
         if metadata.get("purpose") == "causal_summary":
@@ -56,7 +56,7 @@ class FailingSummaryGateway(MockAIPlatformAnnotationGateway):
         return await super().responses(**kwargs)
 
 
-class InvalidSummaryGateway(MockAIPlatformAnnotationGateway):
+class InvalidSummaryGateway(StubModelGateway):
     async def responses(self, **kwargs):
         metadata = kwargs.get("metadata") if isinstance(kwargs.get("metadata"), dict) else {}
         if metadata.get("purpose") == "causal_summary":
@@ -65,7 +65,7 @@ class InvalidSummaryGateway(MockAIPlatformAnnotationGateway):
         return await super().responses(**kwargs)
 
 
-def _summary_gateway_payload(gateway: MockAIPlatformAnnotationGateway) -> tuple[dict, str]:
+def _summary_gateway_payload(gateway: StubModelGateway) -> tuple[dict, str]:
     summary_calls = [
         call
         for call in gateway.calls
@@ -78,8 +78,8 @@ def _summary_gateway_payload(gateway: MockAIPlatformAnnotationGateway) -> tuple[
     return call, text
 
 
-def test_mock_annotation_classifies_linux_auth_and_access_logs() -> None:
-    gateway = MockAIPlatformAnnotationGateway()
+def test_stub_annotation_classifies_linux_auth_and_access_logs() -> None:
+    gateway = StubModelGateway()
 
     auth_failure = gateway._classify(
         "sshd(pam_unix)[1234]: authentication failure; logname= uid=0 "
@@ -96,7 +96,7 @@ def test_mock_annotation_classifies_linux_auth_and_access_logs() -> None:
 
 @pytest.mark.asyncio
 async def test_pipeline_checkout_incident_end_to_end() -> None:
-    gateway = MockAIPlatformAnnotationGateway()
+    gateway = StubModelGateway()
     result = await AnalyzeCasePipeline().run(
         case_id="case-1",
         analysis_run_id="run-1",
@@ -202,10 +202,10 @@ async def test_pipeline_checkout_incident_end_to_end() -> None:
 
 
 @pytest.mark.asyncio
-async def test_mock_causal_summary_uses_packet_terms_for_non_checkout_fixture(
+async def test_stub_causal_summary_uses_packet_terms_for_non_checkout_fixture(
     tmp_path: Path,
 ) -> None:
-    gateway = MockAIPlatformAnnotationGateway()
+    gateway = StubModelGateway()
     result = await AnalyzeCasePipeline().run(
         case_id="case-scheduler",
         analysis_run_id="run-scheduler",
@@ -245,10 +245,9 @@ async def test_causal_summary_falls_back_to_evidence_when_gateway_unavailable_or
     )
 
     markdown = result.causal_summary.summary_markdown.lower()
-    assert result.causal_summary.details["source"] == "fallback"
+    assert result.causal_summary.details["source"] == "structured"
     assert (
-        "gateway_unavailable_or_invalid_model_output"
-        in result.causal_summary.details["fallback_reason"]
+        "model_output_unavailable_or_invalid" in result.causal_summary.details["generation_reason"]
     )
     assert "candidate" in markdown
     assert "needs validation" in markdown
@@ -273,7 +272,7 @@ async def test_causal_summary_fallback_is_domain_neutral_for_scheduler_incident(
         gateway=gateway,
     )
 
-    assert result.causal_summary.details["source"] == "fallback"
+    assert result.causal_summary.details["source"] == "structured"
     rendered_actions = json.dumps(result.causal_summary.next_actions).lower()
     rendered_claims = json.dumps(result.causal_summary.evidence_claims).lower()
     combined = " ".join(
@@ -337,7 +336,6 @@ async def test_pipeline_emits_step_progress_events() -> None:
         "preprocess_redact",
         "drain_templating",
         "representative_sampling",
-        "ai_platform_annotation",
         "broadcast_annotations",
         "temporal_aggregation",
         "causal_graph",
@@ -347,9 +345,16 @@ async def test_pipeline_emits_step_progress_events() -> None:
     assert [
         event["step_name"] for event in events if event["event_type"] == "completed"
     ] == expected_steps
+    skipped = [event for event in events if event["event_type"] == "skipped"]
+    assert [event["step_name"] for event in skipped] == ["ai_platform_annotation"]
     assert all(event["analysis_run_id"] == "run-events" for event in events)
     assert result.progress["current_step"] == "completed"
-    assert result.progress["steps"]["ai_platform_annotation"]["metadata"]["annotations"] > 0
+    assert result.progress["steps"]["ai_platform_annotation"]["status"] == "skipped"
+    assert result.progress["steps"]["ai_platform_annotation"]["metadata"]["annotations"] == 0
+    assert result.annotations == []
+    assert result.model_inputs == []
+    assert result.causal_summary.details["source"] == "structured"
+    assert result.causal_summary.details["generation_reason"] == "llm_disabled"
     body = metrics_text()
     assert 'logan_pipeline_runs_total{status="started"}' in body
     assert 'logan_pipeline_runs_total{status="completed"}' in body
@@ -391,7 +396,7 @@ async def test_redaction_happens_before_model_input(tmp_path: Path) -> None:
         "tenant_id=customer-123\n",
         encoding="utf-8",
     )
-    gateway = MockAIPlatformAnnotationGateway()
+    gateway = StubModelGateway()
     result = await AnalyzeCasePipeline().run(
         case_id="case-redaction",
         analysis_run_id="run-redaction",

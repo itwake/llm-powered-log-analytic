@@ -7,7 +7,7 @@ from typing import Any
 from logan_analysis.activities.broadcasting import broadcast_annotations
 from logan_analysis.activities.causal import infer_causal_graph
 from logan_analysis.activities.export import export_analysis
-from logan_analysis.activities.inference import MockAIPlatformAnnotationGateway, annotate_templates
+from logan_analysis.activities.inference import annotate_templates
 from logan_analysis.activities.ingestion import ingest_paths
 from logan_analysis.activities.preprocessing import merge_entries, preprocess_entries
 from logan_analysis.activities.sampling import select_samples
@@ -33,6 +33,8 @@ def _event_status(event_type: str) -> str:
         return "processing"
     if event_type == "failed":
         return "failed"
+    if event_type == "skipped":
+        return "skipped"
     return "completed"
 
 
@@ -120,7 +122,6 @@ class AnalyzeCasePipeline:
             "analysis_run_id": analysis_run_id,
             **(case_context or {}),
         }
-        gateway = gateway or MockAIPlatformAnnotationGateway()
         progress: dict[str, Any] = {"current_step": "queued", "steps": {}}
         inference_config = (
             config.get("inference") if isinstance(config.get("inference"), dict) else {}
@@ -235,29 +236,43 @@ class AnalyzeCasePipeline:
             ),
             lambda value: {"samples": len(value)},
         )
-        annotations, model_inputs = await run_step(
-            "ai_platform_annotation",
-            lambda: annotate_templates(
-                analysis_run_id=analysis_run_id,
-                templates=templates,
-                samples=samples,
-                case_context=case_context,
-                gateway=gateway,
-                max_sample_message_chars=max_sample_message_chars,
-                max_samples_per_template=max_samples_per_template,
-                max_templates=max_annotation_templates,
-            ),
-            lambda value: {
-                "annotations": len(value[0]),
-                "annotation_templates_total": len(templates),
-                "annotation_templates_selected": len(value[0]),
-                **(
-                    {"annotation_budget": max_annotation_templates}
-                    if max_annotation_templates is not None
-                    else {}
+        if gateway is None:
+            annotations, model_inputs = [], []
+            await emit(
+                step_name="ai_platform_annotation",
+                event_type="skipped",
+                metadata={
+                    "llm_enabled": False,
+                    "annotations": 0,
+                    "annotation_templates_total": len(templates),
+                    "annotation_templates_selected": 0,
+                },
+            )
+        else:
+            annotations, model_inputs = await run_step(
+                "ai_platform_annotation",
+                lambda: annotate_templates(
+                    analysis_run_id=analysis_run_id,
+                    templates=templates,
+                    samples=samples,
+                    case_context=case_context,
+                    gateway=gateway,
+                    max_sample_message_chars=max_sample_message_chars,
+                    max_samples_per_template=max_samples_per_template,
+                    max_templates=max_annotation_templates,
                 ),
-            },
-        )
+                lambda value: {
+                    "llm_enabled": True,
+                    "annotations": len(value[0]),
+                    "annotation_templates_total": len(templates),
+                    "annotation_templates_selected": len(value[0]),
+                    **(
+                        {"annotation_budget": max_annotation_templates}
+                        if max_annotation_templates is not None
+                        else {}
+                    ),
+                },
+            )
         enriched = await run_step(
             "broadcast_annotations",
             lambda: broadcast_annotations(normalized, annotations),

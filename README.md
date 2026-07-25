@@ -63,8 +63,8 @@ uvicorn app.main:app --reload --app-dir apps/api --port 8000
 npm run dev --workspace @logan/web
 ```
 
-The default mock model provider and mock SSO flow make local development deterministic and
-network-free.
+The default configuration disables LLM calls and uses mock SSO for local sign-in, so local
+development is network-free.
 
 ## Architecture
 
@@ -102,7 +102,7 @@ including defaults and production-only options, is in
 
 - `LOGAN_DATABASE_URL` — SQLAlchemy URL; defaults to `sqlite:///.logan/logan.db`
 - `LOGAN_LOCAL_OBJECT_STORE_DIR` — upload and step-artifact root
-- `LOGAN_LLM_PROVIDER` — `mock` for deterministic local runs or `ai_platform`
+- `LOGAN_LLM_PROVIDER` — `none` to disable LLM calls or `ai_platform` to enable them
 - `LOGAN_METRICS_ENABLED` — exposes low-cardinality metrics at `/metrics`
 - `LOGAN_SSO_*` — SSO provider settings; the mock provider is for development only
 - retention and security settings documented in `apps/api/app/config.py`
@@ -127,14 +127,17 @@ python scripts/export_openapi.py --out docs/openapi.snapshot.json
 python -m pytest tests/api/test_openapi_contract.py
 ```
 
-The offline quality benchmark is also deterministic:
+The quality benchmark uses the configured AI Platform model:
 
 ```bash
+LOGAN_LLM_PROVIDER=ai_platform \
 python -m logan_analysis.evaluation.run \
   --benchmark benchmarks/logan/checkout_incident \
   --out .logan/evaluation/report.json \
   --markdown .logan/evaluation/report.md
 ```
+
+It exits before running when `LOGAN_LLM_PROVIDER=none`.
 
 ## Safety model
 

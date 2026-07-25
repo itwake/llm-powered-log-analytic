@@ -47,5 +47,5 @@ npm run e2e
 ```
 
 `make check` runs the first three non-browser checks through the same repository entrypoints.
-Tests must not make unapproved network calls. Use the mock model gateway and mock SSO provider for
-deterministic local and CI behavior.
+Tests must not make unapproved network calls. Inject a model-gateway stub and use mock SSO for
+deterministic local and CI sign-in.

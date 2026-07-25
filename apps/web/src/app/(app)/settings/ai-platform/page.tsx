@@ -11,7 +11,7 @@ import { apiErrorMessage } from "@/lib/format";
 import { Badge, Card, InfoGrid } from "@/components/ui";
 
 function providerLabel(provider: string): string {
-  return provider === "ai_platform" ? "AI Platform" : provider;
+  return provider === "ai_platform" ? "AI Platform" : "None";
 }
 
 export default function AIPlatformSettingsPage() {
@@ -49,7 +49,7 @@ export default function AIPlatformSettingsPage() {
     <Stack spacing={2.5}>
       <Box>
         <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
-          AI Platform
+          LLM
         </Typography>
         <Typography color="text.secondary">Runtime capability and model surface configuration.</Typography>
       </Box>
@@ -66,12 +66,12 @@ export default function AIPlatformSettingsPage() {
             <InfoGrid
               rows={[
                 { label: "Provider", value: providerLabel(capabilities.models.provider) },
-                { label: "Default model", value: capabilities.models.default_model },
+                { label: "Default model", value: capabilities.models.default_model ?? "—" },
                 {
                   label: "Status",
                   value: (
-                    <Badge tone={capabilities.models.provider === "ai_platform" ? "success" : "warning"}>
-                      {capabilities.models.provider === "ai_platform" ? "configured" : "check configuration"}
+                    <Badge tone={capabilities.models.enabled ? "success" : "neutral"}>
+                      {capabilities.models.enabled ? "enabled" : "disabled"}
                     </Badge>
                   ),
                 },
@@ -88,7 +88,10 @@ export default function AIPlatformSettingsPage() {
           {!loading && capabilities && (
             <InfoGrid
               rows={[
-                { label: "Supported models", value: capabilities.models.supported_models.join(", ") },
+                {
+                  label: "Supported models",
+                  value: capabilities.models.supported_models.join(", ") || "None",
+                },
                 { label: "Views", value: capabilities.views.join(", ") },
                 { label: "Uploads", value: capabilities.upload.supported_extensions.join(", ") },
               ]}

@@ -5,6 +5,7 @@ import io
 import json
 import zipfile
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,7 @@ from app.store import (
     create_ephemeral_store,
 )
 from httpx import ASGITransport, AsyncClient
-from logan_analysis.activities.inference import MockAIPlatformAnnotationGateway
+from tests.model_gateway_stub import StubModelGateway
 
 FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
 PIPELINE_STEPS = [
@@ -97,7 +98,7 @@ async def test_cors_allowed_origins_are_configurable() -> None:
     app_settings = Settings(cors_allowed_origins="https://logan.example.com, http://localhost:3000")
     app = create_app(
         store=create_ephemeral_store(app_settings),
-        model_gateway=MockAIPlatformAnnotationGateway(),
+        model_gateway=StubModelGateway(),
     )
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"
@@ -114,14 +115,14 @@ async def test_cors_allowed_origins_are_configurable() -> None:
     assert response.headers["access-control-allow-origin"] == "https://logan.example.com"
 
 
-class FailingAnnotationGateway(MockAIPlatformAnnotationGateway):
+class FailingAnnotationGateway(StubModelGateway):
     async def responses(self, **kwargs):
         raise RuntimeError(
             "annotation failed source_token=gho_secret_token_1234567890 password=hunter2"
         )
 
 
-class StreamingChatGateway(MockAIPlatformAnnotationGateway):
+class StreamingChatGateway(StubModelGateway):
     async def responses(self, **kwargs):
         if kwargs.get("stream"):
             self.calls.append(kwargs)
@@ -138,7 +139,7 @@ class StreamingChatGateway(MockAIPlatformAnnotationGateway):
         return await super().responses(**kwargs)
 
 
-class StreamingErrorGateway(MockAIPlatformAnnotationGateway):
+class StreamingErrorGateway(StubModelGateway):
     async def responses(self, **kwargs):
         if kwargs.get("stream"):
             raise ModelTransportError(
@@ -151,10 +152,13 @@ async def _authenticated_client(
     app_settings: Settings | None = None,
     model_gateway=None,
 ) -> tuple[AsyncClient, MetadataStore, str]:
-    store = create_ephemeral_store(app_settings or Settings())
+    resolved_settings = app_settings or Settings()
+    if resolved_settings.llm_provider == "none":
+        resolved_settings = replace(resolved_settings, llm_provider="ai_platform")
+    store = create_ephemeral_store(resolved_settings)
     app = create_app(
         store=store,
-        model_gateway=model_gateway or MockAIPlatformAnnotationGateway(),
+        model_gateway=model_gateway or StubModelGateway(),
     )
     transport = ASGITransport(app=app)
     client = AsyncClient(transport=transport, base_url="http://testserver")
@@ -337,7 +341,7 @@ async def test_prometheus_metrics_endpoint_records_safe_api_request_metrics() ->
     store = create_ephemeral_store(Settings(metrics_enabled=True))
     app = create_app(
         store=store,
-        model_gateway=MockAIPlatformAnnotationGateway(),
+        model_gateway=StubModelGateway(),
     )
     client = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
 
@@ -376,7 +380,7 @@ async def test_case_rbac_collaborator_roles_are_enforced(tmp_path: Path) -> None
     store = create_ephemeral_store(Settings(local_object_store_dir=str(tmp_path / "object-store")))
     app = create_app(
         store=store,
-        model_gateway=MockAIPlatformAnnotationGateway(),
+        model_gateway=StubModelGateway(),
     )
     owner = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
     collaborator = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
@@ -532,7 +536,7 @@ async def test_organization_isolation_and_policy_group_case_access(tmp_path: Pat
     )
     app = create_app(
         store=store,
-        model_gateway=MockAIPlatformAnnotationGateway(),
+        model_gateway=StubModelGateway(),
     )
     owner = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
     admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
@@ -690,7 +694,7 @@ async def test_admin_api_settings_are_safe_and_admin_only() -> None:
     )
     app = create_app(
         store=store,
-        model_gateway=MockAIPlatformAnnotationGateway(),
+        model_gateway=StubModelGateway(),
     )
     engineer = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
     admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
@@ -811,7 +815,7 @@ async def test_scim_users_and_groups_support_bearer_and_admin_session() -> None:
     )
     app = create_app(
         store=store,
-        model_gateway=MockAIPlatformAnnotationGateway(),
+        model_gateway=StubModelGateway(),
     )
     scim = AsyncClient(
         transport=ASGITransport(app=app),
@@ -946,7 +950,7 @@ async def test_scim_bearer_defaults_to_default_organization() -> None:
     store = create_ephemeral_store(Settings(scim_bearer_token="default-scim-secret"))
     app = create_app(
         store=store,
-        model_gateway=MockAIPlatformAnnotationGateway(),
+        model_gateway=StubModelGateway(),
     )
     scim = AsyncClient(
         transport=ASGITransport(app=app),
@@ -970,7 +974,7 @@ async def test_audit_export_and_metadata_redaction_block_adversarial_payloads() 
     store = create_ephemeral_store()
     app = create_app(
         store=store,
-        model_gateway=MockAIPlatformAnnotationGateway(),
+        model_gateway=StubModelGateway(),
     )
     admin = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
     admin_id = await _register_and_login(
@@ -1325,7 +1329,7 @@ async def test_case_analysis_report_and_feedback_apis(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_chat_stream_fallback_without_context_does_not_call_gateway() -> None:
-    gateway = MockAIPlatformAnnotationGateway()
+    gateway = StubModelGateway()
     client, _, _ = await _authenticated_client(model_gateway=gateway)
 
     response = await client.post("/api/chat/stream", json={"message": "What happened?"})
@@ -1339,6 +1343,68 @@ async def test_chat_stream_fallback_without_context_does_not_call_gateway() -> N
         ("done", {"message": "No case analysis context was found for this chat request."}),
     ]
     assert gateway.calls == []
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_none_provider_skips_llm_calls_and_model_audit(tmp_path: Path) -> None:
+    store = create_ephemeral_store(
+        Settings(
+            llm_provider="none",
+            local_object_store_dir=str(tmp_path / "object-store"),
+        )
+    )
+    app = create_app(store=store)
+    client = AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
+    user = store.register_user(
+        email="no-llm@example.com",
+        username="no-llm",
+        full_name="No LLM",
+        password="password123",
+    )
+    token, _ = store.create_session(user.id)
+    client.cookies.set("logan_session", token)
+
+    capabilities = await client.get("/api/capabilities")
+    assert capabilities.status_code == 200
+    assert capabilities.json()["models"] == {
+        "enabled": False,
+        "provider": "none",
+        "default_model": None,
+        "supported_models": [],
+    }
+
+    case_id = await _create_case(client)
+    run_response = await client.post(
+        f"/api/cases/{case_id}/analysis-runs",
+        json={"input_paths": [str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))]},
+    )
+    assert run_response.status_code == 200, run_response.text
+    run_id = run_response.json()["analysis_run_id"]
+
+    run = store.get_analysis_run(run_id)
+    result = store.get_analysis_result(case_id, run_id)
+    assert run is not None
+    assert run.model_provider == "none"
+    assert run.model_name == ""
+    assert result is not None
+    assert result.annotations == []
+    assert result.model_inputs == []
+    assert result.causal_summary.details["source"] == "structured"
+    assert result.causal_summary.details["generation_reason"] == "llm_disabled"
+    annotation_events = store.list_job_events(
+        analysis_run_id=run_id,
+        step_name="ai_platform_annotation",
+    )
+    assert [event.event_type for event in annotation_events] == ["skipped"]
+    assert store.list_audit_logs(case_id=case_id, action="model.invocation") == []
+
+    chat = await client.post("/api/chat/stream", json={"message": "What happened?"})
+    assert chat.status_code == 409
+    assert chat.json()["detail"] == "LLM is disabled"
+    task = await client.post("/api/tasks/execute", json={"task_name": "noop", "arguments": {}})
+    assert task.status_code == 409
+    assert task.json()["detail"] == "LLM is disabled"
     await client.aclose()
 
 

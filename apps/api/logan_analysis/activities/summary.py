@@ -601,13 +601,15 @@ def _fallback_summary(
         f"service `{line.service or 'unknown'}`, time `{line.time or 'unknown'}`"
         for line in packet.evidence_lines[:12]
     ]
+    generation_note = (
+        "LLM analysis is disabled; this summary uses structured evidence only."
+        if reason == "llm_disabled"
+        else "Model output was unavailable or invalid; this summary uses structured evidence only."
+    )
     uncertainty_lines = [
         "Candidate edges need validation with service metrics, traces, and deployment context.",
         "Clock skew, missing timestamps, and sparse windows may affect causal ordering.",
-        (
-            "Fallback summary was generated from structured evidence only because the LLM output "
-            "was unavailable or invalid."
-        ),
+        generation_note,
     ]
     signal_lines = [f"- {signal}" for signal in signals] or [
         (
@@ -680,8 +682,9 @@ def _fallback_summary(
         ],
         uncertainties=uncertainty_lines,
         details={
-            "source": "fallback",
-            "fallback_reason": reason,
+            "source": "structured",
+            "generation_reason": reason,
+            "llm_enabled": reason != "llm_disabled",
             "prompt_version": PROMPT_VERSION,
             "evidence_packet_counts": {
                 "evidence_lines": len(packet.evidence_lines),
@@ -819,6 +822,7 @@ def parse_causal_summary_model_output(
         uncertainties=uncertainties,
         details={
             "source": "llm",
+            "llm_enabled": True,
             "prompt_version": PROMPT_VERSION,
             "evidence_packet_counts": {
                 "evidence_lines": len(packet.evidence_lines),
@@ -849,7 +853,7 @@ async def render_causal_summary(
         return _fallback_summary(
             packet=packet,
             evidence_refs=evidence_refs,
-            reason="gateway_unavailable",
+            reason="llm_disabled",
         )
 
     try:
@@ -865,5 +869,5 @@ async def render_causal_summary(
         return _fallback_summary(
             packet=packet,
             evidence_refs=evidence_refs,
-            reason="gateway_unavailable_or_invalid_model_output",
+            reason="model_output_unavailable_or_invalid",
         )

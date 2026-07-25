@@ -48,6 +48,7 @@ STANDARD_PROXY_ENV_NAMES = (
     "all_proxy",
 )
 DEFAULT_SQLITE_DATABASE_URL = "sqlite:///.logan/logan.db"
+LLM_PROVIDERS = {"ai_platform", "none"}
 
 
 def _is_unsafe_production_secret(value: str, unsafe_values: Iterable[str]) -> bool:
@@ -63,7 +64,7 @@ class Settings:
     )
     credential_encryption_key_id: str = os.getenv("LOGAN_CREDENTIAL_ENCRYPTION_KEY_ID", "default")
     credential_encryption_keyring: str = os.getenv("LOGAN_CREDENTIAL_ENCRYPTION_KEYRING", "{}")
-    llm_provider: str = os.getenv("LOGAN_LLM_PROVIDER", "ai_platform")
+    llm_provider: str = os.getenv("LOGAN_LLM_PROVIDER", "none")
     ai_platform_model: str = os.getenv("LOGAN_AI_PLATFORM_MODEL", "gpt-5.4")
     ai_platform_reasoning_effort: str = os.getenv("LOGAN_AI_PLATFORM_REASONING_EFFORT", "high")
     ai_platform_chat_host: str | None = os.getenv("LOGAN_AI_PLATFORM_CHAT_HOST") or None
@@ -143,7 +144,13 @@ class Settings:
         os.getenv("LOGAN_SCIM_ORGANIZATION_ID", "default").strip() or "default"
     )
 
+    @property
+    def normalized_llm_provider(self) -> str:
+        return self.llm_provider.strip().lower()
+
     def validate_for_runtime(self) -> None:
+        if self.normalized_llm_provider not in LLM_PROVIDERS:
+            raise ValueError("LOGAN_LLM_PROVIDER must be ai_platform or none")
         if self.env.strip().lower() not in PRODUCTION_ENV_NAMES:
             return
         errors: list[str] = []

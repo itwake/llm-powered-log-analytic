@@ -11,11 +11,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
-
 from pydantic import BaseModel, Field
 
-from logan_analysis.activities.inference import MockAIPlatformAnnotationGateway
 from logan_analysis.evaluation.metrics import review_load_reduction
 from logan_analysis.evaluation.reporting import ensure_report_text_is_safe
 from logan_analysis.evaluation.schemas import ReportSafetySummary
@@ -437,19 +434,6 @@ def _current_rss_bytes_linux() -> int | None:
     return None
 
 
-def _model_call_counts(calls: list[dict[str, Any]]) -> tuple[int, int]:
-    annotation_calls = 0
-    summary_calls = 0
-    for call in calls:
-        metadata = call.get("metadata") if isinstance(call.get("metadata"), dict) else {}
-        purpose = metadata.get("purpose")
-        if purpose == "template_annotation":
-            annotation_calls += 1
-        elif purpose == "causal_summary":
-            summary_calls += 1
-    return annotation_calls, summary_calls
-
-
 async def run_scale_benchmark(
     *,
     profile: str = "quick",
@@ -461,7 +445,6 @@ async def run_scale_benchmark(
         profile=profile,
         target_bytes=target_bytes,
     )
-    gateway = MockAIPlatformAnnotationGateway()
     case_id = f"{fixture.fixture_id}-case"
     analysis_run_id = f"{fixture.fixture_id}-run"
     baseline_rss = _current_rss_bytes_linux()
@@ -491,7 +474,7 @@ async def run_scale_benchmark(
                 ],
             },
         },
-        gateway=gateway,
+        gateway=None,
     )
     wall_time = time.perf_counter() - started_at
     peak_rss = _peak_rss_bytes()
@@ -500,8 +483,6 @@ async def run_scale_benchmark(
         if peak_rss is not None and baseline_rss is not None
         else None
     )
-    annotation_call_count, summary_call_count = _model_call_counts(gateway.calls)
-
     report = ScaleBenchmarkReport(
         benchmark_id="logan.scale.synthetic",
         profile=profile,
@@ -527,9 +508,9 @@ async def run_scale_benchmark(
             peak_rss_delta_bytes=peak_delta,
             linux_peak_rss=platform.system().lower() == "linux",
         ),
-        model_call_count=len(gateway.calls),
-        annotation_model_call_count=annotation_call_count,
-        summary_model_call_count=summary_call_count,
+        model_call_count=0,
+        annotation_model_call_count=0,
+        summary_model_call_count=0,
         review_load_reduction=review_load_reduction(
             raw_items=len(result.raw_entries),
             review_items=len(result.samples),

@@ -96,14 +96,13 @@ def test_scale_benchmark_cli_quick_profile_writes_safe_reports(tmp_path: Path) -
     assert payload["pipeline_counts"]["files"] == 5
     assert payload["pipeline_counts"]["templates"] > 0
     assert payload["pipeline_counts"]["representative_samples"] > 0
-    assert payload["pipeline_counts"]["annotations"] == payload["annotation_model_call_count"]
-    assert payload["summary_model_call_count"] == 1
-    assert payload["model_call_count"] == (
-        payload["annotation_model_call_count"] + payload["summary_model_call_count"]
-    )
+    assert payload["pipeline_counts"]["annotations"] == 0
+    assert payload["annotation_model_call_count"] == 0
+    assert payload["summary_model_call_count"] == 0
+    assert payload["model_call_count"] == 0
     assert payload["pipeline_counts"]["windows"] > 0
-    assert payload["pipeline_counts"]["causal_nodes"] > 0
-    assert payload["pipeline_counts"]["causal_edges"] > 0
+    assert payload["pipeline_counts"]["causal_nodes"] == 0
+    assert payload["pipeline_counts"]["causal_edges"] == 0
     assert payload["review_load_reduction"] > 0
     assert payload["causal_summary"]["present"] is True
     assert payload["causal_summary"]["next_actions"] > 0
