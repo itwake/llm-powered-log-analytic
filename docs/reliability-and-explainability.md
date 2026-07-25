@@ -81,9 +81,8 @@ python -m logan_workers.evaluation.run --benchmark benchmarks/logan/checkout_inc
 
 The mock provider (`MockAIPlatformAnnotationGateway`, `apps/workers/logan_workers/activities/inference.py`)
 is pure keyword/regex logic — no randomness, no network, no time dependence — so identical input
-yields identical output. Unit tests inject fakes via
-`create_app(store, model_gateway=..., s3_client_factory=...)` and never touch the network. Repeatable
-output is what makes regressions detectable.
+yields identical output. Unit tests inject fakes through `create_app(store=..., model_gateway=...)`
+and never touch the network. Repeatable output is what makes regressions detectable.
 
 ### 4. Layered validation keeps bad output away from users
 

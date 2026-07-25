@@ -18,6 +18,14 @@ STALE_REFERENCES = (
     "LOGAN_OBJECT_STORE_BACKEND",
     "LOGAN_ANALYSIS_ORCHESTRATOR",
 )
+REMOTE_STORAGE_REFERENCES = (
+    "s3_client_factory",
+    "s3://",
+    "LOGAN_S3_",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "MINIO_",
+)
 
 
 def _documentation_script_and_config_files() -> list[Path]:
@@ -47,6 +55,17 @@ def test_documentation_and_scripts_do_not_reference_removed_entrypoints() -> Non
     for path in _documentation_script_and_config_files():
         content = path.read_text(encoding="utf-8")
         for stale in STALE_REFERENCES:
+            if stale in content:
+                violations.append(f"{path.relative_to(REPO_ROOT)}: {stale}")
+
+    assert violations == []
+
+
+def test_documentation_and_config_do_not_expose_remote_object_storage() -> None:
+    violations: list[str] = []
+    for path in _documentation_script_and_config_files():
+        content = path.read_text(encoding="utf-8")
+        for stale in REMOTE_STORAGE_REFERENCES:
             if stale in content:
                 violations.append(f"{path.relative_to(REPO_ROOT)}: {stale}")
 

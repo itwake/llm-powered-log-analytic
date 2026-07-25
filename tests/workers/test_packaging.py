@@ -20,7 +20,15 @@ def test_removed_infrastructure_is_not_packaged() -> None:
     ]
     dependency_text = "\n".join(dependencies).lower()
 
-    for removed in ("boto3", "drain3", "opentelemetry", "temporalio"):
+    for removed in (
+        "boto3",
+        "botocore",
+        "drain3",
+        "minio",
+        "opentelemetry",
+        "s3fs",
+        "temporalio",
+    ):
         assert removed not in dependency_text
 
 
