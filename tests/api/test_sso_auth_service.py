@@ -41,9 +41,7 @@ async def test_sso_callback_provisions_user_and_session() -> None:
         )
 
     settings = Settings(
-        metrics_enabled=False,
         web_base_url="http://localhost:3000",
-        sso_enabled=True,
         sso_authorize_url="https://sso.example.test/authorize",
         sso_token_url="https://sso.example.test/token",
         sso_client_id="logan",
@@ -89,4 +87,4 @@ async def test_sso_callback_provisions_user_and_session() -> None:
 
 def test_sso_requires_complete_configuration() -> None:
     with pytest.raises(ValueError, match="SSO URLs and client id"):
-        Settings(sso_enabled=True).validate_for_runtime()
+        Settings(env="production", secret_key="x" * 32).validate_for_runtime()

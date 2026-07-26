@@ -5,9 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "lint": "tsc --noEmit",
-    "start": "next start",
-    "test": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start": "next start"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

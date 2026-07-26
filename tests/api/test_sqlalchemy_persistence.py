@@ -1,13 +1,25 @@
 from __future__ import annotations
 
 from app.config import Settings
+from app.db import Base
+from app.models import tables  # noqa: F401
 from app.sqlalchemy_store import SQLAlchemyStore
 
 
+def test_database_contains_only_core_tables() -> None:
+    assert set(Base.metadata.tables) == {
+        "analysis_runs",
+        "cases",
+        "raw_files",
+        "sessions",
+        "users",
+    }
+
+
 def test_core_records_persist_across_store_instances(tmp_path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    settings = Settings(database_url=database_url)
-    store = SQLAlchemyStore(app_settings=settings, database_url=database_url)
+    database_path = str(tmp_path / "logan.db")
+    settings = Settings(database_path=database_path)
+    store = SQLAlchemyStore(app_settings=settings, database_path=database_path)
     user = store.register_user(
         email="owner@example.com",
         username="owner",
@@ -15,9 +27,9 @@ def test_core_records_persist_across_store_instances(tmp_path) -> None:
         external_id="subject-1",
     )
     case = store.create_case(user_id=user.id, data={"title": "Incident"})
-    run = store.create_analysis_run(case_id=case.id, user_id=user.id, config={})
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
 
-    recreated = SQLAlchemyStore(app_settings=settings, database_url=database_url)
+    recreated = SQLAlchemyStore(app_settings=settings, database_path=database_path)
     assert recreated.get_user_by_external_id("subject-1") == user
     persisted_case = recreated.get_case(case.id)
     assert persisted_case is not None

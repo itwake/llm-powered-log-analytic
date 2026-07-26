@@ -20,7 +20,6 @@ def _env_first(*names: str) -> str | None:
     return None
 
 
-DEFAULT_SQLITE_DATABASE_URL = "sqlite:///.logan/logan.db"
 LLM_PROVIDERS = {"ai_platform", "none"}
 
 
@@ -28,7 +27,7 @@ LLM_PROVIDERS = {"ai_platform", "none"}
 class Settings:
     env: str = os.getenv("LOGAN_ENV", "development")
     secret_key: str = os.getenv("LOGAN_SECRET_KEY", "change-me")
-    database_url: str = _env_first("LOGAN_DATABASE_URL") or DEFAULT_SQLITE_DATABASE_URL
+    database_path: str = os.getenv("LOGAN_DATABASE_PATH", ".logan/logan.db")
     local_object_store_dir: str = os.getenv(
         "LOGAN_LOCAL_OBJECT_STORE_DIR",
         str(Path.cwd() / ".logan" / "object-store"),
@@ -39,10 +38,6 @@ class Settings:
         "http://localhost:3000",
     )
     log_level: str = os.getenv("LOGAN_LOG_LEVEL", "INFO")
-    metrics_enabled: bool = _env_bool("LOGAN_METRICS_ENABLED", True)
-    metrics_path: str = "/metrics"
-
-    sso_enabled: bool = _env_bool("LOGAN_SSO_ENABLED", False)
     sso_authorize_url: str = os.getenv("LOGAN_SSO_AUTHORIZE_URL", "")
     sso_token_url: str = os.getenv("LOGAN_SSO_TOKEN_URL", "")
     sso_client_id: str = os.getenv("LOGAN_SSO_CLIENT_ID", "")
@@ -116,10 +111,6 @@ class Settings:
         errors: list[str] = []
         if self.normalized_llm_provider not in LLM_PROVIDERS:
             errors.append("LOGAN_LLM_PROVIDER must be ai_platform or none")
-        if self.sso_enabled and not (
-            self.sso_authorize_url and self.sso_token_url and self.sso_client_id
-        ):
-            errors.append("SSO URLs and client id are required when SSO is enabled")
         if self.normalized_llm_provider == "ai_platform" and not (
             self.ai_platform_chat_host and self.ai_platform_chat_uri
         ):
@@ -127,11 +118,14 @@ class Settings:
         if self.env.strip().lower() == "production":
             if len(self.secret_key.strip()) < 32 or self.secret_key == "change-me":
                 errors.append("LOGAN_SECRET_KEY must contain at least 32 characters")
-            if not self.sso_enabled:
-                errors.append("LOGAN_SSO_ENABLED must be true")
+            if not (self.sso_authorize_url and self.sso_token_url and self.sso_client_id):
+                errors.append("SSO URLs and client id are required")
             if not self.sso_tls_verify:
                 errors.append("LOGAN_SSO_TLS_VERIFY must be true")
-            if not self.ai_platform_tls_verify:
+            if (
+                self.normalized_llm_provider == "ai_platform"
+                and not self.ai_platform_tls_verify
+            ):
                 errors.append("LOGAN_AI_PLATFORM_TLS_VERIFY must be true")
         if errors:
             raise ValueError("Invalid configuration: " + "; ".join(errors))

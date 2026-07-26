@@ -17,7 +17,6 @@ REQUIRED = {
     "/api/cases/{case_id}/analysis-runs": {"get", "post"},
     "/api/cases/{case_id}/analysis-runs/{run_id}": {"get"},
     "/api/cases/{case_id}/analysis-runs/{run_id}/cancel": {"post"},
-    "/api/cases/{case_id}/analysis-runs/{run_id}/events": {"get"},
     "/api/cases/{case_id}/analysis-runs/{run_id}/summary": {"get"},
     "/api/cases/{case_id}/analysis-runs/{run_id}/temporal": {"get"},
     "/api/cases/{case_id}/analysis-runs/{run_id}/logs": {"get"},

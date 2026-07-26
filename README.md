@@ -7,7 +7,7 @@ candidates, and a summary.
 ## Stack
 
 - FastAPI and SQLAlchemy
-- SQLite by default, PostgreSQL supported
+- SQLite
 - Local filesystem uploads
 - Next.js and Material UI
 - Optional AI Platform integration
@@ -32,7 +32,7 @@ npm ci
 Configure the SSO values in `.env`, then start the API and web app in separate terminals:
 
 ```bash
-python -m uvicorn app.main:app --reload --app-dir apps/api --host 127.0.0.1 --port 8000
+python -m uvicorn app.main:app --reload --env-file .env --app-dir apps/api --host 127.0.0.1 --port 8000
 npm run dev --workspace @logan/web
 ```
 
@@ -47,18 +47,18 @@ docker compose up --build
 ## Configuration
 
 Copy `.env.example` for the minimum setup or `.env.full.example` for every supported setting.
-Environment variables are read by the API process at startup.
+The API reads `.env` at startup through the local command above. The web app uses
+`NEXT_PUBLIC_API_BASE_URL` at build time and defaults to `http://localhost:8000`.
 
 SQLite data and uploaded files are stored under `.logan/` by default. Set
-`LOGAN_DATABASE_URL` for PostgreSQL and `LOGAN_LOCAL_OBJECT_STORE_DIR` for another local data
-directory.
+`LOGAN_DATABASE_PATH` and `LOGAN_LOCAL_OBJECT_STORE_DIR` to use other local paths.
 
 ## Development
 
 ```bash
 python -m pytest -q
 python -m ruff check apps tests scripts
-npm run lint
+npm run typecheck
 npm run build
 ```
 

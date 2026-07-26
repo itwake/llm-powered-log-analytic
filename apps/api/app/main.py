@@ -2,18 +2,19 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from logan_analysis.ports import ModelGateway
 
 from app.api import auth, cases, chat, reports
 from app.config import validate_runtime_settings
-from app.observability import configure_logging, install_metrics
+from app.logging_config import configure_logging
 from app.services.model_gateway_factory import create_model_gateway
-from app.store import MetadataStore, create_store
+from app.store import Store, create_store
 
 
 def create_app(
-    store: MetadataStore | None = None,
+    store: Store | None = None,
     *,
-    model_gateway: object | None = None,
+    model_gateway: ModelGateway | None = None,
 ) -> FastAPI:
     app = FastAPI(title="LogAn Platform API", version="0.1.0")
 
@@ -36,7 +37,6 @@ def create_app(
     app.include_router(cases.router)
     app.include_router(reports.router)
     app.include_router(chat.router)
-    install_metrics(app, app.state.store.settings)
     return app
 
 

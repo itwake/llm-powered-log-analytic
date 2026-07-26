@@ -5,13 +5,17 @@ import asyncio
 import pytest
 from app.config import Settings
 from app.main import create_app
-from app.store import create_ephemeral_store
+from app.store import create_ephemeral_store, sanitize_error_message
 from httpx import ASGITransport, AsyncClient
+
+
+def test_sanitized_text_accepts_a_length_limit() -> None:
+    assert sanitize_error_message("secret=value " + "x" * 20, max_length=12) == "secret=[reda"
 
 
 @pytest.mark.asyncio
 async def test_case_upload_analysis_and_reports() -> None:
-    store = create_ephemeral_store(Settings(metrics_enabled=False))
+    store = create_ephemeral_store(Settings())
     user = store.register_user(
         email="owner@example.com",
         username="owner",
@@ -59,16 +63,15 @@ async def test_case_upload_analysis_and_reports() -> None:
 
         summary = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
         logs = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/logs")
-        events = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/events")
         assert summary.status_code == 200
         assert logs.status_code == 200
         assert logs.json()["total"] == 1
-        assert events.json()["total"] > 0
+        assert run.json()["progress"]["steps"]
 
 
 @pytest.mark.asyncio
 async def test_analysis_requires_completed_upload() -> None:
-    store = create_ephemeral_store(Settings(metrics_enabled=False))
+    store = create_ephemeral_store(Settings())
     user = store.register_user(
         email="owner@example.com",
         username="owner",

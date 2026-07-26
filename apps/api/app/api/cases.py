@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app.dependencies import current_user, get_model_gateway, get_store, require_case_permission
+from app.dependencies import current_user, get_model_gateway, get_store, require_case_owner
 from app.schemas.case import (
     AnalysisRunListResponse,
     AnalysisRunRequest,
@@ -14,14 +14,12 @@ from app.schemas.case import (
     CaseCreateRequest,
     CaseResponse,
     CaseUpdateRequest,
-    JobEventListResponse,
-    JobEventResponse,
     UploadContentResponse,
     UploadRequest,
     UploadStartResponse,
 )
 from app.services.object_store import digest_bytes, file_uri_to_path, write_bytes
-from app.store import MetadataStore, UserRecord
+from app.store import Store, UserRecord
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 logger = logging.getLogger("logan.analysis")
@@ -62,23 +60,7 @@ def _analysis_run_response(record: Any) -> AnalysisRunResponse:
     )
 
 
-def _job_event_response(record: Any) -> JobEventResponse:
-    return JobEventResponse(
-        id=record.id,
-        case_id=record.case_id,
-        analysis_run_id=record.analysis_run_id,
-        step_name=record.step_name,
-        event_type=record.event_type,
-        status=record.status,
-        attempt=record.attempt,
-        idempotency_key=record.idempotency_key,
-        metadata=record.metadata,
-        error_message=record.error_message,
-        created_at=record.created_at,
-    )
-
-
-def _upload_for_case(store: MetadataStore, case_id: str, file_id: str):
+def _upload_for_case(store: Store, case_id: str, file_id: str):
     upload = store.get_upload(file_id)
     if upload is None or upload.case_id != case_id:
         raise HTTPException(status_code=404, detail="upload not found")
@@ -122,7 +104,7 @@ def _track_task(request: Request, run_id: str, task: asyncio.Task[Any]) -> None:
 def create_case(
     payload: CaseCreateRequest,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> CaseResponse:
     return _case_response(store.create_case(user_id=user.id, data=payload.model_dump()))
 
@@ -134,7 +116,7 @@ def list_cases(
     page: int = 1,
     page_size: int = 25,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> dict[str, object]:
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
@@ -157,15 +139,13 @@ def list_cases(
 def get_case(
     case_id: str,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> CaseResponse:
     return _case_response(
-        require_case_permission(
+        require_case_owner(
             store=store,
             user=user,
             case_id=case_id,
-            permission="view",
-            hide_forbidden=True,
         )
     )
 
@@ -175,14 +155,12 @@ def update_case(
     case_id: str,
     payload: CaseUpdateRequest,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> CaseResponse:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="edit",
-        hide_forbidden=False,
     )
     data = payload.model_dump(exclude_unset=True)
     if data.get("title") is None and "title" in data:
@@ -195,14 +173,12 @@ def delete_case(
     request: Request,
     case_id: str,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> dict[str, bool]:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="owner",
-        hide_forbidden=False,
     )
     for run in store.list_analysis_runs(case_id):
         task = _tasks(request).get(run.id)
@@ -218,14 +194,12 @@ def request_upload(
     case_id: str,
     payload: UploadRequest,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> UploadStartResponse:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="edit",
-        hide_forbidden=False,
     )
     upload = store.create_upload(
         case_id=case_id,
@@ -249,14 +223,12 @@ async def upload_content(
     case_id: str,
     file_id: str,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> UploadContentResponse:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="edit",
-        hide_forbidden=False,
     )
     upload = _upload_for_case(store, case_id, file_id)
     content = await request.body()
@@ -281,15 +253,13 @@ async def start_analysis(
     case_id: str,
     payload: AnalysisRunRequest,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
     gateway: Any = Depends(get_model_gateway),
 ) -> AnalysisRunResponse:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="edit",
-        hide_forbidden=False,
     )
     file_paths = [
         _upload_path(_upload_for_case(store, case_id, file_id))
@@ -298,14 +268,12 @@ async def start_analysis(
     run = store.create_analysis_run(
         case_id=case_id,
         user_id=user.id,
-        config=payload.config,
     )
     task = asyncio.create_task(
         store.run_analysis(
             run_id=run.id,
             user_id=user.id,
             file_paths=file_paths,
-            config=payload.config,
             gateway=gateway,
         ),
         name=f"analysis-run-{run.id}",
@@ -318,14 +286,12 @@ async def start_analysis(
 def list_analysis_runs(
     case_id: str,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> AnalysisRunListResponse:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="view",
-        hide_forbidden=True,
     )
     runs = store.list_analysis_runs(case_id)
     return AnalysisRunListResponse(
@@ -339,14 +305,12 @@ def get_analysis_run(
     case_id: str,
     run_id: str,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> AnalysisRunResponse:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="view",
-        hide_forbidden=True,
     )
     run = store.get_analysis_run(run_id)
     if run is None or run.case_id != case_id:
@@ -363,14 +327,12 @@ def cancel_analysis_run(
     case_id: str,
     run_id: str,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> AnalysisRunResponse:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="edit",
-        hide_forbidden=False,
     )
     run = store.get_analysis_run(run_id)
     if run is None or run.case_id != case_id:
@@ -380,30 +342,3 @@ def cancel_analysis_run(
     if task and not task.done():
         task.cancel()
     return _analysis_run_response(cancelled)
-
-
-@router.get(
-    "/{case_id}/analysis-runs/{run_id}/events",
-    response_model=JobEventListResponse,
-)
-def list_analysis_run_events(
-    case_id: str,
-    run_id: str,
-    user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
-) -> JobEventListResponse:
-    require_case_permission(
-        store=store,
-        user=user,
-        case_id=case_id,
-        permission="view",
-        hide_forbidden=True,
-    )
-    run = store.get_analysis_run(run_id)
-    if run is None or run.case_id != case_id:
-        raise HTTPException(status_code=404, detail="analysis run not found")
-    events = store.list_job_events(case_id=case_id, analysis_run_id=run_id)
-    return JobEventListResponse(
-        items=[_job_event_response(event) for event in events],
-        total=len(events),
-    )

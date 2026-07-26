@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import time
 from collections.abc import Awaitable, Callable
+from copy import deepcopy
+from datetime import UTC, datetime
 from typing import Any
 
 from logan_analysis.activities.broadcasting import broadcast_annotations
@@ -11,68 +12,41 @@ from logan_analysis.activities.ingestion import ingest_paths
 from logan_analysis.activities.preprocessing import merge_entries, preprocess_entries
 from logan_analysis.activities.sampling import select_samples
 from logan_analysis.activities.summary import render_causal_summary
-from logan_analysis.activities.templating import run_drain_templating
+from logan_analysis.activities.templating import extract_templates
 from logan_analysis.activities.temporal_aggregation import build_time_window_aggregates
 from logan_analysis.models import AnalysisResult
-from logan_analysis.observability import (
-    record_pipeline_run_completed,
-    record_pipeline_run_failed,
-    record_pipeline_run_started,
-    record_pipeline_step_completed,
-    record_pipeline_step_failed,
-    record_pipeline_step_started,
-)
 from logan_analysis.ports import ModelGateway
 
 ProgressCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
+MAX_ANNOTATION_TEMPLATES = 64
+MAX_SAMPLE_MESSAGE_CHARS = 1200
+MAX_SAMPLES_PER_TEMPLATE = 3
 
 
-def _event_status(event_type: str) -> str:
-    if event_type == "started":
-        return "processing"
-    if event_type == "failed":
-        return "failed"
-    if event_type == "skipped":
-        return "skipped"
-    return "completed"
-
-
-def _merge_progress(progress: dict[str, Any], event: dict[str, Any]) -> None:
-    step_name = str(event["step_name"])
-    event_type = str(event["event_type"])
-    metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else {}
+def _update_progress(
+    progress: dict[str, Any],
+    *,
+    step_name: str,
+    status: str,
+    metadata: dict[str, Any] | None = None,
+    error_message: str | None = None,
+) -> None:
+    details = metadata or {}
     steps = progress.setdefault("steps", {})
     step = dict(steps.get(step_name, {}))
-    step["status"] = event["status"]
-    step["attempt"] = event["attempt"]
-    step[f"{event_type}_at"] = event["created_at"]
-    if metadata:
-        step["metadata"] = metadata
-        progress.update(metadata)
-        if "files" in metadata:
-            progress["files_total"] = metadata["files"]
-            progress["files_processed"] = metadata["files"]
-        if "samples" in metadata:
-            progress["representative_samples"] = metadata["samples"]
-        if "annotations" in metadata:
-            progress["annotated_templates"] = metadata["annotations"]
-    if event.get("error_message"):
-        step["error_message"] = event["error_message"]
-        progress["error_message"] = event["error_message"]
+    step["status"] = status
+    timestamp_name = "started_at" if status == "processing" else f"{status}_at"
+    step[timestamp_name] = datetime.now(UTC).isoformat()
+    if details:
+        step["details"] = details
+        progress.update(details)
+    if error_message:
+        step["error_message"] = error_message
+        progress["error_message"] = error_message
     steps[step_name] = step
     progress["current_step"] = (
-        "completed" if step_name == "causal_summary" and event_type == "completed" else step_name
+        "completed" if step_name == "causal_summary" and status == "completed" else step_name
     )
-
-
-def _positive_int(value: Any) -> int | None:
-    if isinstance(value, bool) or value is None:
-        return None
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return None
-    return parsed if parsed > 0 else None
 
 
 class AnalyzeCasePipeline:
@@ -83,78 +57,32 @@ class AnalyzeCasePipeline:
         analysis_run_id: str,
         paths: list[str],
         case_context: dict[str, Any] | None = None,
-        config: dict[str, Any] | None = None,
         gateway: ModelGateway | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> AnalysisResult:
-        record_pipeline_run_started()
-        try:
-            result = await self._run_core(
-                case_id=case_id,
-                analysis_run_id=analysis_run_id,
-                paths=paths,
-                case_context=case_context,
-                config=config,
-                gateway=gateway,
-                progress_callback=progress_callback,
-            )
-        except Exception:
-            record_pipeline_run_failed()
-            raise
-        record_pipeline_run_completed()
-        return result
-
-    async def _run_core(
-        self,
-        *,
-        case_id: str,
-        analysis_run_id: str,
-        paths: list[str],
-        case_context: dict[str, Any] | None = None,
-        config: dict[str, Any] | None = None,
-        gateway: ModelGateway | None = None,
-        progress_callback: ProgressCallback | None = None,
-    ) -> AnalysisResult:
-        config = config or {}
         case_context = {
             "case_id": case_id,
             "analysis_run_id": analysis_run_id,
             **(case_context or {}),
         }
         progress: dict[str, Any] = {"current_step": "queued", "steps": {}}
-        inference_config = (
-            config.get("inference") if isinstance(config.get("inference"), dict) else {}
-        )
-        max_annotation_templates = _positive_int(inference_config.get("max_annotation_templates"))
-        max_sample_message_chars = _positive_int(inference_config.get("max_sample_message_chars"))
-        max_samples_per_template = _positive_int(inference_config.get("max_samples_per_template"))
-
-        async def emit(
+        async def update_step(
             *,
             step_name: str,
-            event_type: str,
+            status: str,
             metadata: dict[str, Any] | None = None,
             error_message: str | None = None,
-            attempt: int = 1,
         ) -> None:
-            from datetime import UTC, datetime
-
-            event = {
-                "case_id": case_id,
-                "analysis_run_id": analysis_run_id,
-                "step_name": step_name,
-                "event_type": event_type,
-                "status": _event_status(event_type),
-                "attempt": attempt,
-                "idempotency_key": f"{step_name}:attempt:{attempt}",
-                "metadata": metadata or {},
-                "error_message": error_message,
-                "created_at": datetime.now(UTC).isoformat(),
-            }
-            _merge_progress(progress, event)
+            _update_progress(
+                progress,
+                step_name=step_name,
+                status=status,
+                metadata=metadata,
+                error_message=error_message,
+            )
             if progress_callback is None:
                 return
-            callback_result = progress_callback(event)
+            callback_result = progress_callback(deepcopy(progress))
             if isinstance(callback_result, Awaitable):
                 await callback_result
 
@@ -163,32 +91,22 @@ class AnalyzeCasePipeline:
             action: Callable[[], Any] | Callable[[], Awaitable[Any]],
             metadata: Callable[[Any], dict[str, Any]],
         ) -> Any:
-            record_pipeline_step_started(step_name)
-            step_started_at = time.perf_counter()
-            await emit(step_name=step_name, event_type="started")
+            await update_step(step_name=step_name, status="processing")
             try:
                 value = action()
                 if isinstance(value, Awaitable):
                     value = await value
             except Exception as exc:
-                record_pipeline_step_failed(
-                    step_name,
-                    time.perf_counter() - step_started_at,
-                )
-                await emit(
+                await update_step(
                     step_name=step_name,
-                    event_type="failed",
+                    status="failed",
                     error_message=str(exc),
                 )
                 raise
-            await emit(
+            await update_step(
                 step_name=step_name,
-                event_type="completed",
+                status="completed",
                 metadata=metadata(value),
-            )
-            record_pipeline_step_completed(
-                step_name,
-                time.perf_counter() - step_started_at,
             )
             return value
 
@@ -211,18 +129,15 @@ class AnalyzeCasePipeline:
                 case_id=case_id,
                 analysis_run_id=analysis_run_id,
                 entries=raw_entries,
-                redaction_mode=config.get("redaction", {}).get("mode", "mask"),
             ),
             lambda value: {"normalized_lines": len(value)},
         )
-        drain_config = config.get("drain") if isinstance(config.get("drain"), dict) else {}
         normalized, templates = await run_step(
-            "drain_templating",
-            lambda: run_drain_templating(
+            "template_extraction",
+            lambda: extract_templates(
                 case_id=case_id,
                 analysis_run_id=analysis_run_id,
                 logs=normalized,
-                config=drain_config,
             ),
             lambda value: {"normalized_lines": len(value[0]), "templates": len(value[1])},
         )
@@ -231,15 +146,15 @@ class AnalyzeCasePipeline:
             lambda: select_samples(
                 normalized,
                 templates,
-                max_samples_per_template=max_samples_per_template or 5,
+                max_samples_per_template=MAX_SAMPLES_PER_TEMPLATE,
             ),
             lambda value: {"samples": len(value)},
         )
         if gateway is None:
             annotations = []
-            await emit(
+            await update_step(
                 step_name="ai_platform_annotation",
-                event_type="skipped",
+                status="skipped",
                 metadata={
                     "llm_enabled": False,
                     "annotations": 0,
@@ -256,20 +171,16 @@ class AnalyzeCasePipeline:
                     samples=samples,
                     case_context=case_context,
                     gateway=gateway,
-                    max_sample_message_chars=max_sample_message_chars,
-                    max_samples_per_template=max_samples_per_template,
-                    max_templates=max_annotation_templates,
+                    max_sample_message_chars=MAX_SAMPLE_MESSAGE_CHARS,
+                    max_samples_per_template=MAX_SAMPLES_PER_TEMPLATE,
+                    max_templates=MAX_ANNOTATION_TEMPLATES,
                 ),
                 lambda value: {
                     "llm_enabled": True,
                     "annotations": len(value),
                     "annotation_templates_total": len(templates),
                     "annotation_templates_selected": len(value),
-                    **(
-                        {"annotation_budget": max_annotation_templates}
-                        if max_annotation_templates is not None
-                        else {}
-                    ),
+                    "annotation_budget": MAX_ANNOTATION_TEMPLATES,
                 },
             )
         enriched = await run_step(
@@ -279,10 +190,7 @@ class AnalyzeCasePipeline:
         )
         temporal = await run_step(
             "temporal_aggregation",
-            lambda: build_time_window_aggregates(
-                enriched,
-                window_size_seconds=config.get("default_window_size_seconds"),
-            ),
+            lambda: build_time_window_aggregates(enriched),
             lambda value: {"windows": len(value)},
         )
         causal_graph = await run_step(
@@ -292,7 +200,6 @@ class AnalyzeCasePipeline:
                 analysis_run_id=analysis_run_id,
                 templates=templates,
                 logs=enriched,
-                max_lag_seconds=config.get("causal", {}).get("max_lag_seconds", 600),
             ),
             lambda value: {"nodes": len(value.nodes), "edges": len(value.edges)},
         )

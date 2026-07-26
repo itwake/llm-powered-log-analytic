@@ -11,9 +11,9 @@ Uploads are written below `LOGAN_LOCAL_OBJECT_STORE_DIR` using generated case an
 and sanitized filenames. Analysis accepts completed upload identifiers, not arbitrary filesystem
 paths.
 
-Log preprocessing masks common secrets before model input or report display. Progress metadata and
-error messages filter credential-like fields. AI Platform credentials are read from process
-environment variables and are not stored in the database.
+Log preprocessing masks common secrets before model input or report display. Analysis progress
+contains pipeline-generated counts, and error messages are sanitized before storage. AI Platform
+credentials are read from process environment variables and are not stored in the database.
 
 For production:
 

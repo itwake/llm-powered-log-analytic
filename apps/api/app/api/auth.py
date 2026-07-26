@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse
 from app.dependencies import current_user, get_store
 from app.schemas.auth import AuthUserResponse, UserOut
 from app.services.sso_auth_service import SsoAuthService
-from app.store import MetadataStore, UserRecord
+from app.store import Store, UserRecord
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 SSO_STATE_COOKIE_NAME = "logan_sso_state"
@@ -72,7 +72,7 @@ def _read_state(token: str, secret_key: str) -> dict[str, str]:
     return {"nonce": nonce, "next": _safe_next_path(next_path)}
 
 
-def _sso_service(request: Request, store: MetadataStore) -> SsoAuthService:
+def _sso_service(request: Request, store: Store) -> SsoAuthService:
     service = getattr(request.app.state, "sso_auth_service", None)
     return service if isinstance(service, SsoAuthService) else SsoAuthService(
         app_settings=store.settings
@@ -82,10 +82,10 @@ def _sso_service(request: Request, store: MetadataStore) -> SsoAuthService:
 @router.get("/sso/login")
 def sso_login(
     request: Request,
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> RedirectResponse:
     service = _sso_service(request, store)
-    service.ensure_enabled()
+    service.ensure_configured()
     next_path = _safe_next_path(request.query_params.get("next"))
     nonce = secrets.token_urlsafe(24)
     state = _sign_state(next_path, nonce, store.settings.secret_key)
@@ -110,10 +110,10 @@ def sso_login(
 @router.get("/sso/callback")
 async def sso_callback(
     request: Request,
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> RedirectResponse:
     service = _sso_service(request, store)
-    service.ensure_enabled()
+    service.ensure_configured()
     state = _read_state(
         (request.query_params.get("state") or "").strip(),
         store.settings.secret_key,
@@ -148,7 +148,7 @@ async def sso_callback(
 def logout(
     request: Request,
     response: Response,
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> dict[str, str]:
     store.revoke_session(request.cookies.get("logan_session"))
     response.delete_cookie("logan_session")

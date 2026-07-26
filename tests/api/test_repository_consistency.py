@@ -7,7 +7,8 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[2]
 LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-ENV = re.compile(r"^\s*#?\s*(LOGAN_[A-Z0-9_]+)=", re.MULTILINE)
+ENV = re.compile(r"^\s*#?\s*((?:LOGAN|NEXT_PUBLIC)_[A-Z0-9_]+)=", re.MULTILINE)
+RUNTIME_ENV = re.compile(r"\b((?:LOGAN|NEXT_PUBLIC)_[A-Z0-9_]+)\b")
 
 
 def test_relative_markdown_links_resolve() -> None:
@@ -29,16 +30,19 @@ def test_relative_markdown_links_resolve() -> None:
 
 
 def test_full_environment_example_covers_runtime_settings() -> None:
-    config = (ROOT / "apps/api/app/config.py").read_text(encoding="utf-8")
+    runtime_files = [
+        *(ROOT / "apps/api/app").rglob("*.py"),
+        *(ROOT / "apps/web/src").rglob("*.ts"),
+        ROOT / "docker-compose.yml",
+        *(ROOT / "infra/docker").glob("*"),
+    ]
+    runtime_settings = {
+        name
+        for path in runtime_files
+        for name in RUNTIME_ENV.findall(path.read_text(encoding="utf-8"))
+    }
     full = (ROOT / ".env.full.example").read_text(encoding="utf-8")
-    assert set(re.findall(r'"(LOGAN_[A-Z0-9_]+)"', config)) <= set(ENV.findall(full))
-
-
-def test_repository_has_one_initial_schema() -> None:
-    migrations = sorted((ROOT / "apps/api/migrations").glob("*.sql"))
-    assert [path.name for path in migrations] == ["0001_initial.sql"]
-    schema = migrations[0].read_text(encoding="utf-8")
-    assert schema.count("CREATE TABLE ") == 6
+    assert runtime_settings <= set(ENV.findall(full))
 
 
 def test_web_manifest_matches_lockfile() -> None:

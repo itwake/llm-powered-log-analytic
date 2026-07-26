@@ -4,10 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from logan_analysis.activities.broadcasting import broadcast_annotations
 from logan_analysis.activities.sampling import select_samples
-from logan_analysis.algorithms.drain_adapter import (
-    StableDrainAdapter,
-    build_drain_adapter,
-)
+from logan_analysis.algorithms.template_extractor import TemplateExtractor
 from logan_analysis.models import NormalizedLogLine, TemplateAnnotation
 
 
@@ -15,8 +12,8 @@ def _line(index: int, message: str, *, service: str = "api") -> NormalizedLogLin
     return NormalizedLogLine(
         log_id=f"log-{index}",
         raw_log_id=f"raw-{index}",
-        case_id="case-drain",
-        analysis_run_id="run-drain",
+        case_id="case-template",
+        analysis_run_id="run-template",
         file_id="file-1",
         file_path="service.log",
         line_number=index,
@@ -31,15 +28,15 @@ def _line(index: int, message: str, *, service: str = "api") -> NormalizedLogLin
     )
 
 
-def test_stable_drain_groups_variable_values_and_masks_high_cardinality_fields() -> None:
+def test_template_extractor_groups_variable_values_and_masks_high_cardinality_fields() -> None:
     logs = [
         _line(1, "cache-service connection pool exhausted active=40 max=40 request_id=req-a"),
         _line(2, "cache-service connection pool exhausted active=39 max=40 request_id=req-b"),
         _line(3, "cache-service connection pool exhausted active=38 max=40 request_id=req-c"),
     ]
 
-    _, templates = StableDrainAdapter().cluster(
-        case_id="case-drain", analysis_run_id="run-drain", logs=logs
+    _, templates = TemplateExtractor().cluster(
+        case_id="case-template", analysis_run_id="run-template", logs=logs
     )
 
     assert len(templates) == 1
@@ -50,21 +47,21 @@ def test_stable_drain_groups_variable_values_and_masks_high_cardinality_fields()
     assert {line.template_id for line in logs} == {templates[0].template_id}
 
 
-def test_stable_drain_templates_feed_sampling_and_label_broadcasting() -> None:
+def test_templates_feed_sampling_and_label_broadcasting() -> None:
     logs = [
         _line(1, "worker timeout calling scheduler-service job_id=job-1 after 5000ms"),
         _line(2, "worker timeout calling scheduler-service job_id=job-2 after 6000ms"),
     ]
 
-    _, templates = StableDrainAdapter().cluster(
-        case_id="case-drain", analysis_run_id="run-drain", logs=logs
+    _, templates = TemplateExtractor().cluster(
+        case_id="case-template", analysis_run_id="run-template", logs=logs
     )
     samples = select_samples(logs, templates)
     annotations = [
         TemplateAnnotation(
             annotation_id="ann-1",
             template_id=templates[0].template_id,
-            analysis_run_id="run-drain",
+            analysis_run_id="run-template",
             golden_signal="availability",
             fault_categories=["timeout"],
             entities={"service": ["scheduler-service"]},
@@ -81,10 +78,9 @@ def test_stable_drain_templates_feed_sampling_and_label_broadcasting() -> None:
     assert all(line.fault_categories == ["timeout"] for line in enriched)
 
 
-def test_stable_drain_adapter_is_the_single_parser() -> None:
-    adapter = build_drain_adapter()
+def test_template_extractor_masks_paths() -> None:
+    extractor = TemplateExtractor()
 
-    assert isinstance(adapter, StableDrainAdapter)
-    assert "/tenant/acme/private" not in adapter.to_template(
+    assert "/tenant/acme/private" not in extractor.to_template(
         "GET /tenant/acme/private failed status=500 trace-abc"
     )

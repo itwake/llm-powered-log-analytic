@@ -107,7 +107,7 @@ class LogTemplate(BaseModel):
     services: list[str] = Field(default_factory=list)
     files: list[str] = Field(default_factory=list)
     sample_values: dict[str, Any] = Field(default_factory=dict)
-    drain_cluster_id: str | None = None
+    cluster_id: str | None = None
 
 
 class RepresentativeSample(BaseModel):

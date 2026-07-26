@@ -6,8 +6,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from logan_analysis.models import OFFENDING_SIGNALS
 
-from app.dependencies import current_user, get_store, require_case_permission
-from app.store import MetadataStore, UserRecord
+from app.dependencies import current_user, get_store, require_case_owner
+from app.store import Store, UserRecord
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
@@ -18,7 +18,7 @@ def _parse_dt(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def _require_result(store: MetadataStore, case_id: str, run_id: str):
+def _require_result(store: Store, case_id: str, run_id: str):
     result = store.get_analysis_result(case_id, run_id)
     if not result:
         raise HTTPException(status_code=404, detail="analysis result not found")
@@ -34,14 +34,12 @@ def data_summary(
     limit: int = 100,
     offset: int = 0,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> dict[str, object]:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="view",
-        hide_forbidden=True,
     )
     result = _require_result(store, case_id, run_id)
     summary_scope = "all" if scope == "all" else "attention"
@@ -102,18 +100,14 @@ def data_summary(
 def temporal(
     case_id: str,
     run_id: str,
-    window_size_seconds: int = 60,
     group_by: str = "golden_signal",
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> dict[str, object]:
-    del window_size_seconds
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="view",
-        hide_forbidden=True,
     )
     result = _require_result(store, case_id, run_id)
     grouped: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -153,14 +147,12 @@ def logs(
     limit: int = 200,
     offset: int = 0,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> dict[str, object]:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="view",
-        hide_forbidden=True,
     )
     start = _parse_dt(window_start)
     end = _parse_dt(window_end)
@@ -230,14 +222,12 @@ def causal_graph(
     max_nodes: int = 100,
     min_confidence: float = Query(0.0, ge=0, le=1),
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> dict[str, object]:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="view",
-        hide_forbidden=True,
     )
     result = _require_result(store, case_id, run_id)
     graph = result.causal_graph
@@ -265,14 +255,12 @@ def causal_summary(
     case_id: str,
     run_id: str,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
 ) -> dict[str, object]:
-    require_case_permission(
+    require_case_owner(
         store=store,
         user=user,
         case_id=case_id,
-        permission="view",
-        hide_forbidden=True,
     )
     result = _require_result(store, case_id, run_id)
     return result.causal_summary.model_dump(mode="json")

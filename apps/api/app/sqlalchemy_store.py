@@ -9,8 +9,8 @@ from typing import Any, Iterator
 
 from logan_analysis.models import AnalysisResult
 from logan_analysis.pipeline import AnalyzeCasePipeline
-from sqlalchemy import create_engine, func, or_, select
-from sqlalchemy.engine import Engine, make_url
+from sqlalchemy import URL, create_engine, func, or_, select
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -20,18 +20,15 @@ from app.core.security import default_session_expiry, hash_token, issue_session_
 from app.db import Base
 from app.models import tables
 from app.services.object_store import local_upload_object_uri, safe_filename
-from app.store import (
+from app.records import (
     TERMINAL_ANALYSIS_RUN_STATUSES,
     AnalysisRunCancelled,
     AnalysisRunRecord,
     CaseRecord,
-    JobEventRecord,
     SessionRecord,
     UploadRecord,
     UserRecord,
-    merge_event_progress,
     sanitize_error_message,
-    sanitize_job_metadata,
 )
 
 
@@ -45,19 +42,12 @@ def _utc(value: datetime | None) -> datetime | None:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
-def _sync_database_url(database_url: str) -> str:
-    if database_url.startswith("postgresql+asyncpg://"):
-        return database_url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
-    if database_url.startswith("postgres://"):
-        return database_url.replace("postgres://", "postgresql+psycopg://", 1)
-    return database_url
-
-
-def _ensure_sqlite_parent_dir(database_url: str) -> None:
-    url = make_url(database_url)
-    if not url.drivername.startswith("sqlite") or not url.database or url.database == ":memory:":
-        return
-    Path(url.database).expanduser().parent.mkdir(parents=True, exist_ok=True)
+def _sqlite_url(database_path: str) -> URL:
+    if database_path == ":memory:":
+        return URL.create("sqlite+pysqlite", database=":memory:")
+    path = Path(database_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return URL.create("sqlite+pysqlite", database=str(path))
 
 
 class SQLAlchemyStore:
@@ -65,25 +55,19 @@ class SQLAlchemyStore:
         self,
         *,
         app_settings: Settings = settings,
-        database_url: str,
+        database_path: str,
         engine: Engine | None = None,
         create_schema: bool = True,
     ) -> None:
         self.settings = app_settings
-        self.database_url = _sync_database_url(database_url)
-        _ensure_sqlite_parent_dir(self.database_url)
+        self.database_path = database_path
         engine_options: dict[str, Any] = {
             "future": True,
-            "connect_args": (
-                {"check_same_thread": False}
-                if self.database_url.startswith("sqlite")
-                else {}
-            ),
+            "connect_args": {"check_same_thread": False},
         }
-        database = make_url(self.database_url)
-        if database.drivername.startswith("sqlite") and database.database == ":memory:":
+        if database_path == ":memory:":
             engine_options["poolclass"] = StaticPool
-        self.engine = engine or create_engine(self.database_url, **engine_options)
+        self.engine = engine or create_engine(_sqlite_url(database_path), **engine_options)
         self.session_factory = sessionmaker(self.engine, expire_on_commit=False, future=True)
         if create_schema:
             Base.metadata.create_all(self.engine)
@@ -116,7 +100,6 @@ class SQLAlchemyStore:
             username=normalized_username,
             full_name=full_name.strip() if full_name else None,
             external_id=external_id,
-            is_active=True,
             created_at=_now(),
             updated_at=_now(),
         )
@@ -226,7 +209,7 @@ class SQLAlchemyStore:
             ):
                 return None
             user = session.get(tables.User, session_row.user_id)
-            if user is None or not user.is_active:
+            if user is None:
                 return None
             return self._user_record(user)
 
@@ -299,12 +282,6 @@ class SQLAlchemyStore:
                 .limit(limit)
             ).all()
             return [self._case_record(row) for row in rows], int(total)
-
-    def user_can_access_case(self, user_id: str, case_id: str, permission: str) -> bool:
-        del permission
-        with self._session() as session:
-            row = session.get(tables.Case, case_id)
-            return bool(row and row.deleted_at is None and row.created_by == user_id)
 
     def update_case(
         self,
@@ -395,7 +372,6 @@ class SQLAlchemyStore:
         *,
         case_id: str,
         user_id: str,
-        config: dict[str, Any],
     ) -> AnalysisRunRecord:
         with self._session() as session:
             case = session.get(tables.Case, case_id)
@@ -414,19 +390,12 @@ class SQLAlchemyStore:
                 case_id=case_id,
                 run_number=run_number,
                 status="queued",
-                config_json=dict(config),
                 model_provider=self.settings.normalized_llm_provider,
                 model_name=(
                     self.settings.ai_platform_model
                     if self.settings.normalized_llm_provider == "ai_platform"
                     else "none"
                 ),
-                model_reasoning_effort=(
-                    self.settings.ai_platform_reasoning_effort
-                    if self.settings.normalized_llm_provider == "ai_platform"
-                    else "none"
-                ),
-                prompt_version="annotation_v1",
                 progress_json={"current_step": "queued", "steps": {}},
                 created_by=user_id,
                 created_at=_now(),
@@ -443,7 +412,6 @@ class SQLAlchemyStore:
         run_id: str,
         user_id: str,
         file_paths: list[str],
-        config: dict[str, Any],
         gateway: Any | None = None,
     ) -> AnalysisRunRecord:
         if not file_paths:
@@ -464,25 +432,11 @@ class SQLAlchemyStore:
             row.status = "processing"
             row.started_at = _now()
 
-        def record_progress(event: dict[str, Any]) -> None:
+        def record_progress(progress: dict[str, Any]) -> None:
             current = self.get_analysis_run(run_id)
             if current is None or current.status == "cancelled":
                 raise AnalysisRunCancelled("analysis run was cancelled")
-            self.record_job_event(
-                case_id=run.case_id,
-                analysis_run_id=run_id,
-                step_name=str(event["step_name"]),
-                event_type=str(event["event_type"]),
-                status=str(event["status"]),
-                attempt=int(event.get("attempt") or 1),
-                idempotency_key=str(event["idempotency_key"]),
-                metadata=(
-                    event["metadata"] if isinstance(event.get("metadata"), dict) else {}
-                ),
-                error_message=(
-                    str(event["error_message"]) if event.get("error_message") else None
-                ),
-            )
+            self.update_analysis_progress(run_id=run_id, progress=progress)
 
         try:
             result = await AnalyzeCasePipeline().run(
@@ -496,9 +450,8 @@ class SQLAlchemyStore:
                     "service": case.service,
                     "environment": case.environment,
                     "model": run.model_name,
-                    "reasoning_effort": run.model_reasoning_effort,
+                    "reasoning_effort": self.settings.ai_platform_reasoning_effort,
                 },
-                config=dict(config or run.config),
                 gateway=gateway,
                 progress_callback=record_progress,
             )
@@ -509,8 +462,7 @@ class SQLAlchemyStore:
                 row = session.get(tables.AnalysisRun, run_id)
                 if row is not None and row.status != "cancelled":
                     row.status = "failed"
-                    row.failed_at = _now()
-                    row.completed_at = row.failed_at
+                    row.completed_at = _now()
                     row.error_message = sanitize_error_message(exc)
                     case_row = session.get(tables.Case, row.case_id)
                     if case_row is not None:
@@ -574,77 +526,25 @@ class SQLAlchemyStore:
             session.flush()
             return self._analysis_run_record(row)
 
-    def record_job_event(
-        self,
-        *,
-        case_id: str,
-        analysis_run_id: str,
-        step_name: str,
-        event_type: str,
-        status: str,
-        attempt: int,
-        idempotency_key: str,
-        metadata: dict[str, Any] | None = None,
-        error_message: str | None = None,
-    ) -> JobEventRecord:
-        clean_metadata = sanitize_job_metadata(metadata)
+    def update_analysis_progress(self, *, run_id: str, progress: dict[str, Any]) -> None:
+        clean_progress = dict(progress)
+        if clean_progress.get("error_message"):
+            clean_progress["error_message"] = sanitize_error_message(
+                str(clean_progress["error_message"])
+            )
+        steps = {
+            str(name): dict(value)
+            for name, value in dict(clean_progress.get("steps") or {}).items()
+            if isinstance(value, dict)
+        }
+        for step in steps.values():
+            if step.get("error_message"):
+                step["error_message"] = sanitize_error_message(str(step["error_message"]))
+        clean_progress["steps"] = steps
         with self._session() as session:
-            existing = session.scalar(
-                select(tables.JobEvent).where(
-                    tables.JobEvent.analysis_run_id == analysis_run_id,
-                    tables.JobEvent.idempotency_key == idempotency_key,
-                    tables.JobEvent.event_type == event_type,
-                )
-            )
-            if existing is not None:
-                return self._job_event_record(existing)
-            row = tables.JobEvent(
-                id=str(uuid.uuid4()),
-                case_id=case_id,
-                analysis_run_id=analysis_run_id,
-                step_name=step_name,
-                event_type=event_type,
-                status=status,
-                attempt=attempt,
-                idempotency_key=idempotency_key,
-                metadata_json=clean_metadata,
-                error_message=(
-                    sanitize_error_message(error_message) if error_message else None
-                ),
-                created_at=_now(),
-            )
-            session.add(row)
-            run = session.get(tables.AnalysisRun, analysis_run_id)
+            run = session.get(tables.AnalysisRun, run_id)
             if run is not None:
-                run.progress_json = merge_event_progress(
-                    dict(run.progress_json or {}),
-                    {
-                        "step_name": step_name,
-                        "event_type": event_type,
-                        "status": status,
-                        "attempt": attempt,
-                        "metadata": clean_metadata,
-                        "error_message": row.error_message,
-                        "created_at": row.created_at.isoformat(),
-                    },
-                )
-            session.flush()
-            return self._job_event_record(row)
-
-    def list_job_events(
-        self,
-        *,
-        case_id: str | None = None,
-        analysis_run_id: str | None = None,
-    ) -> list[JobEventRecord]:
-        query = select(tables.JobEvent)
-        if case_id:
-            query = query.where(tables.JobEvent.case_id == case_id)
-        if analysis_run_id:
-            query = query.where(tables.JobEvent.analysis_run_id == analysis_run_id)
-        query = query.order_by(tables.JobEvent.created_at, tables.JobEvent.id)
-        with self._session() as session:
-            return [self._job_event_record(row) for row in session.scalars(query).all()]
+                run.progress_json = clean_progress
 
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
         with self._session() as session:
@@ -660,7 +560,6 @@ class SQLAlchemyStore:
             username=row.username,
             full_name=row.full_name,
             external_id=row.external_id,
-            is_active=row.is_active,
             created_at=_utc(row.created_at) or _now(),
         )
 
@@ -711,30 +610,12 @@ class SQLAlchemyStore:
             case_id=row.case_id,
             run_number=row.run_number,
             status=row.status,
-            config=dict(row.config_json or {}),
             model_provider=row.model_provider,
             model_name=row.model_name,
-            model_reasoning_effort=row.model_reasoning_effort,
-            prompt_version=row.prompt_version,
             created_by=row.created_by,
             started_at=_utc(row.started_at),
             completed_at=_utc(row.completed_at),
             error_message=row.error_message,
             result=result,
             progress=dict(row.progress_json or {}),
-        )
-
-    def _job_event_record(self, row: tables.JobEvent) -> JobEventRecord:
-        return JobEventRecord(
-            id=row.id,
-            case_id=row.case_id,
-            analysis_run_id=row.analysis_run_id,
-            step_name=row.step_name,
-            event_type=row.event_type,
-            status=row.status,
-            attempt=row.attempt,
-            idempotency_key=row.idempotency_key,
-            metadata=dict(row.metadata_json or {}),
-            error_message=row.error_message,
-            created_at=_utc(row.created_at) or _now(),
         )

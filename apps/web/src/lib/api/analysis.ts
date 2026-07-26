@@ -6,7 +6,6 @@ import type {
   AnalysisRunResponse,
   CausalGraphResponse,
   CausalSummaryResponse,
-  JobEventListResponse,
   LogsResponse,
   SummaryResponse,
   TemporalResponse,
@@ -26,8 +25,6 @@ export const runsApi = {
     request<AnalysisRunResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/cancel`, {
       method: "POST",
     }),
-  events: (caseId: string, runId: string) =>
-    request<JobEventListResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/events`),
 };
 
 export const reportsApi = {
@@ -40,7 +37,7 @@ export const reportsApi = {
   temporal: (
     caseId: string,
     runId: string,
-    query?: {window_size_seconds?: number; group_by?: string},
+    query?: {group_by?: string},
   ) =>
     request<TemporalResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/temporal`, {query}),
   logs: (

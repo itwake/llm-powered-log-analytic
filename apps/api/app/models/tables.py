@@ -4,15 +4,13 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from app.db import Base
 
-UUID_TYPE = String(36).with_variant(PG_UUID(as_uuid=False), "postgresql")
-JSON_TYPE = JSON().with_variant(JSONB, "postgresql")
+UUID_TYPE = String(36)
+JSON_TYPE = JSON
 
 
 def uuid_pk() -> Mapped[str]:
@@ -31,7 +29,6 @@ class User(Base):
     username: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     full_name: Mapped[str | None] = mapped_column(Text)
     external_id: Mapped[str | None] = mapped_column(Text, unique=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -89,45 +86,12 @@ class AnalysisRun(Base):
     case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
     run_number: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="queued")
-    config_json: Mapped[dict[str, Any]] = json_object()
     model_provider: Mapped[str] = mapped_column(Text, nullable=False)
     model_name: Mapped[str] = mapped_column(Text, nullable=False)
-    model_reasoning_effort: Mapped[str] = mapped_column(Text, nullable=False)
-    prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
     progress_json: Mapped[dict[str, Any]] = json_object()
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
-class JobEvent(Base):
-    __tablename__ = "job_events"
-    __table_args__ = (
-        UniqueConstraint("analysis_run_id", "idempotency_key", "event_type"),
-    )
-
-    id: Mapped[str] = uuid_pk()
-    case_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("cases.id"), nullable=False)
-    analysis_run_id: Mapped[str] = mapped_column(
-        UUID_TYPE,
-        ForeignKey("analysis_runs.id"),
-        nullable=False,
-    )
-    step_name: Mapped[str] = mapped_column(Text, nullable=False)
-    event_type: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(Text, nullable=False)
-    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(
-        "metadata",
-        JSON_TYPE,
-        nullable=False,
-        default=dict,
-        server_default="{}",
-    )
-    error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

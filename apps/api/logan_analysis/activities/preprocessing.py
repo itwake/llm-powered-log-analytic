@@ -20,9 +20,8 @@ def preprocess_entries(
     case_id: str,
     analysis_run_id: str,
     entries: list[LogEntry],
-    redaction_mode: str = "mask",
 ) -> list[NormalizedLogLine]:
-    redactor = Redactor(mode=redaction_mode)
+    redactor = Redactor()
     normalized: list[NormalizedLogLine] = []
     previous_timestamp: datetime | None = None
     for entry in entries:

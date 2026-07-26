@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import re
 from dataclasses import dataclass
 
@@ -35,14 +33,8 @@ class RedactionResult:
 
 
 class Redactor:
-    def __init__(self, *, mode: str = "mask", secret: str = "logan-local-redaction") -> None:
-        self.mode = mode
-        self.secret = secret.encode()
-
-    def _replacement(self, label: str, value: str | None = None) -> str:
-        if self.mode == "hash" and value:
-            digest = hmac.new(self.secret, value.encode(), hashlib.sha256).hexdigest()[:12]
-            return f"<{label}:{digest}>"
+    @staticmethod
+    def _replacement(label: str) -> str:
         return f"<{label}>"
 
     def redact(self, text: str) -> RedactionResult:
@@ -51,22 +43,21 @@ class Redactor:
         def count(label: str, n: int) -> None:
             replacements[label] = replacements.get(label, 0) + n
 
-        def sub(pattern: re.Pattern[str], label: str, value_group: int | None = None) -> None:
+        def sub(pattern: re.Pattern[str], label: str) -> None:
             nonlocal text
 
             def repl(match: re.Match[str]) -> str:
-                value = match.group(value_group or 0)
                 if label == "SECRET_ASSIGNMENT":
                     key = match.group(1)
-                    return f"{key}={self._replacement('SECRET', value)}"
-                return self._replacement(label, value)
+                    return f"{key}={self._replacement('SECRET')}"
+                return self._replacement(label)
 
             text, n = pattern.subn(repl, text)
             if n:
                 count(label, n)
 
         def url_repl(match: re.Match[str]) -> str:
-            return f"{match.group(1)}{self._replacement('SECRET', match.group(2))}"
+            return f"{match.group(1)}{self._replacement('SECRET')}"
 
         text, n = URL_SECRET_RE.subn(url_repl, text)
         if n:
@@ -74,8 +65,8 @@ class Redactor:
 
         sub(JWT_RE, "JWT")
         sub(BEARER_RE, "TOKEN")
-        sub(ASSIGNMENT_SECRET_RE, "SECRET_ASSIGNMENT", 2)
-        sub(TENANT_RE, "TENANT_ID", 1)
+        sub(ASSIGNMENT_SECRET_RE, "SECRET_ASSIGNMENT")
+        sub(TENANT_RE, "TENANT_ID")
         sub(EMAIL_RE, "EMAIL")
         sub(IPV6_RE, "IP")
         sub(IPV4_RE, "IP")
@@ -84,5 +75,5 @@ class Redactor:
         return RedactionResult(text=text, replacements=replacements)
 
 
-def redact_text(text: str, *, mode: str = "mask", secret: str = "logan-local-redaction") -> str:
-    return Redactor(mode=mode, secret=secret).redact(text).text
+def redact_text(text: str) -> str:
+    return Redactor().redact(text).text

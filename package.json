@@ -6,7 +6,6 @@
   ],
   "scripts": {
     "build": "npm run build --workspace @logan/web",
-    "test": "npm run test --workspace @logan/web",
-    "lint": "npm run lint --workspace @logan/web"
+    "typecheck": "npm run typecheck --workspace @logan/web"
   }
 }

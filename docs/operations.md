@@ -1,27 +1,24 @@
 # Operations
 
-## Health and metrics
+## Health
 
-`GET /healthz` verifies that the API process is running. Prometheus metrics are served at
-`GET /metrics` when `LOGAN_METRICS_ENABLED=true`.
+`GET /healthz` verifies that the API process is running.
 
 ## Data
 
 The default SQLite database is `.logan/logan.db`. Uploaded files are under
-`.logan/object-store`. Back up both locations together. PostgreSQL deployments should back up the
-database and the configured local upload directory on the same schedule.
+`.logan/object-store`. Back up both locations together.
 
 ## Deployment
 
 Production configuration requires:
 
 - a secret key containing at least 32 characters
-- SSO enabled with authorize URL, token URL, and client id
-- TLS verification enabled for SSO and AI Platform
+- SSO authorize URL, token URL, and client id
+- TLS verification enabled for SSO and, when configured, AI Platform
 - a persistent database and upload directory
 
-Run `python scripts/run_migrations.py` before starting a new deployment. Start the API with one
-process per instance; in-process background tasks are not shared across API instances.
+Start one API process per instance because analysis runs use in-process background tasks.
 
 ## Logs
 

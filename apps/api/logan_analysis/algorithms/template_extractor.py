@@ -3,29 +3,15 @@ from __future__ import annotations
 import hashlib
 import re
 import uuid
-from dataclasses import dataclass
 from typing import Any
 
 from logan_analysis.models import LogTemplate, NormalizedLogLine
 
 
-@dataclass(frozen=True)
-class DrainConfig:
-    config_hash: str = "default"
-
-    @classmethod
-    def from_mapping(
-        cls, value: dict[str, Any] | None, *, config_hash: str = "default"
-    ) -> "DrainConfig":
-        if not value:
-            return cls(config_hash=config_hash)
-        return cls(config_hash=str(value.get("config_hash", config_hash)))
-
-
 def _template_key(
-    *, analysis_run_id: str, template_text: str, parser_version: str, config_hash: str
+    *, analysis_run_id: str, template_text: str, parser_version: str
 ) -> str:
-    raw = f"{analysis_run_id}:{template_text}:{parser_version}:{config_hash}"
+    raw = f"{analysis_run_id}:{template_text}:{parser_version}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -33,10 +19,8 @@ def _template_sort_key(item: LogTemplate) -> tuple[bool, Any, str]:
     return (item.first_seen is None, item.first_seen, item.template_text)
 
 
-class StableDrainAdapter:
-    """Deterministic Drain-style template clustering."""
-
-    parser_version = "stable_drain_adapter_v1"
+class TemplateExtractor:
+    parser_version = "template_extractor_v1"
 
     UUID_RE = re.compile(
         r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
@@ -58,9 +42,6 @@ class StableDrainAdapter:
     )
     PATHISH_RE = re.compile(r"\b/[A-Za-z0-9_./-]{3,}\b")
 
-    def __init__(self, *, config_hash: str = "default") -> None:
-        self.config_hash = config_hash
-
     def to_template(self, normalized_message: str) -> str:
         text = normalized_message
         text = self.TIMESTAMP_RE.sub("<*>", text)
@@ -78,7 +59,6 @@ class StableDrainAdapter:
             analysis_run_id=analysis_run_id,
             template_text=template_text,
             parser_version=self.parser_version,
-            config_hash=self.config_hash,
         )
 
     def cluster(
@@ -119,19 +99,8 @@ class StableDrainAdapter:
                         "parser": "stable",
                         "distinct_messages": len({line.redacted_message for line in group}),
                     },
-                    drain_cluster_id=key[:16],
+                    cluster_id=key[:16],
                 )
             )
         templates.sort(key=_template_sort_key)
         return logs, templates
-
-
-def build_drain_adapter(
-    *, config_hash: str = "default", config: dict[str, Any] | DrainConfig | None = None
-) -> StableDrainAdapter:
-    drain_config = (
-        config
-        if isinstance(config, DrainConfig)
-        else DrainConfig.from_mapping(config, config_hash=config_hash)
-    )
-    return StableDrainAdapter(config_hash=drain_config.config_hash)

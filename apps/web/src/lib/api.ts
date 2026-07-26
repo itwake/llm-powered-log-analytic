@@ -153,7 +153,6 @@ export interface UploadContentResponse {
 
 export interface AnalysisRunRequest {
   input_file_ids: string[];
-  config?: Record<string, unknown>;
 }
 
 export interface AnalysisRunResponse {
@@ -171,25 +170,6 @@ export interface AnalysisRunResponse {
 
 export interface AnalysisRunListResponse {
   items: AnalysisRunResponse[];
-  total: number;
-}
-
-export interface JobEventResponse {
-  id: string;
-  case_id: string;
-  analysis_run_id: string;
-  step_name: string;
-  event_type: string;
-  status: string;
-  attempt: number;
-  idempotency_key: string;
-  metadata: Record<string, unknown>;
-  error_message: string | null;
-  created_at: string;
-}
-
-export interface JobEventListResponse {
-  items: JobEventResponse[];
   total: number;
 }
 

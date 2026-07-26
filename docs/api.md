@@ -25,7 +25,6 @@ The API is served under `/api`. Interactive OpenAPI documentation is available a
 - `GET /api/cases/{case_id}/analysis-runs`
 - `GET /api/cases/{case_id}/analysis-runs/{run_id}`
 - `POST /api/cases/{case_id}/analysis-runs/{run_id}/cancel`
-- `GET /api/cases/{case_id}/analysis-runs/{run_id}/events`
 
 Starting a run requires at least one completed `input_file_id`. The API returns the queued run and
 continues analysis in the background.
@@ -42,6 +41,5 @@ continues analysis in the background.
 
 - `POST /api/chat/stream`
 - `GET /healthz`
-- `GET /metrics` when metrics are enabled
 
 Chat requires `LOGAN_LLM_PROVIDER=ai_platform`, a completed analysis run, and access to its case.

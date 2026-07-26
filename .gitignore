@@ -3,7 +3,6 @@
 .venv/
 __pycache__/
 .pytest_cache/
-.mypy_cache/
 .ruff_cache/
 *.pyc
 *.pyo
@@ -11,13 +10,6 @@ __pycache__/
 node_modules/
 .next/
 *.tsbuildinfo
-dist/
-coverage/
-playwright-report/
-test-results/
 tmp/
-artifacts/
 *.log
-!.gitkeep
 !tests/fixtures/logs/**/*.log
-!demo/logs/*.log

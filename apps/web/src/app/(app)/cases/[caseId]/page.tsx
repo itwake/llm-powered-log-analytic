@@ -13,12 +13,10 @@ import Typography from "@mui/material/Typography";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "@/components/Link";
-import { ANALYSIS_CONFIG } from "@/lib/analysisConfig";
 import {
   AnalysisRunResponse,
   CaseResponse,
   EvidenceRef,
-  JobEventResponse,
   UploadProgressEvent,
   casesApi,
   runsApi,
@@ -112,7 +110,6 @@ export default function CaseWorkspacePage() {
   const router = useRouter();
   const [caseRecord, setCaseRecord] = useState<CaseResponse | null>(null);
   const [runs, setRuns] = useState<AnalysisRunResponse[]>([]);
-  const [runEvents, setRunEvents] = useState<Record<string, JobEventResponse[]>>({});
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
@@ -164,12 +161,8 @@ export default function CaseWorkspacePage() {
   }
 
   async function refreshRunProgress(runId: string) {
-    const [run, events] = await Promise.all([
-      runsApi.get(caseId, runId),
-      runsApi.events(caseId, runId),
-    ]);
+    const run = await runsApi.get(caseId, runId);
     upsertRun(run);
-    setRunEvents((current) => ({ ...current, [runId]: events.items }));
     return run;
   }
 
@@ -219,28 +212,18 @@ export default function CaseWorkspacePage() {
     if (!trackedRun) {
       return;
     }
-    let cancelled = false;
     const runId = trackedRun.analysis_run_id;
-    async function refresh() {
-      try {
-        await refreshRunProgress(runId);
-      } catch {
-        if (!cancelled) {
-          setRunEvents((current) => ({ ...current, [runId]: current[runId] || [] }));
-        }
-      }
+    function refresh() {
+      void refreshRunProgress(runId).catch(() => undefined);
     }
-    void refresh();
+    refresh();
     if (terminalRunStatus(trackedRun.status)) {
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
     const timer = window.setInterval(() => {
-      void refresh();
+      refresh();
     }, 2000);
     return () => {
-      cancelled = true;
       window.clearInterval(timer);
     };
   }, [caseId, trackedRun?.analysis_run_id, trackedRun?.status]);
@@ -264,7 +247,6 @@ export default function CaseWorkspacePage() {
       });
       const run = await runsApi.start(caseId, {
         input_file_ids: uploaded.map((file) => file.file_id),
-        config: ANALYSIS_CONFIG,
       });
       setActiveRunId(run.analysis_run_id);
       await refreshRunProgress(run.analysis_run_id);
@@ -333,8 +315,6 @@ export default function CaseWorkspacePage() {
       setCancellingRunId(null);
     }
   }
-
-  const trackedEvents = trackedRun ? runEvents[trackedRun.analysis_run_id] || [] : [];
 
   return (
     <Stack spacing={2.5}>
@@ -522,7 +502,6 @@ export default function CaseWorkspacePage() {
                 cancelling={trackedRun?.analysis_run_id === cancellingRunId}
                 caseId={caseId}
                 caseRecord={caseRecord}
-                events={trackedEvents}
                 run={trackedRun}
                 selectedEvidence={selectedEvidence}
                 onCancel={(run) => void cancelRun(run)}

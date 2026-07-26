@@ -62,7 +62,6 @@ class UploadContentResponse(BaseModel):
 
 class AnalysisRunRequest(BaseModel):
     input_file_ids: list[str] = Field(min_length=1)
-    config: dict[str, Any] = Field(default_factory=dict)
 
 
 class AnalysisRunResponse(BaseModel):
@@ -80,23 +79,4 @@ class AnalysisRunResponse(BaseModel):
 
 class AnalysisRunListResponse(BaseModel):
     items: list[AnalysisRunResponse]
-    total: int
-
-
-class JobEventResponse(BaseModel):
-    id: str
-    case_id: str
-    analysis_run_id: str
-    step_name: str
-    event_type: str
-    status: str
-    attempt: int
-    idempotency_key: str
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    error_message: str | None = None
-    created_at: datetime
-
-
-class JobEventListResponse(BaseModel):
-    items: list[JobEventResponse]
     total: int

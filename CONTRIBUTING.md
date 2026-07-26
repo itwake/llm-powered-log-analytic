@@ -8,7 +8,7 @@ Before opening a pull request, run:
 ```bash
 python -m ruff check apps tests scripts
 python -m pytest -q
-npm run lint
+npm run typecheck
 npm run build
 ```
 

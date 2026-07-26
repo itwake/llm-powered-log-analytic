@@ -10,7 +10,6 @@ import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { casesApi, runsApi, type UploadProgressEvent } from "@/lib/api";
-import { ANALYSIS_CONFIG } from "@/lib/analysisConfig";
 import { apiErrorMessage } from "@/lib/format";
 import { FileUploadDropzone } from "@/components/FileUploadDropzone";
 import { Button, Card, SectionHeader } from "@/components/ui";
@@ -108,7 +107,6 @@ export default function NewCasePage() {
         setSubmitStatus("Starting analysis");
         await runsApi.start(created.case_id, {
           input_file_ids: uploaded.map((file) => file.file_id),
-          config: ANALYSIS_CONFIG,
         });
         router.push(`/cases/${created.case_id}`);
         return;

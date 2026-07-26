@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-from typing import Any
-
-from logan_analysis.algorithms.drain_adapter import build_drain_adapter
+from logan_analysis.algorithms.template_extractor import TemplateExtractor
 from logan_analysis.models import LogTemplate, NormalizedLogLine
 
 
-def run_drain_templating(
+def extract_templates(
     *,
     case_id: str,
     analysis_run_id: str,
     logs: list[NormalizedLogLine],
-    config_hash: str = "default",
-    config: dict[str, Any] | None = None,
 ) -> tuple[list[NormalizedLogLine], list[LogTemplate]]:
-    adapter = build_drain_adapter(config_hash=config_hash, config=config)
-    return adapter.cluster(case_id=case_id, analysis_run_id=analysis_run_id, logs=logs)
+    return TemplateExtractor().cluster(
+        case_id=case_id,
+        analysis_run_id=analysis_run_id,
+        logs=logs,
+    )
