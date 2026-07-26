@@ -19,6 +19,7 @@ Production configuration requires:
 - a persistent database and upload directory
 
 Start one API process per instance because analysis runs use in-process background tasks.
+See [Getting started](getting-started.md) for local and Docker startup instructions.
 
 ## Logs
 

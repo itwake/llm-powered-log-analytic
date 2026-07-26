@@ -15,3 +15,5 @@ Key modules:
 - `app/sqlalchemy_store.py`: application persistence
 - `app/services`: SSO, AI Platform, and local file storage
 - `logan_analysis`: analysis models and pipeline
+
+See [Analysis pipeline](../../docs/analysis-pipeline.md) for the ordered steps and LLM modes.

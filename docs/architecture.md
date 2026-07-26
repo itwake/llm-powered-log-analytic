@@ -5,6 +5,8 @@ LogAn has two deployable applications:
 - `apps/api`: FastAPI routes, SQL persistence, local file storage, and the analysis package.
 - `apps/web`: the Next.js user interface.
 
+See [Analysis pipeline](analysis-pipeline.md) for the processing and persistence contract.
+
 The API owns background analysis tasks. A run follows one ordered pipeline:
 
 1. ingest uploaded files

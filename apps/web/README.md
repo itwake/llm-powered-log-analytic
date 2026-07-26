@@ -19,3 +19,5 @@ Routes:
 - `/cases/{case_id}/runs/{run_id}/causal-summary`
 
 Set `NEXT_PUBLIC_API_BASE_URL` when the API is not available at `http://localhost:8000`.
+
+See the repository [user guide](../../docs/user-guide.md) for the case and report workflow.

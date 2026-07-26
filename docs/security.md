@@ -23,3 +23,6 @@ For production:
 - restrict CORS to the deployed web origin
 - restrict access to the database and local upload directory
 - keep `.env` out of source control
+
+See [Reliability and explainability](reliability-and-explainability.md) for model boundaries,
+evidence validation, and current operational limits.

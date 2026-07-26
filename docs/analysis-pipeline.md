@@ -1,0 +1,178 @@
+# Analysis pipeline
+
+LogAn executes one ordered analysis pipeline inside the API process. A run accepts completed
+upload identifiers, resolves them to local files, records progress after every step, and stores
+one final `AnalysisResult`.
+
+## Run lifecycle
+
+A case moves through these states:
+
+```text
+created -> uploading -> analyzing -> completed
+                                  \-> failed
+                                  \-> cancelled
+```
+
+An analysis run moves through:
+
+```text
+queued -> processing -> completed
+                    \-> failed
+                    \-> cancelled
+```
+
+Starting a run creates an asynchronous task in the API process. Cancelling the run cancels that
+task and records the terminal state. A graceful API shutdown also cancels active tasks.
+
+## Inputs
+
+Supported file types are:
+
+- `.log`
+- `.txt`
+- `.json`
+- `.jsonl`
+- `.zip`
+- `.gz`
+- `.tar`
+- `.tgz` and `.tar.gz`
+
+Each uploaded file and its expanded archive content are limited to 100 MiB. Archive members are
+read as log inputs; files are not extracted into user-controlled filesystem paths.
+
+## Processing steps
+
+### 1. Ingest paths — `ingest_paths`
+
+`ingest_paths` reads plain files and archives. Every physical line receives a file id, file path,
+line number, SHA-256 hash, and ingestion order. These fields establish the evidence identity used
+by later steps.
+
+### 2. Merge entries — `merge_entries`
+
+`merge_entries` joins recognized stack-trace and exception continuation lines into one logical
+entry. The entry retains all original line numbers and raw-line identifiers. Ordinary lines
+without a timestamp are kept separate unless they match a continuation pattern.
+
+### 3. Parse and redact — `preprocess_redact`
+
+`preprocess_redact` parses timestamps, log levels, services, and common structured fields. An
+entry without a timestamp may inherit the previous timestamp.
+
+Before template generation or model input, the redactor masks:
+
+- URL query secrets
+- JWTs and bearer tokens
+- password, secret, token, and API-key assignments
+- tenant and customer identifiers
+- email addresses
+- IPv4 and IPv6 addresses
+- UUIDs
+- card-like numbers
+
+The normalized line stores the redacted message used by reports and downstream analysis.
+
+### 4. Extract templates — `template_extraction`
+
+`TemplateExtractor` replaces timestamps, identifiers, key-value values, numbers, and path-like
+values with `<*>`. Lines with the same resulting message shape are grouped into one template.
+Each line receives a template id, while the template records its occurrence count, time range,
+services, files, and a representative log id.
+
+### 5. Select representative samples — `representative_sampling`
+
+The pipeline selects up to three redacted samples per template. Samples retain evidence
+references and provide bounded input for template annotation.
+
+### 6. Annotate templates — `ai_platform_annotation`
+
+With `LOGAN_LLM_PROVIDER=ai_platform`, at most 64 templates are sent to AI Platform. Each sample
+message is limited to 1,200 characters. The validated response supplies:
+
+- one golden signal
+- fault categories
+- structured entities
+- severity and confidence
+- a short rationale
+
+With `LOGAN_LLM_PROVIDER=none`, this step is marked `skipped`; the pipeline does not create
+synthetic annotations.
+
+### 7. Broadcast annotations — `broadcast_annotations`
+
+`broadcast_annotations` copies each template annotation to all normalized lines in that template.
+Without an annotation, the line remains `unknown` with no model-derived categories or entities.
+
+### 8. Aggregate time windows — `temporal_aggregation`
+
+`build_time_window_aggregates` counts timestamped lines by template, service, golden signal, and
+fault category. The default window is selected from the incident duration:
+
+| Duration | Window |
+| --- | --- |
+| Up to 30 minutes | 10 seconds |
+| Up to 3 hours | 60 seconds |
+| Up to 24 hours | 5 minutes |
+| Longer | 15 minutes |
+
+### 9. Build causal candidates — `causal_graph`
+
+Only templates labeled with an offending signal participate:
+
+```text
+error, availability, latency, saturation, traffic
+```
+
+The algorithm proposes directed `temporal_association` edges using event order, target support,
+lag, shared service or entity context, and source severity. It ranks early templates with
+supported downstream associations as root-cause candidates.
+
+Every edge is a candidate with `needs_validation=true`. The score is an investigation aid, not
+proof of causation.
+
+### 10. Render the causal summary — `causal_summary`
+
+The summary receives a bounded, redacted evidence packet containing selected log lines, supported
+edges, candidates, and case context.
+
+In AI Platform mode, model output must satisfy the summary schema and cite evidence ids from the
+packet. Invalid output falls back to a structured, cautious summary. In `none` mode, the structured
+summary is used directly.
+
+## LLM modes
+
+| Capability | `none` | `ai_platform` |
+| --- | --- | --- |
+| Ingestion, parsing, redaction, templates | Yes | Yes |
+| Representative samples | Yes | Yes |
+| Template classification | Skipped | Yes |
+| Temporal aggregation | Yes | Yes |
+| Causal candidate scoring | Runs on available offending labels | Runs on model annotations |
+| Causal summary | Structured evidence summary | Generated text with structured fallback |
+| Analysis chat | No | Yes, after a completed AI-enabled run |
+
+Because `none` does not invent template classifications, attention-only summaries and causal
+graphs can be empty. Use the `all` scope in Data Summary to review extracted templates.
+
+## Persistence and reports
+
+Progress is stored on the analysis-run row while the task runs. On completion, the full
+`AnalysisResult` is serialized once in `analysis_runs.result_json`.
+
+Data Summary, Temporal View, Tabular Logs, Causal Graph, Causal Summary, and analysis chat all read
+that same validated result. There is no second analytical schema to reconcile.
+
+## Traceability
+
+An `EvidenceRef` carries:
+
+- case id
+- analysis run id
+- template id when available
+- log id
+- file path
+- line number
+- timestamp when available
+
+Report evidence links use these fields to return to the corresponding redacted log row.

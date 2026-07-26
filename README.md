@@ -70,7 +70,12 @@ python scripts/export_openapi.py --out docs/openapi.snapshot.json
 
 ## Documentation
 
+- [Getting started](docs/getting-started.md)
+- [User guide](docs/user-guide.md)
 - [Architecture](docs/architecture.md)
+- [Analysis pipeline](docs/analysis-pipeline.md)
+- [Reliability and explainability](docs/reliability-and-explainability.md)
+- [Glossary](docs/glossary.md)
 - [API](docs/api.md)
 - [Data model](docs/data-model.md)
 - [Operations](docs/operations.md)
