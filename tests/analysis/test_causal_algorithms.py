@@ -2,102 +2,69 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from logan_analysis.algorithms.causal_granger import (
-    benjamini_hochberg,
-    score_granger_pair,
-    score_granger_pairs,
-)
-from logan_analysis.algorithms.causal_pgem import score_pgem_transition
-from logan_analysis.algorithms.causal_series import build_count_series
+from logan_analysis.activities.causal import infer_causal_graph
+from logan_analysis.models import LogTemplate, NormalizedLogLine
 
 
-def test_pgem_scores_source_preceding_target_direction_more_strongly() -> None:
-    base = datetime(2026, 6, 6, 10, 0, tzinfo=UTC)
-    source_times = [base + timedelta(minutes=index * 4) for index in range(8)]
-    target_times = [timestamp + timedelta(seconds=45) for timestamp in source_times]
-
-    forward = score_pgem_transition(
-        source_times,
-        target_times,
-        max_lag_seconds=90,
-    )
-    reverse = score_pgem_transition(
-        target_times,
-        source_times,
-        max_lag_seconds=90,
-    )
-
-    assert forward["supported"] is True
-    assert forward["support"] == len(source_times)
-    assert forward["target_coverage"] == 1.0
-    assert forward["median_lag_seconds"] == 45
-    assert reverse["supported"] is False
-    assert forward["score"] > reverse["score"]
-
-
-def test_granger_scores_source_preceding_target_direction_more_strongly() -> None:
-    base = datetime(2026, 6, 6, 10, 0, tzinfo=UTC)
-    source_offsets = [0, 2, 7, 13, 21, 30, 34, 47]
-    source_times = [base + timedelta(minutes=offset) for offset in source_offsets]
-    target_times = [timestamp + timedelta(minutes=1) for timestamp in source_times]
-    series = build_count_series(
-        {"A": source_times, "B": target_times},
-        template_ids=["A", "B"],
-        time_bin_seconds=60,
+def _line(template_id: str, minute: int, service: str) -> NormalizedLogLine:
+    return NormalizedLogLine(
+        log_id=f"log-{template_id}-{minute}",
+        raw_log_id=f"raw-{template_id}-{minute}",
+        case_id="case-1",
+        analysis_run_id="run-1",
+        file_id="file-1",
+        file_path="incident.log",
+        line_number=minute + 1,
+        line_numbers=[minute + 1],
+        timestamp=datetime(2026, 1, 1, tzinfo=UTC) + timedelta(minutes=minute),
+        level="ERROR",
+        service=service,
+        message="error",
+        normalized_message="error",
+        redacted_message="error",
+        template_id=template_id,
+        template_text=f"{service} error",
+        golden_signal="error",
+        severity_score=0.8,
+        confidence=0.9,
     )
 
-    results = score_granger_pairs(
-        series.series_by_template,
-        ["A", "B"],
-        time_bin_seconds=60,
-        max_lag_bins=1,
-    )
-    forward = results[("A", "B")]
-    reverse = results[("B", "A")]
 
-    assert forward["supported"] is True
-    assert forward["lag_bins"] == 1
-    assert forward["lag_seconds"] == 60
-    assert forward["p_value"] is not None
-    assert forward["p_value_adj"] is not None
-    assert forward["score"] > reverse["score"]
-    assert reverse["supported"] is False
-
-
-def test_sparse_and_constant_inputs_are_unsupported_not_errors() -> None:
-    base = datetime(2026, 6, 6, 10, 0, tzinfo=UTC)
-
-    pgem = score_pgem_transition(
-        [base],
-        [base + timedelta(seconds=30)],
-        max_lag_seconds=60,
-    )
-    granger = score_granger_pair(
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        time_bin_seconds=60,
-        max_lag_bins=1,
+def test_temporal_association_scores_earlier_signal() -> None:
+    templates = [
+        LogTemplate(
+            template_id="source",
+            template_key="source",
+            template_text="database pool exhausted",
+            normalized_template_text="database pool exhausted",
+            occurrence_count=2,
+        ),
+        LogTemplate(
+            template_id="target",
+            template_key="target",
+            template_text="gateway request failed",
+            normalized_template_text="gateway request failed",
+            occurrence_count=2,
+        ),
+    ]
+    graph = infer_causal_graph(
+        case_id="case-1",
+        analysis_run_id="run-1",
+        templates=templates,
+        logs=[
+            _line("source", 0, "payments"),
+            _line("source", 1, "payments"),
+            _line("target", 2, "gateway"),
+            _line("target", 3, "gateway"),
+        ],
+        max_lag_seconds=300,
     )
 
-    assert pgem["supported"] is False
-    assert pgem["reason"] == "too_few_events"
-    assert granger["supported"] is False
-    assert granger["reason"] in {"too_few_events", "constant_series"}
-
-
-def test_benjamini_hochberg_adjustment_is_deterministic_and_monotonic() -> None:
-    p_values = {
-        ("A", "B"): 0.01,
-        ("A", "C"): 0.04,
-        ("B", "C"): 0.03,
-        ("C", "A"): 0.20,
-    }
-
-    first = benjamini_hochberg(p_values)
-    second = benjamini_hochberg(dict(reversed(list(p_values.items()))))
-
-    assert first == second
-    ordered_pairs = sorted(p_values, key=p_values.get)
-    adjusted_in_p_order = [first[pair] for pair in ordered_pairs]
-    assert adjusted_in_p_order == sorted(adjusted_in_p_order)
-    assert all(first[pair] >= p_values[pair] for pair in p_values)
+    assert len(graph.nodes) == 2
+    assert len(graph.edges) == 1
+    edge = graph.edges[0]
+    assert edge.source_template_id == "source"
+    assert edge.target_template_id == "target"
+    assert edge.method == "temporal_association"
+    assert edge.support_windows == 2
+    assert graph.root_cause_candidates[0].template_id == "source"

@@ -37,16 +37,10 @@ jobs:
         run: npm ci
       - name: Build web
         run: npm run build --workspace @logan/web
-      - name: Typecheck web
-        run: npm run test --workspace @logan/web
-      - name: Build production web image
-        run: docker build -f infra/docker/web.Dockerfile -t logan-web-ci .
 
-  runtime:
+  compose:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Validate Compose
         run: docker compose config -q
-      - name: Build runtime images
-        run: docker compose build

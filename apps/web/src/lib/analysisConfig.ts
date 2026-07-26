@@ -1,4 +1,4 @@
-export const BACKGROUND_ANALYSIS_CONFIG = {
+export const ANALYSIS_CONFIG = {
   default_window_size_seconds: 60,
   inference: {
     max_annotation_templates: 64,

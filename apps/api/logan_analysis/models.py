@@ -163,7 +163,6 @@ class CausalNode(BaseModel):
     first_seen: datetime | None = None
     last_seen: datetime | None = None
     rank_score: float = 0.0
-    pagerank_score: float = 0.0
     confidence: float = 0.0
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
 
@@ -175,14 +174,10 @@ class CausalEdge(BaseModel):
     source_template_id: str
     target_template_id: str
     edge_type: str = "candidate_cause"
-    method: str
+    method: Literal["temporal_association"] = "temporal_association"
     lag_seconds: int | None = None
     support_windows: int = 0
     confidence: float = 0.0
-    p_value_adj: float | None = None
-    lift: float | None = None
-    temporal_precedence_score: float | None = None
-    correlation_score: float | None = None
     evidence: dict[str, Any] = Field(default_factory=dict)
     needs_validation: bool = True
 
@@ -209,14 +204,6 @@ class CausalSummary(BaseModel):
     uncertainties: list[str] = Field(default_factory=list)
     details: dict[str, Any] = Field(default_factory=dict)
     confidence: float
-    edited: bool = False
-
-
-class ExportArtifact(BaseModel):
-    export_id: str
-    export_type: Literal["markdown", "html", "json"]
-    content: str
-    object_uri: str
 
 
 class AnalysisResult(BaseModel):
@@ -231,6 +218,4 @@ class AnalysisResult(BaseModel):
     temporal: list[WindowAggregate]
     causal_graph: CausalGraph
     causal_summary: CausalSummary
-    exports: dict[str, ExportArtifact]
-    model_inputs: list[dict[str, Any]] = Field(default_factory=list)
     progress: dict[str, Any] = Field(default_factory=dict)

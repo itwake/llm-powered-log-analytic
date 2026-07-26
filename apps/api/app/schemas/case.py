@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class CaseCreateRequest(BaseModel):
-    title: str
+    title: str = Field(min_length=1)
     issue_description: str | None = None
     product: str | None = None
     service: str | None = None
@@ -31,7 +31,7 @@ class CaseUpdateRequest(BaseModel):
 class CaseResponse(BaseModel):
     case_id: str
     case_key: str
-    title: str | None = None
+    title: str
     issue_description: str | None = None
     status: str
     product: str | None = None
@@ -42,31 +42,8 @@ class CaseResponse(BaseModel):
     timezone: str = "UTC"
 
 
-class CaseCollaboratorRequest(BaseModel):
-    user_id: str
-    role: str
-
-
-class CaseCollaboratorResponse(BaseModel):
-    id: str
-    case_id: str
-    user_id: str
-    role: str
-    added_by: str | None = None
-    email: str | None = None
-    username: str | None = None
-    full_name: str | None = None
-    created_at: datetime
-    updated_at: datetime
-
-
-class CaseCollaboratorListResponse(BaseModel):
-    items: list[CaseCollaboratorResponse]
-    total: int
-
-
 class UploadRequest(BaseModel):
-    filename: str
+    filename: str = Field(min_length=1)
     content_type: str | None = None
     size_bytes: int = Field(ge=0)
 
@@ -84,8 +61,7 @@ class UploadContentResponse(BaseModel):
 
 
 class AnalysisRunRequest(BaseModel):
-    input_file_ids: list[str] = Field(default_factory=list)
-    input_paths: list[str] = Field(default_factory=list)
+    input_file_ids: list[str] = Field(min_length=1)
     config: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -124,50 +100,3 @@ class JobEventResponse(BaseModel):
 class JobEventListResponse(BaseModel):
     items: list[JobEventResponse]
     total: int
-
-
-class AnalysisStepArtifactResponse(BaseModel):
-    id: str
-    case_id: str
-    analysis_run_id: str
-    step_name: str
-    artifact_type: str
-    object_uri: str
-    sha256: str
-    size_bytes: int
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime
-    updated_at: datetime
-
-
-class AnalysisStepArtifactListResponse(BaseModel):
-    items: list[AnalysisStepArtifactResponse]
-    total: int
-
-
-class ExportRequest(BaseModel):
-    export_type: str
-    include_sections: list[str] = Field(default_factory=list)
-    redaction_mode: str = "customer_safe"
-
-
-class CausalSummaryUpdateRequest(BaseModel):
-    summary_markdown: str = Field(min_length=1, max_length=12000)
-    customer_update_markdown: str | None = Field(default=None, max_length=12000)
-
-    @field_validator("summary_markdown")
-    @classmethod
-    def summary_must_not_be_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("summary_markdown must not be blank")
-        return value
-
-
-class FeedbackRequest(BaseModel):
-    analysis_run_id: str | None = None
-    target_type: str
-    target_id: str | None = None
-    feedback_type: str
-    rating: int | None = None
-    comment: str | None = None
-    corrected_value: dict[str, Any] | None = None

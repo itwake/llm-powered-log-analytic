@@ -14,7 +14,6 @@ PIPELINE_STEP_NAMES = frozenset(
         "temporal_aggregation",
         "causal_graph",
         "causal_summary",
-        "export_artifacts",
     }
 )
 

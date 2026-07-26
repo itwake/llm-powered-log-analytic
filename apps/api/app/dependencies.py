@@ -23,12 +23,6 @@ def current_user(request: Request) -> UserRecord:
     return user
 
 
-def require_admin(user: UserRecord) -> UserRecord:
-    if user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin role required")
-    return user
-
-
 def require_case_permission(
     *,
     store: MetadataStore,

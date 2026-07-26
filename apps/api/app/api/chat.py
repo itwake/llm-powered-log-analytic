@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.dependencies import current_user, get_model_gateway, get_store, require_case_permission
-from app.schemas.chat import ChatRequest, TaskExecuteRequest
+from app.schemas.chat import ChatRequest
 from app.services.model_gateway import ModelGatewayError
 from app.store import MetadataStore, UserRecord, sanitize_error_message
 
@@ -20,33 +20,6 @@ CHAT_INSTRUCTIONS = (
     "evidence-bound. Treat causal chains as candidates that need validation. Use only the "
     "provided redacted analysis context, call out uncertainty, and do not invent log details."
 )
-
-
-@router.post("/chat")
-def chat(
-    payload: ChatRequest,
-    user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
-) -> dict[str, object]:
-    if payload.case_id and payload.analysis_run_id:
-        require_case_permission(
-            store=store,
-            user=user,
-            case_id=payload.case_id,
-            permission="view",
-            hide_forbidden=True,
-        )
-        result = store.get_analysis_result(payload.case_id, payload.analysis_run_id)
-        if result:
-            refs = [ref.model_dump(mode="json") for ref in result.causal_summary.evidence_refs[:3]]
-            return {
-                "message": "The current analysis treats the leading chain as candidate evidence, not a definitive root cause. The ranking is based on temporal precedence, service/entity evidence, lift, and PageRank-style scoring, and it needs validation.",
-                "evidence_refs": refs,
-            }
-    return {
-        "message": CHAT_FALLBACK_MESSAGE,
-        "evidence_refs": [],
-    }
 
 
 @router.post("/chat/stream")
@@ -125,24 +98,6 @@ async def chat_stream(
             yield _sse_frame("error", {"message": sanitize_error_message(exc)})
 
     return StreamingResponse(events(), media_type="text/event-stream")
-
-
-@router.post("/tasks/execute")
-def execute_task(
-    payload: TaskExecuteRequest,
-    user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
-) -> dict[str, object]:
-    provider = store.settings.normalized_llm_provider
-    if provider == "none":
-        raise HTTPException(status_code=409, detail="LLM is disabled")
-    return {
-        "task_id": f"task-{payload.task_name}",
-        "status": "accepted",
-        "runtime_type": provider,
-        "created_by": user.id,
-        "arguments": payload.arguments,
-    }
 
 
 def _sse_frame(event: str, data: dict[str, Any]) -> str:

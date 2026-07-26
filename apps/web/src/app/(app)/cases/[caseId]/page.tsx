@@ -13,7 +13,7 @@ import Typography from "@mui/material/Typography";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "@/components/Link";
-import { BACKGROUND_ANALYSIS_CONFIG } from "@/lib/analysisConfig";
+import { ANALYSIS_CONFIG } from "@/lib/analysisConfig";
 import {
   AnalysisRunResponse,
   CaseResponse,
@@ -118,7 +118,7 @@ export default function CaseWorkspacePage() {
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [selectedEvidence, setSelectedEvidence] = useState<EvidenceRef | null>(null);
   const [loading, setLoading] = useState(true);
-  const [starting, setStarting] = useState<"files" | "sample" | null>(null);
+  const [starting, setStarting] = useState<"files" | null>(null);
   const [editingCase, setEditingCase] = useState(false);
   const [savingCase, setSavingCase] = useState(false);
   const [deletingCase, setDeletingCase] = useState(false);
@@ -264,8 +264,8 @@ export default function CaseWorkspacePage() {
       });
       const run = await runsApi.start(caseId, {
         input_file_ids: uploaded.map((file) => file.file_id),
-        config: BACKGROUND_ANALYSIS_CONFIG,
-      }, { background: true });
+        config: ANALYSIS_CONFIG,
+      });
       setActiveRunId(run.analysis_run_id);
       await refreshRunProgress(run.analysis_run_id);
     } catch (caught) {
@@ -274,23 +274,6 @@ export default function CaseWorkspacePage() {
           item.status === "completed" ? item : { ...item, status: "failed", message: apiErrorMessage(caught) },
         ),
       );
-      setError(apiErrorMessage(caught));
-    } finally {
-      setStarting(null);
-    }
-  }
-
-  async function startSampleAnalysis() {
-    setStarting("sample");
-    setError(null);
-    try {
-      const run = await runsApi.start(caseId, {
-        input_paths: [],
-        config: BACKGROUND_ANALYSIS_CONFIG,
-      }, { background: true });
-      setActiveRunId(run.analysis_run_id);
-      await refreshRunProgress(run.analysis_run_id);
-    } catch (caught) {
       setError(apiErrorMessage(caught));
     } finally {
       setStarting(null);
@@ -525,13 +508,9 @@ export default function CaseWorkspacePage() {
                   <Button disabled={starting !== null || selectedFiles.length === 0} onClick={startUploadedAnalysis}>
                     {starting === "files" ? "Uploading" : "Upload and analyze files"}
                   </Button>
-                  <Button disabled={starting !== null} variant="secondary" onClick={startSampleAnalysis}>
-                    {starting === "sample" ? "Starting" : "Start sample/local analysis"}
-                  </Button>
                 </Stack>
                 <Typography color="text.secondary">
-                  Uploaded files run through the local object store. The sample/local action uses the
-                  deterministic fixture set.
+                  Files stay in the configured local data directory and are analyzed in one background run.
                 </Typography>
               </Stack>
             </Card>

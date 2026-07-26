@@ -3,635 +3,89 @@
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { useTheme } from "@mui/material/styles";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
-import cytoscape from "cytoscape";
 import { useParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
-import {
-  CausalEdge,
-  CausalGraphResponse,
-  CausalNode,
-  EvidenceRef,
-  reportsApi,
-} from "@/lib/api";
-import { apiErrorMessage, formatDateTime, formatPercent } from "@/lib/format";
-import { cleanTemplateLabel, signalColor } from "@/lib/signals";
-import { Badge, Button, Card, ColorBadge, EmptyState } from "@/components/ui";
-
-const MAX_RENDERED_EDGES = 20;
-
-function nodeLabel(nodes: CausalNode[], nodeId: string): string {
-  const node = nodes.find((candidate) => candidate.id === nodeId);
-  return node ? cleanTemplateLabel(node.label, 80) : nodeId;
-}
-
-function methodParts(method: string): string[] {
-  return method.split("+").map((part) => part.replaceAll("_", " ").trim()).filter(Boolean);
-}
-
-function evidenceRefLabel(ref: EvidenceRef): string {
-  const timestamp = ref.timestamp ? ` at ${formatDateTime(ref.timestamp)}` : "";
-  return `${ref.file_path}:${ref.line_number}${timestamp}`;
-}
-
-function evidenceSummary(evidence: Record<string, unknown>): string {
-  const entries = Object.entries(evidence).slice(0, 5);
-  if (entries.length === 0) {
-    return "No edge evidence";
-  }
-  return entries
-    .map(([key, value]) => {
-      const rendered = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
-      return `${key}: ${rendered}`;
-    })
-    .join("\n");
-}
-
-type GraphElement = cytoscape.NodeSingular | cytoscape.EdgeSingular;
-
-function nearestElement(cy: cytoscape.Core, point: cytoscape.Position): GraphElement | null {
-  let nearest: GraphElement | null = null;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-  cy.nodes().forEach((node) => {
-    const position = node.renderedPosition();
-    const distance = Math.hypot(position.x - point.x, position.y - point.y);
-    if (distance < nearestDistance) {
-      nearest = node;
-      nearestDistance = distance;
-    }
-  });
-  cy.edges().forEach((edge) => {
-    const position = edge.renderedMidpoint();
-    const distance = Math.hypot(position.x - point.x, position.y - point.y);
-    if (distance < nearestDistance) {
-      nearest = edge;
-      nearestDistance = distance;
-    }
-  });
-  return nearest;
-}
-
-type GraphSelection =
-  | { kind: "node"; id: string }
-  | { kind: "edge"; id: string }
-  | null;
-
-function DetailList({ children }: { children: ReactNode }) {
-  return (
-    <Box
-      component="dl"
-      sx={{
-        display: "grid",
-        gap: 1,
-        gridTemplateColumns: "130px minmax(0, 1fr)",
-        m: 0,
-        "& dt": { color: "text.secondary" },
-        "& dd": { m: 0, overflowWrap: "anywhere" },
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
+import { useEffect, useState } from "react";
+import { Badge, Card, EmptyState } from "@/components/ui";
+import { reportsApi } from "@/lib/api";
+import type { CausalGraphResponse } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/format";
 
 export default function CausalGraphPage() {
   const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
-  const theme = useTheme();
-  const graphElement = useRef<HTMLDivElement | null>(null);
-  const cyRef = useRef<cytoscape.Core | null>(null);
   const [data, setData] = useState<CausalGraphResponse | null>(null);
-  const [minConfidence, setMinConfidence] = useState(0);
-  const [selection, setSelection] = useState<GraphSelection>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(nextMinConfidence = minConfidence) {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await reportsApi.causalGraph(caseId, runId, {
-        max_nodes: 100,
-        min_confidence: nextMinConfidence,
-      });
-      setData(response);
-      setSelection(null);
-    } catch (caught) {
-      setError(apiErrorMessage(caught));
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    void load(0);
+    reportsApi.causalGraph(caseId, runId, { max_nodes: 100, min_confidence: 0.35 })
+      .then(setData)
+      .catch((caught) => setError(apiErrorMessage(caught)));
   }, [caseId, runId]);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void load();
-  }
-
-  const rootTemplateIds = useMemo(
-    () => new Set((data?.root_cause_candidates || []).map((candidate) => candidate.template_id)),
-    [data],
-  );
-
-  const renderedEdgeCount = useMemo(() => {
-    if (!data) {
-      return 0;
-    }
-    return Math.min(data.edges.length, MAX_RENDERED_EDGES);
-  }, [data]);
-
-  const graphElements = useMemo<cytoscape.ElementDefinition[]>(() => {
-    if (!data) {
-      return [];
-    }
-    const nodeIds = new Set(data.nodes.map((node) => node.id));
-    // Render only the strongest edges so the graph stays a readable story
-    // instead of a hairball; the full edge list lives in the table below.
-    const strongestEdges = data.edges
-      .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, MAX_RENDERED_EDGES);
-    return [
-      ...data.nodes.map((node) => ({
-        data: {
-          id: node.id,
-          label: cleanTemplateLabel(node.label, 44),
-          fullLabel: node.label,
-          signal: node.golden_signal,
-          confidence: node.confidence,
-          occurrenceCount: node.occurrence_count,
-          rankScore: node.rank_score,
-          color: signalColor(node.golden_signal),
-        },
-        classes: rootTemplateIds.has(node.template_id) ? "root-candidate" : "",
-      })),
-      ...strongestEdges.map((edge) => ({
-        data: {
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          confidenceLabel: formatPercent(edge.confidence),
-          method: edge.method,
-          confidence: edge.confidence,
-          needsValidation: edge.needs_validation,
-        },
-        classes: edge.needs_validation ? "needs-validation" : "",
-      })),
-    ];
-  }, [data, rootTemplateIds]);
-
-  const selectedNode = useMemo(
-    () => selection?.kind === "node" ? data?.nodes.find((node) => node.id === selection.id) || null : null,
-    [data, selection],
-  );
-  const selectedEdge = useMemo(
-    () => selection?.kind === "edge" ? data?.edges.find((edge) => edge.id === selection.id) || null : null,
-    [data, selection],
-  );
-
-  useEffect(() => {
-    if (loading || !data || data.nodes.length === 0) {
-      cyRef.current?.destroy();
-      cyRef.current = null;
-      return;
-    }
-
-    if (!graphElement.current) {
-      return;
-    }
-
-    cyRef.current?.destroy();
-    const cy = cytoscape({
-      container: graphElement.current,
-      elements: graphElements,
-      layout: {
-        name: "breadthfirst",
-        directed: true,
-        padding: 34,
-        spacingFactor: 1.2,
-        avoidOverlap: true,
-      },
-      maxZoom: 2.5,
-      minZoom: 0.35,
-      selectionType: "single",
-      style: [
-        {
-          selector: "node",
-          style: {
-            "background-color": "data(color)",
-            "background-opacity": (node: cytoscape.NodeSingular) => {
-              const confidence = Number(node.data("confidence"));
-              return Math.max(0.58, Math.min(1, confidence || 0));
-            },
-            "border-color": "#ffffff",
-            "border-width": "2px",
-            color: theme.palette.text.primary,
-            "font-size": "10px",
-            height: "mapData(rankScore, 0, 1, 36, 72)",
-            label: "data(label)",
-            "min-zoomed-font-size": "8px",
-            "overlay-padding": "5px",
-            "text-background-color": "#ffffff",
-            "text-background-opacity": 0.86,
-            "text-background-padding": "3px",
-            "text-margin-y": -8,
-            "text-max-width": "110px",
-            "text-valign": "top",
-            "text-wrap": "wrap",
-            width: "mapData(rankScore, 0, 1, 36, 72)",
-          },
-        },
-        {
-          selector: "node.root-candidate",
-          style: {
-            "border-color": theme.palette.error.main,
-            "border-width": "4px",
-          },
-        },
-        {
-          selector: "node:selected",
-          style: {
-            "border-color": theme.palette.text.primary,
-            "border-width": "5px",
-          },
-        },
-        {
-          selector: "edge",
-          style: {
-            "curve-style": "bezier",
-            "line-color": "#94a3b8",
-            "line-opacity": (edge: cytoscape.EdgeSingular) => {
-              const confidence = Number(edge.data("confidence"));
-              return Math.max(0.3, Math.min(0.95, confidence || 0.3));
-            },
-            "target-arrow-color": "#94a3b8",
-            "target-arrow-shape": "triangle",
-            width: "mapData(confidence, 0, 1, 1.5, 6)",
-          },
-        },
-        {
-          selector: "edge.needs-validation",
-          style: {
-            "line-style": "dashed",
-          },
-        },
-        {
-          selector: "edge:selected",
-          style: {
-            "font-size": "11px",
-            "font-weight": "bold",
-            label: "data(confidenceLabel)",
-            "line-color": theme.palette.primary.main,
-            "line-opacity": 1,
-            "target-arrow-color": theme.palette.primary.main,
-            "text-background-color": "#ffffff",
-            "text-background-opacity": 0.9,
-            "text-background-padding": "3px",
-            width: "5px",
-          },
-        },
-      ],
-      wheelSensitivity: 0.25,
-    });
-    cyRef.current = cy;
-
-    const selectGraphNode = (nodeId: string) => {
-      cy.elements().unselect();
-      cy.getElementById(nodeId).select();
-      setSelection({ kind: "node", id: nodeId });
-    };
-    const selectGraphEdge = (edgeId: string) => {
-      cy.elements().unselect();
-      cy.getElementById(edgeId).select();
-      setSelection({ kind: "edge", id: edgeId });
-    };
-
-    cy.on("tap", "node", (event) => selectGraphNode(event.target.id()));
-    cy.on("mouseover", "node", (event) => setSelection({ kind: "node", id: event.target.id() }));
-    cy.on("tap", "edge", (event) => selectGraphEdge(event.target.id()));
-    cy.on("mouseover", "edge", (event) => setSelection({ kind: "edge", id: event.target.id() }));
-    cy.on("tap", (event) => {
-      if (event.target !== cy) {
-        return;
-      }
-      const nearest = nearestElement(cy, event.renderedPosition);
-      if (!nearest) {
-        return;
-      }
-      if (nearest.isNode()) {
-        selectGraphNode(nearest.id());
-      } else {
-        selectGraphEdge(nearest.id());
-      }
-    });
-
-    const resizeObserver = new ResizeObserver(() => cy.resize());
-    resizeObserver.observe(graphElement.current);
-    cy.ready(() => {
-      cy.fit(undefined, 34);
-      // Pre-select the top root-cause candidate so the evidence panel is
-      // populated as soon as the graph appears.
-      const initial =
-        data.nodes.find((node) => rootTemplateIds.has(node.template_id)) ||
-        [...data.nodes].sort((a, b) => (b.rank_score || 0) - (a.rank_score || 0))[0];
-      if (initial) {
-        cy.getElementById(initial.id).select();
-        setSelection((current) => current ?? { kind: "node", id: initial.id });
-      }
-    });
-
-    return () => {
-      resizeObserver.disconnect();
-      cy.destroy();
-      if (cyRef.current === cy) {
-        cyRef.current = null;
-      }
-    };
-  }, [data, graphElements, loading, theme]);
-
-  useEffect(() => () => {
-    cyRef.current?.destroy();
-    cyRef.current = null;
-  }, []);
-
-  const edgeColumns = useMemo<GridColDef<CausalEdge>[]>(
-    () => [
-      {
-        field: "edge",
-        headerName: "Edge",
-        flex: 1,
-        minWidth: 280,
-        renderCell: (params) => (
-          <Typography sx={{ overflowWrap: "anywhere", whiteSpace: "normal" }} variant="body2">
-            {nodeLabel(data?.nodes || [], params.row.source)} {" -> "} {nodeLabel(data?.nodes || [], params.row.target)}
-          </Typography>
-        ),
-      },
-      {
-        field: "method",
-        headerName: "Evidence methods",
-        minWidth: 220,
-        renderCell: (params) => (
-          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.5, py: 1 }}>
-            {methodParts(params.row.method).map((part) => (
-              <Badge key={part} tone="info">{part}</Badge>
-            ))}
-          </Stack>
-        ),
-      },
-      {
-        field: "confidence",
-        headerName: "Confidence",
-        minWidth: 130,
-        renderCell: (params) => formatPercent(params.row.confidence),
-      },
-      {
-        field: "needs_validation",
-        headerName: "Validation",
-        minWidth: 150,
-        renderCell: (params) => (
-          <Badge tone={params.row.needs_validation ? "warning" : "success"}>
-            {params.row.needs_validation ? "needs validation" : "validated"}
-          </Badge>
-        ),
-      },
-      {
-        field: "evidence",
-        headerName: "Evidence",
-        flex: 1.1,
-        minWidth: 300,
-        sortable: false,
-        renderCell: (params) => (
-          <Box
-            component="pre"
-            sx={{
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-              fontSize: 12,
-              m: 0,
-              maxHeight: 180,
-              overflow: "auto",
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {JSON.stringify(params.row.evidence, null, 2)}
-          </Box>
-        ),
-      },
-    ],
-    [data],
-  );
+  const labels = new Map(data?.nodes.map((node) => [node.id, node.label]) || []);
 
   return (
     <Stack spacing={2.5}>
-      <Stack
-        component="form"
-        direction={{ xs: "column", lg: "row" }}
-        spacing={2}
-        sx={{ alignItems: { xs: "flex-start", lg: "center" }, justifyContent: "space-between" }}
-        onSubmit={submit}
-      >
-        <Box>
-          <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
-            Causal Graph
-          </Typography>
-          <Typography color="text.secondary" variant="body2">
-            Arrows point from candidate cause to symptom. Click a node or edge to see its
-            evidence; nothing here is a proven root cause.
-          </Typography>
-        </Box>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: { xs: "stretch", sm: "center" }, width: { xs: "100%", lg: "auto" } }}>
-          <Box component="label" sx={{ color: "text.secondary", display: "grid", gap: 0.5, minWidth: 260 }}>
-            <Typography component="span" variant="caption">
-              Min confidence {formatPercent(minConfidence)}
-            </Typography>
-            <Box
-              component="input"
-              max="1"
-              min="0"
-              step="0.05"
-              type="range"
-              value={minConfidence}
-              onChange={(event) => setMinConfidence(Number(event.target.value))}
-            />
-          </Box>
-          <Button disabled={loading} type="submit" variant="secondary">
-            Apply
-          </Button>
-        </Stack>
-      </Stack>
-
-      {error && <Alert severity="error">{error}</Alert>}
-      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.5fr) minmax(360px, 0.8fr)" } }}>
-        <Card>
-          {loading && <EmptyState title="Loading graph" />}
-          {!loading && data && data.nodes.length === 0 && (
-            <EmptyState title="No graph nodes">
-              <Typography color="text.secondary" variant="body2">
-                No attention templates were detected for this run, so LogAn did not build a causal graph.
-              </Typography>
-            </EmptyState>
-          )}
-          {!loading && data && data.nodes.length > 0 && (
-            <Stack spacing={1.5}>
-              <Stack direction="row" sx={{ alignItems: "center", flexWrap: "wrap", gap: 1.5 }}>
-                {["error", "availability", "saturation", "traffic"].map((signal) => (
-                  <Stack direction="row" key={signal} spacing={0.5} sx={{ alignItems: "center" }}>
-                    <Box sx={{ bgcolor: signalColor(signal), borderRadius: "50%", height: 10, width: 10 }} />
-                    <Typography color="text.secondary" variant="caption">{signal}</Typography>
-                  </Stack>
-                ))}
-                <Typography color="text.secondary" variant="caption">
-                  | size = causal rank | red ring = root-cause candidate | dashed = needs validation
-                </Typography>
-                {data.edges.length > renderedEdgeCount && (
-                  <Typography color="text.secondary" variant="caption">
-                    | strongest {renderedEdgeCount} of {data.edges.length} edges drawn (full list below)
-                  </Typography>
-                )}
-              </Stack>
-              <Box
-                aria-label="Causal directed graph"
-                className="cytoscape-container"
-                data-testid="cytoscape-graph"
-                ref={graphElement}
-              />
-            </Stack>
-          )}
-        </Card>
-
-        <Stack spacing={2}>
-          <Card>
-            <Stack spacing={1.5}>
-              <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
-                Root Cause Candidates
-              </Typography>
-              {!data?.root_cause_candidates.length && (
-                <EmptyState title="No candidates">
-                  <Typography color="text.secondary" variant="body2">
-                    Candidate ranking starts after attention templates are available in the causal graph.
-                  </Typography>
-                </EmptyState>
-              )}
-              {data?.root_cause_candidates.map((candidate) => (
-                <Box key={candidate.template_id} sx={{ border: 1, borderColor: "divider", borderRadius: "10px", p: 1.5 }}>
-                  <Typography sx={{ fontWeight: 800 }}>#{candidate.rank} {candidate.reason}</Typography>
-                  <Typography color="text.secondary" variant="caption">score {formatPercent(candidate.score)}</Typography>
-                </Box>
-              ))}
-            </Stack>
-          </Card>
-
-          <Card>
-            <Stack spacing={2}>
-              <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
-                Details
-              </Typography>
-              {!selectedNode && !selectedEdge && (
-                <Typography color="text.secondary">Select a node or edge to inspect evidence.</Typography>
-              )}
-              {selectedNode && (
-                <Stack data-testid="causal-detail-panel" spacing={2}>
-                  <Typography component="h3" sx={{ fontWeight: 800 }} variant="subtitle1">
-                    {cleanTemplateLabel(selectedNode.label, 120)}
-                  </Typography>
-                  <DetailList>
-                    <dt>Template</dt>
-                    <dd>{selectedNode.template_id}</dd>
-                    <dt>Signal</dt>
-                    <dd><ColorBadge color={signalColor(selectedNode.golden_signal)}>{selectedNode.golden_signal}</ColorBadge></dd>
-                    <dt>Occurrence</dt>
-                    <dd>{selectedNode.occurrence_count}</dd>
-                    <dt>Rank</dt>
-                    <dd>{formatPercent(selectedNode.rank_score)}</dd>
-                    <dt>Confidence</dt>
-                    <dd>{formatPercent(selectedNode.confidence)}</dd>
-                    <dt>First seen</dt>
-                    <dd>{formatDateTime(selectedNode.first_seen)}</dd>
-                  </DetailList>
-                  <Typography component="h3" sx={{ fontWeight: 800 }} variant="subtitle1">
-                    Evidence Refs
-                  </Typography>
-                  {selectedNode.evidence_refs.length === 0 && <Typography color="text.secondary">No evidence refs</Typography>}
-                  {selectedNode.evidence_refs.slice(0, 4).map((ref) => (
-                    <Typography color="text.secondary" key={ref.log_id} sx={{ overflowWrap: "anywhere" }} variant="body2">
-                      {evidenceRefLabel(ref)}
-                    </Typography>
-                  ))}
-                </Stack>
-              )}
-              {selectedEdge && (
-                <Stack data-testid="causal-detail-panel" spacing={2}>
-                  <Typography component="h3" sx={{ fontWeight: 800 }} variant="subtitle1">
-                    {nodeLabel(data?.nodes || [], selectedEdge.source)}
-                    {" -> "}
-                    {nodeLabel(data?.nodes || [], selectedEdge.target)}
-                  </Typography>
-                  <DetailList>
-                    <dt>Evidence methods</dt>
-                    <dd>
-                      <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.5 }}>
-                        {methodParts(selectedEdge.method).map((part) => (
-                          <Badge key={part} tone="info">{part}</Badge>
-                        ))}
-                      </Stack>
-                    </dd>
-                    <dt>Confidence</dt>
-                    <dd>{formatPercent(selectedEdge.confidence)}</dd>
-                    <dt>Validation</dt>
-                    <dd>{selectedEdge.needs_validation ? "needs validation" : "validated"}</dd>
-                    <dt>Lag</dt>
-                    <dd>{selectedEdge.lag_seconds ?? "n/a"}</dd>
-                    <dt>Support windows</dt>
-                    <dd>{selectedEdge.support_windows}</dd>
-                  </DetailList>
-                  <Typography component="h3" sx={{ fontWeight: 800 }} variant="subtitle1">
-                    Evidence
-                  </Typography>
-                  <Box component="pre" className="code-block compact">
-                    {evidenceSummary(selectedEdge.evidence)}
-                  </Box>
-                </Stack>
-              )}
-            </Stack>
-          </Card>
-        </Stack>
+      <Box>
+        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">Causal Candidates</Typography>
+        <Typography color="text.secondary">
+          Time-ordered associations that need validation with metrics and traces.
+        </Typography>
       </Box>
-
-      <Card>
-        <Stack spacing={2}>
-          <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
-            Candidate Edges
-          </Typography>
-          {!loading && data && data.edges.length === 0 ? (
-            <EmptyState title="No causal edges">
-              <Typography color="text.secondary" variant="body2">
-                No temporal or entity-linked candidate edges were found for the current graph filters.
-              </Typography>
-            </EmptyState>
-          ) : (
-            <Box sx={{ minHeight: 420 }}>
-              <DataGrid
-                columns={edgeColumns}
-                density="compact"
-                disableRowSelectionOnClick
-                getRowHeight={() => "auto"}
-                getRowId={(row) => row.id}
-                initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-                loading={loading}
-                pageSizeOptions={[25, 50, 100]}
-                rows={data?.edges || []}
-                sx={{ "& .MuiDataGrid-cell": { alignItems: "flex-start", py: 1 } }}
-              />
-            </Box>
-          )}
-        </Stack>
-      </Card>
+      {error && <Alert severity="error">{error}</Alert>}
+      {!data && !error && <Card><EmptyState title="Loading causal candidates" /></Card>}
+      {data && (
+        <>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)" } }}>
+            {data.root_cause_candidates.map((candidate) => {
+              const node = data.nodes.find((item) => item.template_id === candidate.template_id);
+              return (
+                <Card key={candidate.template_id}>
+                  <Stack spacing={1}>
+                    <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                      <Typography sx={{ fontWeight: 850 }}>#{candidate.rank} {node?.label || candidate.template_id}</Typography>
+                      <Badge>{Math.round(candidate.score * 100)}%</Badge>
+                    </Stack>
+                    <Typography color="text.secondary" variant="body2">{candidate.reason}</Typography>
+                  </Stack>
+                </Card>
+              );
+            })}
+          </Box>
+          <Card>
+            {data.edges.length === 0 ? <EmptyState title="No supported associations" /> : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead><TableRow>
+                    <TableCell>Earlier signal</TableCell>
+                    <TableCell>Later signal</TableCell>
+                    <TableCell align="right">Lag</TableCell>
+                    <TableCell align="right">Support</TableCell>
+                    <TableCell align="right">Score</TableCell>
+                  </TableRow></TableHead>
+                  <TableBody>
+                    {data.edges.map((edge) => (
+                      <TableRow key={edge.id} hover>
+                        <TableCell>{labels.get(edge.source) || edge.source}</TableCell>
+                        <TableCell>{labels.get(edge.target) || edge.target}</TableCell>
+                        <TableCell align="right">{edge.lag_seconds ?? 0}s</TableCell>
+                        <TableCell align="right">{edge.support_windows}</TableCell>
+                        <TableCell align="right">{Math.round(edge.confidence * 100)}%</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Card>
+        </>
+      )}
     </Stack>
   );
 }

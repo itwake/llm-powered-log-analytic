@@ -30,7 +30,6 @@ _FORBIDDEN_PACKET_KEYS = {
     "apikey",
     "authorization",
     "model_input",
-    "model_inputs",
     "password",
     "prompt",
     "prompts",

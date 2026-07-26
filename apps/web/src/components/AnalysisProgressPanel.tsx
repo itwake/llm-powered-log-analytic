@@ -21,7 +21,6 @@ const PIPELINE_STEPS = [
   ["temporal_aggregation", "Temporal"],
   ["causal_graph", "Graph"],
   ["causal_summary", "Summary"],
-  ["export_artifacts", "Export"],
 ] as const;
 
 const PROGRESS_METRICS = [

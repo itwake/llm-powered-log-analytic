@@ -99,13 +99,12 @@ async def annotate_templates(
     max_templates: int | None = None,
     max_sample_message_chars: int | None = None,
     max_samples_per_template: int | None = None,
-) -> tuple[list[TemplateAnnotation], list[dict[str, Any]]]:
+) -> list[TemplateAnnotation]:
     samples_by_template: dict[str, list[RepresentativeSample]] = {}
     for sample in samples:
         samples_by_template.setdefault(sample.template_id, []).append(sample)
 
     annotations: list[TemplateAnnotation] = []
-    model_inputs: list[dict[str, Any]] = []
     model = str(case_context.get("model") or "gpt-5.4")
     reasoning_effort = str(case_context.get("reasoning_effort") or "high")
     for template in _prioritized_templates(templates, max_templates=max_templates):
@@ -116,7 +115,6 @@ async def annotate_templates(
             max_sample_message_chars=max_sample_message_chars,
             max_samples_per_template=max_samples_per_template,
         )
-        model_inputs.append(payload)
         response = await gateway.responses(
             user_id=case_context.get("user_id", "local"),
             model=model,
@@ -165,4 +163,4 @@ async def annotate_templates(
                 **parsed.model_dump(),
             )
         )
-    return annotations, model_inputs
+    return annotations

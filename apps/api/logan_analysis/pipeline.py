@@ -6,7 +6,6 @@ from typing import Any
 
 from logan_analysis.activities.broadcasting import broadcast_annotations
 from logan_analysis.activities.causal import infer_causal_graph
-from logan_analysis.activities.export import export_analysis
 from logan_analysis.activities.inference import annotate_templates
 from logan_analysis.activities.ingestion import ingest_paths
 from logan_analysis.activities.preprocessing import merge_entries, preprocess_entries
@@ -62,7 +61,7 @@ def _merge_progress(progress: dict[str, Any], event: dict[str, Any]) -> None:
         progress["error_message"] = event["error_message"]
     steps[step_name] = step
     progress["current_step"] = (
-        "completed" if step_name == "export_artifacts" and event_type == "completed" else step_name
+        "completed" if step_name == "causal_summary" and event_type == "completed" else step_name
     )
 
 
@@ -237,7 +236,7 @@ class AnalyzeCasePipeline:
             lambda value: {"samples": len(value)},
         )
         if gateway is None:
-            annotations, model_inputs = [], []
+            annotations = []
             await emit(
                 step_name="ai_platform_annotation",
                 event_type="skipped",
@@ -249,7 +248,7 @@ class AnalyzeCasePipeline:
                 },
             )
         else:
-            annotations, model_inputs = await run_step(
+            annotations = await run_step(
                 "ai_platform_annotation",
                 lambda: annotate_templates(
                     analysis_run_id=analysis_run_id,
@@ -263,9 +262,9 @@ class AnalyzeCasePipeline:
                 ),
                 lambda value: {
                     "llm_enabled": True,
-                    "annotations": len(value[0]),
+                    "annotations": len(value),
                     "annotation_templates_total": len(templates),
-                    "annotation_templates_selected": len(value[0]),
+                    "annotation_templates_selected": len(value),
                     **(
                         {"annotation_budget": max_annotation_templates}
                         if max_annotation_templates is not None
@@ -294,9 +293,6 @@ class AnalyzeCasePipeline:
                 templates=templates,
                 logs=enriched,
                 max_lag_seconds=config.get("causal", {}).get("max_lag_seconds", 600),
-                time_bin_seconds=config.get("causal", {}).get("time_bin_seconds", 60),
-                methods=config.get("causal", {}).get("methods"),
-                granger_max_lag_bins=config.get("causal", {}).get("granger_max_lag_bins"),
             ),
             lambda value: {"nodes": len(value.nodes), "edges": len(value.edges)},
         )
@@ -315,7 +311,7 @@ class AnalyzeCasePipeline:
                 "summary_source": value.details.get("source"),
             },
         )
-        placeholder = AnalysisResult(
+        return AnalysisResult(
             case_id=case_id,
             analysis_run_id=analysis_run_id,
             files=files,
@@ -327,8 +323,6 @@ class AnalyzeCasePipeline:
             temporal=temporal,
             causal_graph=causal_graph,
             causal_summary=causal_summary,
-            exports={},
-            model_inputs=model_inputs,
             progress={
                 **progress,
                 "files_total": len(files),
@@ -343,27 +337,3 @@ class AnalyzeCasePipeline:
                 "edges": len(causal_graph.edges),
             },
         )
-        exports = await run_step(
-            "export_artifacts",
-            lambda: {
-                export_type: export_analysis(placeholder, export_type)
-                for export_type in ("markdown", "html", "json")
-            },
-            lambda value: {"exports": len(value), "export_types": sorted(value)},
-        )
-        final_progress = {
-            **placeholder.progress,
-            **progress,
-            "files_total": len(files),
-            "files_processed": len(files),
-            "raw_lines": sum(len(file.lines) for file in files),
-            "normalized_lines": len(enriched),
-            "templates": len(templates),
-            "representative_samples": len(samples),
-            "annotated_templates": len(annotations),
-            "windows": len(temporal),
-            "nodes": len(causal_graph.nodes),
-            "edges": len(causal_graph.edges),
-            "exports": len(exports),
-        }
-        return placeholder.model_copy(update={"exports": exports, "progress": final_progress})

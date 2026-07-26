@@ -1,1 +1,1 @@
-"""Pure analysis models, algorithms, pipeline, and evaluation tools."""
+"""Log analysis models, algorithms, and pipeline."""

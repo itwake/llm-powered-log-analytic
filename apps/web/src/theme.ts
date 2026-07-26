@@ -1,7 +1,6 @@
 "use client";
 
 import { alpha, createTheme } from "@mui/material/styles";
-import type {} from "@mui/x-data-grid/themeAugmentation";
 
 const palette = {
   appBg: "#f3f5ff",
@@ -14,9 +13,6 @@ const palette = {
   success: "#10b981",
   warning: "#f97316",
   error: "#ef4444",
-  tableHeader: "#e6e1ff",
-  tableHover: "#f4f7ff",
-  infoPanel: "#d9ecff",
   paper: "#ffffff",
   text: "#101828",
   muted: "#667085",
@@ -184,41 +180,6 @@ export const loganTheme = createTheme({
         root: {
           borderRadius: "10px",
         },
-      },
-    },
-    MuiDataGrid: {
-      defaultProps: {
-        disableColumnMenu: true,
-      },
-      styleOverrides: {
-        root: ({ theme }) => ({
-          borderColor: alpha(theme.palette.primary.main, 0.12),
-          borderRadius: "12px",
-          backgroundColor: theme.palette.background.paper,
-          boxShadow: `0 14px 32px ${alpha("#243b7a", 0.06)}`,
-          "--DataGrid-rowBorderColor": alpha(theme.palette.primary.main, 0.1),
-          "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: palette.tableHeader,
-            color: "#322572",
-            minHeight: "48px !important",
-          },
-          "& .MuiDataGrid-columnHeader": {
-            backgroundColor: palette.tableHeader,
-          },
-          "& .MuiDataGrid-columnHeaderTitle": {
-            fontWeight: 850,
-          },
-          "& .MuiDataGrid-row:hover": {
-            backgroundColor: palette.tableHover,
-          },
-          "& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus": {
-            outline: "none",
-          },
-          "& .MuiDataGrid-cell:focus-within, & .MuiDataGrid-columnHeader:focus-within": {
-            outline: `1px solid ${theme.palette.primary.main}`,
-            outlineOffset: -1,
-          },
-        }),
       },
     },
   },

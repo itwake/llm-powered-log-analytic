@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import json
-import secrets
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
@@ -191,7 +190,6 @@ class SsoAuthService:
                     email=profile.email,
                     username=profile.username,
                     full_name=profile.full_name,
-                    password=secrets.token_urlsafe(32),
                     external_id=profile.external_id,
                 )
             except ValueError as exc:
@@ -249,4 +247,3 @@ class SsoAuthService:
             full_name=full_name,
             external_id=_claim_text(claims, "sub", "oid", "user_id"),
         )
-

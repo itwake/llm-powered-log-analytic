@@ -1,149 +1,77 @@
 # LogAn
 
-LogAn is a case-based incident log diagnosis application. Engineers upload logs, run one
-deterministic analysis pipeline, and inspect summary, time-window, log, causal-graph, and
-causal-summary views.
+LogAn is a focused incident log analysis application. Users sign in with SSO, create a case,
+upload logs, run one analysis pipeline, and review structured logs, temporal activity, causal
+candidates, and a summary.
 
-The project deliberately uses one core implementation:
+## Stack
 
-- Next.js web application
-- FastAPI API
-- SQLAlchemy persistence (SQLite by default; PostgreSQL uses the same store)
-- local filesystem uploads and step artifacts
-- in-process Python analysis pipeline
-- deterministic `StableDrainAdapter` template parser
-- Prometheus metrics
+- FastAPI and SQLAlchemy
+- SQLite by default, PostgreSQL supported
+- Local filesystem uploads
+- Next.js and Material UI
+- Optional AI Platform integration
 
-There is no separate analysis service. The API calls the analysis package directly and persists
-the normalized result in SQL.
+`LOGAN_LLM_PROVIDER` has two valid values:
 
-## Quick start
+- `none` runs the complete deterministic pipeline, including causal scoring and an
+  evidence-based summary, without model calls.
+- `ai_platform` adds template annotation, model-generated summary text, and case chat.
 
-### Docker
+## Run locally
 
-```bash
-docker compose up -d --build
-```
-
-Open <http://localhost:3000> and choose **Continue with SSO**. The stack stores SQLite data and
-uploaded files in the `logan-data` volume.
+Requirements: Python 3.11+, Node.js 22+, and an OAuth-compatible SSO application.
 
 ```bash
-docker compose down
-```
-
-Use `docker compose down -v` only when you intentionally want to remove local case data.
-
-### Local development
-
-Requirements: Python 3.11 or newer and Node.js 22 or newer.
-
-On Windows, the helper script creates the virtual environment, installs runtime dependencies,
-copies `.env.example` to `.env`, and starts both applications:
-
-```powershell
-.\scripts\local.ps1
-# cmd.exe alternative: scripts\local.bat
-```
-
-For a manual or non-Windows setup:
-
-```bash
+cp .env.example .env
 python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
 python -m pip install -e ".[dev]"
 npm ci
 ```
 
-Copy `.env.example` values into your shell, then start the two processes:
+Configure the SSO values in `.env`, then start the API and web app in separate terminals:
 
 ```bash
-uvicorn app.main:app --reload --app-dir apps/api --port 8000
+python -m uvicorn app.main:app --reload --app-dir apps/api --host 127.0.0.1 --port 8000
 npm run dev --workspace @logan/web
 ```
 
-The default configuration disables LLM calls and uses mock SSO for local sign-in, so local
-development is network-free.
+Open `http://localhost:3000`.
 
-## Architecture
+Docker uses the same `.env` file:
 
-```text
-browser
-  └─ Next.js
-      └─ FastAPI
-          ├─ SQLAlchemy ── SQLite / PostgreSQL
-          ├─ local upload and artifact directory
-          ├─ model gateway
-          └─ AnalyzeCasePipeline
-              ├─ ingest and multiline merge
-              ├─ normalize and redact
-              ├─ stable template clustering
-              ├─ representative sampling
-              ├─ annotation and label broadcast
-              ├─ time-window aggregation
-              ├─ causal candidate ranking
-              └─ summary and exports
+```bash
+docker compose up --build
 ```
-
-Repository layout:
-
-- `apps/api` — FastAPI runtime, persistence, local files, model integration, and the internal
-  `logan_analysis` pipeline package
-- `apps/web` — Next.js workbench
-- `tests` — API, engine, persistence, contract, and browser tests
-- `docs` — focused architecture, API, operations, and security references
 
 ## Configuration
 
-The copy-ready minimum is in [`.env.example`](.env.example). The current complete reference,
-including defaults and production-only options, is in
-[`.env.full.example`](.env.full.example). Important settings:
+Copy `.env.example` for the minimum setup or `.env.full.example` for every supported setting.
+Environment variables are read by the API process at startup.
 
-- `LOGAN_DATABASE_URL` — SQLAlchemy URL; defaults to `sqlite:///.logan/logan.db`
-- `LOGAN_LOCAL_OBJECT_STORE_DIR` — upload and step-artifact root
-- `LOGAN_LLM_PROVIDER` — `none` to disable LLM calls or `ai_platform` to enable them
-- `LOGAN_METRICS_ENABLED` — exposes low-cardinality metrics at `/metrics`
-- `LOGAN_SSO_*` — SSO provider settings; the mock provider is for development only
-- retention and security settings documented in `apps/api/app/config.py`
+SQLite data and uploaded files are stored under `.logan/` by default. Set
+`LOGAN_DATABASE_URL` for PostgreSQL and `LOGAN_LOCAL_OBJECT_STORE_DIR` for another local data
+directory.
 
-Production mode validates that runtime secrets are not left at development defaults.
-
-## Quality checks
-
-Run the shared local/CI checks with `make check`, or invoke them directly:
+## Development
 
 ```bash
-python -m pytest
-python -m ruff check --select F apps tests scripts
+python -m pytest -q
+python -m ruff check apps tests scripts
 npm run lint
-npm run e2e
+npm run build
 ```
 
-Regenerate and verify the API contract after route or schema changes:
+Generate the checked-in API contract after changing routes or schemas:
 
 ```bash
 python scripts/export_openapi.py --out docs/openapi.snapshot.json
-python -m pytest tests/api/test_openapi_contract.py
 ```
 
-The quality benchmark uses the configured AI Platform model:
+## Documentation
 
-```bash
-LOGAN_LLM_PROVIDER=ai_platform \
-python -m logan_analysis.evaluation.run \
-  --benchmark benchmarks/logan/checkout_incident \
-  --out .logan/evaluation/report.json \
-  --markdown .logan/evaluation/report.md
-```
-
-It exits before running when `LOGAN_LLM_PROVIDER=none`.
-
-## Safety model
-
-Raw logs are redacted before model calls. Job events and step manifests store safe counts and
-identifiers rather than raw log text, prompts, credentials, or tokens. Causal edges are candidate
-evidence and remain marked for validation; they are not presented as definitive root cause.
-
-See [architecture](docs/architecture.md), [API](docs/api.md),
-[operations](docs/operations.md), and [security](docs/security.md).
+- [Architecture](docs/architecture.md)
+- [API](docs/api.md)
+- [Data model](docs/data-model.md)
+- [Operations](docs/operations.md)
+- [Security](docs/security.md)

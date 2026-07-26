@@ -1,12 +1,9 @@
 "use client";
 
 import AddCircleIcon from "@mui/icons-material/AddCircle";
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
-import InsightsIcon from "@mui/icons-material/Insights";
-import SettingsIcon from "@mui/icons-material/Settings";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -257,13 +254,9 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
     selectedCase?.case_key ||
     (pathname === "/cases/new"
       ? "New Case"
-      : pathname.startsWith("/settings/ai-platform")
-        ? "AI Platform"
-        : pathname.startsWith("/admin")
-          ? "Admin"
-          : pathname.startsWith("/cases")
-            ? "Cases"
-            : "Incident workbench");
+      : pathname.startsWith("/cases")
+        ? "Cases"
+        : "Incident workbench");
 
   function isActive(href: string): boolean {
     return pathname === href;
@@ -475,32 +468,6 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
             })}
           </List>
 
-          <Divider sx={{ borderColor: loganTokens.sidebarBorder, my: 1.5 }} />
-          {!sidebarCollapsed && (
-            <Typography sx={{ color: loganTokens.sidebarMuted, fontWeight: 850, letterSpacing: 0.8, px: 1.5, py: 0.75, textTransform: "uppercase" }} variant="caption">
-              Settings
-            </Typography>
-          )}
-          <List aria-label="Settings" dense disablePadding sx={{ display: "grid", gap: 0.5 }}>
-            <NavItem
-              active={isActive("/settings/ai-platform")}
-              collapsed={sidebarCollapsed}
-              href="/settings/ai-platform"
-              icon={<SettingsIcon fontSize="small" />}
-              label="AI Platform"
-              abbr="AI"
-            />
-            {user?.role === "admin" && (
-              <NavItem
-                active={isActive("/admin")}
-                collapsed={sidebarCollapsed}
-                href="/admin"
-                icon={<AdminPanelSettingsIcon fontSize="small" />}
-                label="Admin"
-                abbr="A"
-              />
-            )}
-          </List>
         </Box>
 
         <Divider sx={{ borderColor: loganTokens.sidebarBorder }} />
@@ -514,7 +481,7 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
                 {signedInDisplayName}
               </Typography>
               <Typography noWrap sx={{ color: loganTokens.sidebarMuted }} variant="caption">
-                AI Platform
+                {user?.email}
               </Typography>
             </Box>
           )}
@@ -544,7 +511,7 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
           </Typography>
           <Box sx={{ flex: "0 0 auto" }}>
             {authState === "loading" && <Chip color="default" label="Checking session" variant="outlined" />}
-            {authState === "signed-in" && <Chip icon={<InsightsIcon />} label="AI Platform" variant="outlined" />}
+            {authState === "signed-in" && <Chip label="Signed in" variant="outlined" />}
             {authState === "signed-out" && (
               <Chip component={Link} clickable href="/login" label="Continue with SSO" variant="outlined" />
             )}

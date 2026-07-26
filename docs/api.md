@@ -1,51 +1,47 @@
 # API
 
-The generated OpenAPI contract is available at `/docs`; its committed snapshot is
-`docs/openapi.snapshot.json`.
+The API is served under `/api`. Interactive OpenAPI documentation is available at `/docs`.
 
-## Authentication and access
+## Authentication
 
 - `GET /api/auth/sso/login`
 - `GET /api/auth/sso/callback`
-- `POST /api/auth/logout`
 - `GET /api/auth/me`
+- `POST /api/auth/logout`
 
-Sessions use an HttpOnly `logan_session` cookie. Admins can access all cases. Engineers can access
-cases they own or collaborate on. Case roles are `owner`, `editor`, and `viewer`.
+## Cases and uploads
 
-## Cases, uploads, and runs
-
-- `POST /api/cases`
 - `GET /api/cases`
-- `GET|PATCH|DELETE /api/cases/{case_id}`
-- collaborator routes below `/api/cases/{case_id}/collaborators`
+- `POST /api/cases`
+- `GET /api/cases/{case_id}`
+- `PATCH /api/cases/{case_id}`
+- `DELETE /api/cases/{case_id}`
 - `POST /api/cases/{case_id}/uploads`
 - `PUT /api/cases/{case_id}/uploads/{file_id}/content`
-- `POST /api/cases/{case_id}/analysis-runs`
-- run list, status, cancellation, event, and artifact routes
 
-Upload start returns `file_id` and one authenticated `upload_url`. The content route writes the
-file below `LOGAN_LOCAL_OBJECT_STORE_DIR`, verifies size, computes SHA-256, and marks the upload
-complete in one request. Repeating the same upload is idempotent; different bytes return a
-conflict. Analysis accepts completed `input_file_ids`; test and local tooling may also pass
-filesystem `input_paths`.
+## Analysis runs
+
+- `POST /api/cases/{case_id}/analysis-runs`
+- `GET /api/cases/{case_id}/analysis-runs`
+- `GET /api/cases/{case_id}/analysis-runs/{run_id}`
+- `POST /api/cases/{case_id}/analysis-runs/{run_id}/cancel`
+- `GET /api/cases/{case_id}/analysis-runs/{run_id}/events`
+
+Starting a run requires at least one completed `input_file_id`. The API returns the queued run and
+continues analysis in the background.
 
 ## Reports
 
-- summary
-- temporal time-window series
-- tabular logs
-- causal graph
-- causal summary
-- exports and feedback
+- `GET /api/cases/{case_id}/analysis-runs/{run_id}/summary`
+- `GET /api/cases/{case_id}/analysis-runs/{run_id}/temporal`
+- `GET /api/cases/{case_id}/analysis-runs/{run_id}/logs`
+- `GET /api/cases/{case_id}/analysis-runs/{run_id}/causal-graph`
+- `GET /api/cases/{case_id}/analysis-runs/{run_id}/causal-summary`
 
-Report reads use normalized SQL rows scoped by case, run, and organization.
+## Chat and health
 
-## Admin and platform
+- `POST /api/chat/stream`
+- `GET /healthz`
+- `GET /metrics` when metrics are enabled
 
-Admin routes manage users, policy groups, audit logs, safe runtime settings, and retention.
-Platform routes expose capabilities, model-backed chat, task execution, health, and Prometheus
-metrics.
-
-Raw logs, prompts, credentials, and tokens are excluded from report, progress, artifact, audit,
-and metrics metadata.
+Chat requires `LOGAN_LLM_PROVIDER=ai_platform`, a completed analysis run, and access to its case.

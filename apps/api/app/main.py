@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, capabilities, cases, chat, reports, scim
+from app.api import auth, cases, chat, reports
 from app.config import validate_runtime_settings
 from app.observability import configure_logging, install_metrics
 from app.services.model_gateway_factory import create_model_gateway
@@ -33,12 +33,9 @@ def create_app(
         allow_headers=["*"],
     )
     app.include_router(auth.router)
-    app.include_router(capabilities.router)
     app.include_router(cases.router)
     app.include_router(reports.router)
     app.include_router(chat.router)
-    app.include_router(admin.router)
-    app.include_router(scim.router)
     install_metrics(app, app.state.store.settings)
     return app
 

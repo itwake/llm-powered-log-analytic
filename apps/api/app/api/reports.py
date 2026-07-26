@@ -1,22 +1,12 @@
 from __future__ import annotations
 
-import html
-import json
-import uuid
 from collections import Counter, defaultdict
 from datetime import datetime
-from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from logan_analysis.activities.export import export_analysis
-from logan_analysis.models import OFFENDING_SIGNALS, ExportArtifact
+from fastapi import APIRouter, Depends, HTTPException, Query
+from logan_analysis.models import OFFENDING_SIGNALS
 
 from app.dependencies import current_user, get_store, require_case_permission
-from app.schemas.case import (
-    CausalSummaryUpdateRequest,
-    ExportRequest,
-    FeedbackRequest,
-)
 from app.store import MetadataStore, UserRecord
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
@@ -33,86 +23,6 @@ def _require_result(store: MetadataStore, case_id: str, run_id: str):
     if not result:
         raise HTTPException(status_code=404, detail="analysis result not found")
     return result
-
-
-def _query_report(
-    store: MetadataStore,
-    method_name: str,
-    **kwargs: Any,
-) -> dict[str, object] | None:
-    method = getattr(store, method_name, None)
-    if not callable(method):
-        return None
-    return method(**kwargs)
-
-
-def _causal_summary_export_artifact(
-    *,
-    case_id: str,
-    run_id: str,
-    export_type: str,
-    summary: dict[str, object],
-) -> ExportArtifact:
-    export_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{run_id}:{export_type}"))
-    summary_markdown = str(summary.get("summary_markdown") or "")
-    if export_type == "markdown":
-        content = summary_markdown
-    elif export_type == "html":
-        content = (
-            '<!doctype html><html><head><meta charset="utf-8"><title>LogAn Export</title></head>'
-            "<body><main><pre>" + html.escape(summary_markdown) + "</pre></main></body></html>"
-        )
-    elif export_type == "json":
-        content = json.dumps(
-            {
-                "case_id": case_id,
-                "analysis_run_id": run_id,
-                "summary": summary,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    else:
-        raise ValueError(f"unsupported export type: {export_type}")
-    return ExportArtifact(
-        export_id=export_id,
-        export_type=export_type,  # type: ignore[arg-type]
-        content=content,
-        object_uri=f"memory://exports/{run_id}/{export_id}.{export_type}",
-    )
-
-
-def _record_raw_log_search(
-    *,
-    store: MetadataStore,
-    request: Request,
-    user: UserRecord,
-    case_id: str,
-    run_id: str,
-    window_start: str | None,
-    window_end: str | None,
-    q: str | None,
-    service: str | None,
-    limit: int,
-    offset: int,
-) -> None:
-    store.record_audit(
-        action="raw_log.search",
-        user_id=user.id,
-        target_type="analysis_run",
-        target_id=run_id,
-        case_id=case_id,
-        metadata={
-            "window_start": window_start,
-            "window_end": window_end,
-            "q": q,
-            "service": service,
-            "limit": limit,
-            "offset": offset,
-        },
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-    )
 
 
 @router.get("/{case_id}/analysis-runs/{run_id}/summary")
@@ -133,19 +43,6 @@ def data_summary(
         permission="view",
         hide_forbidden=True,
     )
-    report = _query_report(
-        store,
-        "get_report_summary",
-        case_id=case_id,
-        run_id=run_id,
-        golden_signal=golden_signal,
-        scope=scope,
-        limit=limit,
-        offset=offset,
-    )
-    if report is not None:
-        return report
-
     result = _require_result(store, case_id, run_id)
     summary_scope = "all" if scope == "all" else "attention"
     annotations = {annotation.template_id: annotation for annotation in result.annotations}
@@ -218,16 +115,6 @@ def temporal(
         permission="view",
         hide_forbidden=True,
     )
-    report = _query_report(
-        store,
-        "get_report_temporal",
-        case_id=case_id,
-        run_id=run_id,
-        group_by=group_by,
-    )
-    if report is not None:
-        return report
-
     result = _require_result(store, case_id, run_id)
     grouped: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for aggregate in result.temporal:
@@ -257,7 +144,6 @@ def temporal(
 
 @router.get("/{case_id}/analysis-runs/{run_id}/logs")
 def logs(
-    request: Request,
     case_id: str,
     run_id: str,
     window_start: str | None = None,
@@ -278,48 +164,7 @@ def logs(
     )
     start = _parse_dt(window_start)
     end = _parse_dt(window_end)
-    report = _query_report(
-        store,
-        "get_report_logs",
-        case_id=case_id,
-        run_id=run_id,
-        window_start=start,
-        window_end=end,
-        q=q,
-        service=service,
-        limit=limit,
-        offset=offset,
-    )
-    if report is not None:
-        _record_raw_log_search(
-            store=store,
-            request=request,
-            user=user,
-            case_id=case_id,
-            run_id=run_id,
-            window_start=window_start,
-            window_end=window_end,
-            q=q,
-            service=service,
-            limit=limit,
-            offset=offset,
-        )
-        return report
-
     result = _require_result(store, case_id, run_id)
-    _record_raw_log_search(
-        store=store,
-        request=request,
-        user=user,
-        case_id=case_id,
-        run_id=run_id,
-        window_start=window_start,
-        window_end=window_end,
-        q=q,
-        service=service,
-        limit=limit,
-        offset=offset,
-    )
     rows = result.normalized_logs
     if start:
         rows = [line for line in rows if line.timestamp and line.timestamp >= start]
@@ -394,17 +239,6 @@ def causal_graph(
         permission="view",
         hide_forbidden=True,
     )
-    report = _query_report(
-        store,
-        "get_report_causal_graph",
-        case_id=case_id,
-        run_id=run_id,
-        max_nodes=max_nodes,
-        min_confidence=min_confidence,
-    )
-    if report is not None:
-        return report
-
     result = _require_result(store, case_id, run_id)
     graph = result.causal_graph
     node_ids = {node.id for node in graph.nodes[:max_nodes]}
@@ -440,127 +274,5 @@ def causal_summary(
         permission="view",
         hide_forbidden=True,
     )
-    report = _query_report(
-        store,
-        "get_report_causal_summary",
-        case_id=case_id,
-        run_id=run_id,
-    )
-    if report is not None:
-        return report
-
     result = _require_result(store, case_id, run_id)
     return result.causal_summary.model_dump(mode="json")
-
-
-@router.patch("/{case_id}/analysis-runs/{run_id}/causal-summary")
-def update_causal_summary(
-    case_id: str,
-    run_id: str,
-    payload: CausalSummaryUpdateRequest,
-    user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
-) -> dict[str, object]:
-    require_case_permission(
-        store=store,
-        user=user,
-        case_id=case_id,
-        permission="edit",
-        hide_forbidden=False,
-    )
-    updated = store.update_causal_summary(
-        case_id=case_id,
-        run_id=run_id,
-        summary_markdown=payload.summary_markdown,
-        customer_update_markdown=payload.customer_update_markdown,
-        user_id=user.id,
-    )
-    if updated is None:
-        raise HTTPException(status_code=404, detail="analysis result not found")
-    return updated
-
-
-@router.post("/{case_id}/analysis-runs/{run_id}/exports")
-def create_export(
-    case_id: str,
-    run_id: str,
-    payload: ExportRequest,
-    user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
-) -> dict[str, object]:
-    require_case_permission(
-        store=store,
-        user=user,
-        case_id=case_id,
-        permission="edit",
-        hide_forbidden=False,
-    )
-    result = store.get_analysis_result(case_id, run_id)
-    if result is not None:
-        try:
-            artifact = export_analysis(result, payload.export_type)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="unsupported export type") from None
-    else:
-        summary = _query_report(
-            store,
-            "get_report_causal_summary",
-            case_id=case_id,
-            run_id=run_id,
-        )
-        if summary is None:
-            raise HTTPException(status_code=404, detail="analysis result not found")
-        if payload.include_sections and "causal_summary" not in payload.include_sections:
-            raise HTTPException(status_code=404, detail="analysis result not found")
-        try:
-            artifact = _causal_summary_export_artifact(
-                case_id=case_id,
-                run_id=run_id,
-                export_type=payload.export_type,
-                summary=summary,
-            )
-        except ValueError:
-            raise HTTPException(status_code=400, detail="unsupported export type") from None
-    if not artifact:
-        raise HTTPException(status_code=400, detail="unsupported export type")
-    store.create_export(
-        export_id=artifact.export_id,
-        case_id=case_id,
-        analysis_run_id=run_id,
-        export_type=payload.export_type,
-        object_uri=artifact.object_uri,
-        user_id=user.id,
-    )
-    return {
-        "export_id": artifact.export_id,
-        "download_url": artifact.object_uri,
-        "expires_in": 900,
-    }
-
-
-@router.post("/{case_id}/feedback")
-def feedback(
-    case_id: str,
-    payload: FeedbackRequest,
-    user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
-) -> dict[str, object]:
-    require_case_permission(
-        store=store,
-        user=user,
-        case_id=case_id,
-        permission="edit",
-        hide_forbidden=False,
-    )
-    record = store.record_feedback(
-        case_id=case_id,
-        analysis_run_id=payload.analysis_run_id,
-        user_id=user.id,
-        target_type=payload.target_type,
-        target_id=payload.target_id,
-        feedback_type=payload.feedback_type,
-        rating=payload.rating,
-        comment=payload.comment,
-        corrected_value=payload.corrected_value,
-    )
-    return {"feedback_id": record.id}

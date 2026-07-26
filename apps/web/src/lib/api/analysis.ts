@@ -6,14 +6,8 @@ import type {
   AnalysisRunResponse,
   CausalGraphResponse,
   CausalSummaryResponse,
-  CausalSummaryUpdateRequest,
-  ExportRequest,
-  ExportResponse,
-  FeedbackRequest,
-  FeedbackResponse,
   JobEventListResponse,
   LogsResponse,
-  StartAnalysisResponse,
   SummaryResponse,
   TemporalResponse,
 } from "../api";
@@ -21,11 +15,10 @@ import type {
 export const runsApi = {
   list: (caseId: string) =>
     request<AnalysisRunListResponse>(`/api/cases/${caseId}/analysis-runs`),
-  start: (caseId: string, payload: AnalysisRunRequest, options?: {background?: boolean}) =>
-    request<StartAnalysisResponse>(`/api/cases/${caseId}/analysis-runs`, {
+  start: (caseId: string, payload: AnalysisRunRequest) =>
+    request<AnalysisRunResponse>(`/api/cases/${caseId}/analysis-runs`, {
       method: "POST",
       body: payload,
-      query: {background: options?.background || undefined},
     }),
   get: (caseId: string, runId: string) =>
     request<AnalysisRunResponse>(`/api/cases/${caseId}/analysis-runs/${runId}`),
@@ -76,26 +69,4 @@ export const reportsApi = {
     request<CausalSummaryResponse>(
       `/api/cases/${caseId}/analysis-runs/${runId}/causal-summary`,
     ),
-  updateCausalSummary: (
-    caseId: string,
-    runId: string,
-    payload: CausalSummaryUpdateRequest,
-  ) =>
-    request<CausalSummaryResponse>(
-      `/api/cases/${caseId}/analysis-runs/${runId}/causal-summary`,
-      {
-        method: "PATCH",
-        body: payload,
-      },
-    ),
-  createExport: (caseId: string, runId: string, payload: ExportRequest) =>
-    request<ExportResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/exports`, {
-      method: "POST",
-      body: payload,
-    }),
-  submitFeedback: (caseId: string, payload: FeedbackRequest) =>
-    request<FeedbackResponse>(`/api/cases/${caseId}/feedback`, {
-      method: "POST",
-      body: payload,
-    }),
 };

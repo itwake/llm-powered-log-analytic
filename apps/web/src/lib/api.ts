@@ -81,12 +81,9 @@ async function uploadRawFile(
 
 export interface UserOut {
   id: string;
-  organization_id: string;
   email: string;
   username: string;
   full_name: string | null;
-  role: string;
-  is_active: boolean;
 }
 
 export interface AuthUserResponse {
@@ -118,7 +115,7 @@ export interface CaseUpdateRequest {
 export interface CaseResponse {
   case_id: string;
   case_key: string;
-  title: string | null;
+  title: string;
   issue_description: string | null;
   status: string;
   product: string | null;
@@ -134,24 +131,6 @@ export interface CaseListResponse {
   total: number;
   page: number;
   page_size: number;
-}
-
-export interface CaseCollaborator {
-  id: string;
-  case_id: string;
-  user_id: string;
-  role: "owner" | "editor" | "viewer" | string;
-  added_by: string | null;
-  email: string | null;
-  username: string | null;
-  full_name: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CaseCollaboratorListResponse {
-  items: CaseCollaborator[];
-  total: number;
 }
 
 export interface UploadRequest {
@@ -173,14 +152,8 @@ export interface UploadContentResponse {
 }
 
 export interface AnalysisRunRequest {
-  input_file_ids?: string[];
-  input_paths?: string[];
+  input_file_ids: string[];
   config?: Record<string, unknown>;
-}
-
-export interface StartAnalysisResponse {
-  analysis_run_id: string;
-  status: string;
 }
 
 export interface AnalysisRunResponse {
@@ -316,7 +289,6 @@ export interface CausalNode {
   first_seen: string | null;
   last_seen: string | null;
   rank_score: number;
-  pagerank_score: number;
   confidence: number;
   evidence_refs: EvidenceRef[];
 }
@@ -332,10 +304,6 @@ export interface CausalEdge {
   lag_seconds: number | null;
   support_windows: number;
   confidence: number;
-  p_value_adj: number | null;
-  lift: number | null;
-  temporal_precedence_score: number | null;
-  correlation_score: number | null;
   evidence: Record<string, unknown>;
   needs_validation: boolean;
 }
@@ -362,46 +330,12 @@ export interface CausalSummaryResponse {
   uncertainties?: string[];
   details?: Record<string, unknown>;
   confidence: number;
-  edited: boolean;
-}
-
-export interface CausalSummaryUpdateRequest {
-  summary_markdown: string;
-  customer_update_markdown?: string | null;
-}
-
-export interface ExportRequest {
-  export_type: "markdown" | "html" | "json";
-  include_sections?: string[];
-  redaction_mode?: string;
-}
-
-export interface ExportResponse {
-  export_id: string;
-  download_url: string;
-  expires_in: number;
-}
-
-export interface FeedbackRequest {
-  analysis_run_id?: string | null;
-  target_type: string;
-  target_id?: string | null;
-  feedback_type: string;
-  rating?: number | null;
-  comment?: string | null;
-  corrected_value?: Record<string, unknown> | null;
-}
-
-export interface FeedbackResponse {
-  feedback_id: string;
 }
 
 export interface ChatRequest {
   message: string;
-  session_id?: string | null;
   case_id?: string | null;
   analysis_run_id?: string | null;
-  attachments?: Record<string, unknown>[];
 }
 
 export interface ChatStreamHandlers {
@@ -409,121 +343,6 @@ export interface ChatStreamHandlers {
   evidence?: (evidenceRefs: EvidenceRef[]) => void;
   done?: (message: string) => void;
   error?: (message: string) => void;
-}
-
-export interface AdminUser {
-  id: string;
-  organization_id: string;
-  email: string;
-  username: string;
-  full_name: string | null;
-  role: "admin" | "engineer" | string;
-  is_active: boolean;
-  created_at: string;
-}
-
-export interface AdminUserListResponse {
-  items: AdminUser[];
-  total: number;
-  offset: number;
-  limit: number;
-}
-
-export interface AdminAuditLog {
-  id: string;
-  action: string;
-  user_id: string | null;
-  target_type: string | null;
-  target_id: string | null;
-  case_id: string | null;
-  metadata: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface AdminAuditLogListResponse {
-  items: AdminAuditLog[];
-  total: number;
-  offset: number;
-  limit: number;
-}
-
-export interface CapabilitiesResponse {
-  models: {
-    enabled: boolean;
-    provider: string;
-    default_model: string | null;
-    supported_models: string[];
-  };
-  views: string[];
-  upload: {
-    max_file_size_bytes: number;
-    supported_extensions: string[];
-  };
-}
-
-export interface AdminSettingsResponse {
-  env: string;
-  retention_days: Record<string, number>;
-  metrics_enabled: boolean;
-}
-
-export interface RetentionRunResponse {
-  audit_logs_deleted: number;
-  raw_log_lines_scrubbed: number;
-  exports_deleted: number;
-  analysis_results_cleared: number;
-  step_artifacts_deleted: number;
-}
-
-export interface AdminPolicyGroup {
-  id: string;
-  organization_id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  member_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AdminPolicyGroupListResponse {
-  items: AdminPolicyGroup[];
-  total: number;
-}
-
-export interface AdminPolicyGroupMember {
-  id: string;
-  group_id: string;
-  user_id: string;
-  role: "owner" | "editor" | "viewer" | string;
-  added_by: string | null;
-  email: string | null;
-  username: string | null;
-  full_name: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AdminPolicyGroupMemberListResponse {
-  items: AdminPolicyGroupMember[];
-  total: number;
-}
-
-export interface AdminCaseGroupAccess {
-  id: string;
-  case_id: string;
-  group_id: string;
-  role: "owner" | "editor" | "viewer" | string;
-  granted_by: string | null;
-  group_name: string | null;
-  group_slug: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AdminCaseGroupAccessListResponse {
-  items: AdminCaseGroupAccess[];
-  total: number;
 }
 
 export const authApi = {
@@ -540,19 +359,7 @@ export const casesApi = {
   update: (caseId: string, payload: CaseUpdateRequest) =>
     request<CaseResponse>(`/api/cases/${caseId}`, {method: "PATCH", body: payload}),
   remove: (caseId: string) =>
-    request<{status: string; deleted: boolean}>(`/api/cases/${caseId}`, {method: "DELETE"}),
-  listCollaborators: (caseId: string) =>
-    request<CaseCollaboratorListResponse>(`/api/cases/${caseId}/collaborators`),
-  upsertCollaborator: (caseId: string, payload: {user_id: string; role: string}) =>
-    request<CaseCollaborator>(`/api/cases/${caseId}/collaborators`, {
-      method: "POST",
-      body: payload,
-    }),
-  removeCollaborator: (caseId: string, userId: string) =>
-    request<{status: string; removed: boolean}>(
-      `/api/cases/${caseId}/collaborators/${userId}`,
-      {method: "DELETE"},
-    ),
+    request<{deleted: boolean}>(`/api/cases/${caseId}`, {method: "DELETE"}),
   requestUpload: (caseId: string, payload: UploadRequest) =>
     request<UploadStartResponse>(`/api/cases/${caseId}/uploads`, {
       method: "POST",
@@ -618,9 +425,3 @@ export const casesApi = {
 export {reportsApi, runsApi} from "./api/analysis";
 
 export {chatApi} from "./api/chat";
-
-export const capabilitiesApi = {
-  get: () => request<CapabilitiesResponse>("/api/capabilities"),
-};
-
-export {adminApi} from "./api/admin";

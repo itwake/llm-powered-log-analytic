@@ -10,7 +10,7 @@ import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { casesApi, runsApi, type UploadProgressEvent } from "@/lib/api";
-import { BACKGROUND_ANALYSIS_CONFIG } from "@/lib/analysisConfig";
+import { ANALYSIS_CONFIG } from "@/lib/analysisConfig";
 import { apiErrorMessage } from "@/lib/format";
 import { FileUploadDropzone } from "@/components/FileUploadDropzone";
 import { Button, Card, SectionHeader } from "@/components/ui";
@@ -81,6 +81,10 @@ export default function NewCasePage() {
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const mode =
       submitter instanceof HTMLButtonElement && submitter.value === "start" ? "start" : "create";
+    if (mode === "start" && selectedFiles.length === 0) {
+      setError("Select at least one log or archive file to analyze.");
+      return;
+    }
     setSubmitMode(mode);
     setError(null);
     setSubmitting(true);
@@ -99,16 +103,13 @@ export default function NewCasePage() {
       });
       window.dispatchEvent(new CustomEvent("logan:case-saved", { detail: created }));
       if (mode === "start") {
-        setSubmitStatus(selectedFiles.length ? "Preparing file upload" : "Starting background analysis");
-        const uploaded = selectedFiles.length
-          ? await casesApi.uploadFiles(created.case_id, selectedFiles, { onProgress: handleUploadProgress })
-          : [];
-        setSubmitStatus("Starting background analysis");
+        setSubmitStatus("Preparing file upload");
+        const uploaded = await casesApi.uploadFiles(created.case_id, selectedFiles, { onProgress: handleUploadProgress });
+        setSubmitStatus("Starting analysis");
         await runsApi.start(created.case_id, {
           input_file_ids: uploaded.map((file) => file.file_id),
-          input_paths: [],
-          config: BACKGROUND_ANALYSIS_CONFIG,
-        }, { background: true });
+          config: ANALYSIS_CONFIG,
+        });
         router.push(`/cases/${created.case_id}`);
         return;
       }
@@ -122,9 +123,7 @@ export default function NewCasePage() {
     }
   }
 
-  const startButtonLabel = selectedFiles.length
-    ? "Create, upload, and analyze files"
-    : "Create and start sample/local analysis";
+  const startButtonLabel = "Create, upload, and analyze files";
 
   return (
     <Stack spacing={2.5}>
@@ -154,9 +153,6 @@ export default function NewCasePage() {
             <Stack spacing={1.5} sx={{ mt: 2 }}>
               <Typography color="text.secondary">
                 Selected log and archive files are uploaded to the local object store before analysis.
-              </Typography>
-              <Typography color="text.secondary">
-                With no files selected, the sample/local action runs the deterministic fixture set.
               </Typography>
             </Stack>
           </Card>
@@ -202,12 +198,12 @@ export default function NewCasePage() {
 
               <FileUploadDropzone
                 accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
-                description="Attach incident evidence now, or continue with sample data when starting analysis."
+                description="Attach the logs or archives to analyze."
                 files={selectedFiles}
                 hint={
                   selectedFiles.length
                     ? `${selectedFiles.length} file(s) selected`
-                    : "Upload logs or continue with the local sample data."
+                    : "Select at least one log or archive to start analysis."
                 }
                 onFilesSelected={setSelectedFiles}
               />
@@ -222,8 +218,8 @@ export default function NewCasePage() {
                 <Button disabled={submitting} name="mode" type="submit" value="create">
                   {submitting && submitMode === "create" ? "Creating" : "Create case"}
                 </Button>
-                <Button disabled={submitting} name="mode" type="submit" value="start" variant="secondary">
-                  {submitting && submitMode === "start" ? "Starting background analysis" : startButtonLabel}
+                <Button disabled={submitting || selectedFiles.length === 0} name="mode" type="submit" value="start" variant="secondary">
+                  {submitting && submitMode === "start" ? "Starting analysis" : startButtonLabel}
                 </Button>
               </Stack>
               {submitting && submitStatus && (

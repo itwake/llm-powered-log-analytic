@@ -1,24 +1,19 @@
 # Data model
 
-`SQLAlchemyStore` is the single persistence implementation. SQLite is used by default and for
-isolated tests; PostgreSQL uses the same domain operations.
+The database contains six application tables:
 
-Core tables cover:
+| Table | Purpose |
+| --- | --- |
+| `users` | SSO-provisioned user profiles |
+| `sessions` | Hashed browser session tokens |
+| `cases` | Incident context and ownership |
+| `raw_files` | Uploaded file metadata and local object URI |
+| `analysis_runs` | Run state, progress, configuration, and final result JSON |
+| `job_events` | Ordered pipeline progress events |
 
-- organizations, users, sessions, credentials, policy groups, and case access
-- cases, collaborators, uploaded raw files, and analysis runs
-- job events and safe step-artifact metadata
-- normalized log lines, templates, annotations, window aggregates, causal nodes and edges
-- summary sections, evidence references, exports, feedback, and audit logs
+An analysis result contains ingested files, normalized log lines, templates, samples, optional
+model annotations, temporal aggregates, a causal graph, and a summary. It is stored once in
+`analysis_runs.result_json` and validated with the `AnalysisResult` Pydantic model when read.
 
-The analysis completion transaction fans one `AnalysisResult` into normalized rows. Report
-endpoints read those rows and keep case/run/organization scoping in every query.
-
-Uploaded bytes and step-manifest bodies are stored on the local filesystem; SQL stores their
-internal file URI, digest, size, content type, and lifecycle metadata.
-
-Raw text has shorter retention than normalized reports. Events, audits, metrics, and manifests
-allow only sanitized metadata. Model inputs, prompts, credentials, tokens, cookies, and encryption
-material are never persisted in those surfaces.
-
-PostgreSQL applies numbered, checksummed migrations in order.
+`apps/api/migrations/0001_initial.sql` is the PostgreSQL schema. SQLAlchemy creates the same schema
+for SQLite development and tests.
