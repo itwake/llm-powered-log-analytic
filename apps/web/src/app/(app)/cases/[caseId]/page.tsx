@@ -11,7 +11,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "@/components/Link";
 import {
   AnalysisRunResponse,
@@ -128,8 +128,10 @@ export default function CaseWorkspacePage() {
   const [caseEnvironment, setCaseEnvironment] = useState("");
   const [caseIncidentStart, setCaseIncidentStart] = useState("");
   const [caseIncidentEnd, setCaseIncidentEnd] = useState("");
+  const loadRequestId = useRef(0);
 
   async function load() {
+    const currentRequest = ++loadRequestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -137,15 +139,22 @@ export default function CaseWorkspacePage() {
         casesApi.get(caseId),
         runsApi.list(caseId),
       ]);
+      if (loadRequestId.current !== currentRequest) {
+        return;
+      }
       setCaseRecord(caseResponse);
       setRuns(runResponse.items);
       if (runResponse.items[0]) {
         setActiveRunId((current) => current || runResponse.items[0].analysis_run_id);
       }
     } catch (caught) {
-      setError(apiErrorMessage(caught));
+      if (loadRequestId.current === currentRequest) {
+        setError(apiErrorMessage(caught));
+      }
     } finally {
-      setLoading(false);
+      if (loadRequestId.current === currentRequest) {
+        setLoading(false);
+      }
     }
   }
 
@@ -189,7 +198,16 @@ export default function CaseWorkspacePage() {
   }
 
   useEffect(() => {
+    setCaseRecord(null);
+    setRuns([]);
+    setActiveRunId(null);
+    setSelectedEvidence(null);
+    setSelectedFiles([]);
+    setUploadItems([]);
     void load();
+    return () => {
+      loadRequestId.current += 1;
+    };
   }, [caseId]);
 
   useEffect(() => {
@@ -441,18 +459,20 @@ export default function CaseWorkspacePage() {
               </Card>
             )}
 
-            <ChatWorkspace
-              caseId={caseId}
-              run={latestRun}
-              onEvidenceSelect={setSelectedEvidence}
-            />
+            {latestRun?.model_provider === "ai_platform" && (
+              <ChatWorkspace
+                caseId={caseId}
+                run={latestRun}
+                onEvidenceSelect={setSelectedEvidence}
+              />
+            )}
 
             <Card sx={{ background: "linear-gradient(180deg, #ffffff, rgba(217,236,255,0.32))" }}>
               <Stack spacing={2}>
                 <SectionHeader eyebrow="Run" title="Analyze evidence" />
                 <FileUploadDropzone
                   accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
-                  description="Select logs or archives to upload into this incident run."
+                  description="Select logs or archives up to 100 MiB each. Expanded archives must also fit within 100 MiB."
                   files={selectedFiles}
                   onFilesSelected={handleFileSelection}
                 />

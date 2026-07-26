@@ -47,6 +47,9 @@ class AIPlatformModelGateway:
         )
         self._cached_token: ResolvedAIPlatformToken | None = None
 
+    async def aclose(self) -> None:
+        await self.http_client.aclose()
+
     async def responses(
         self,
         *,

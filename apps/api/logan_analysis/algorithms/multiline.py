@@ -34,7 +34,7 @@ def is_continuation(line: str, has_previous: bool) -> bool:
         return False
     if STACK_CONTINUATION_RE.search(line) or PANIC_RE.search(line):
         return True
-    return True
+    return False
 
 
 def merge_physical_lines(lines: list[RawPhysicalLine]) -> list[LogEntry]:

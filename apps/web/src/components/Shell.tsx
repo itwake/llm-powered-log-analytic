@@ -4,6 +4,7 @@ import AddCircleIcon from "@mui/icons-material/AddCircle";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
+import LogoutIcon from "@mui/icons-material/Logout";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -135,6 +136,7 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [casesLoading, setCasesLoading] = useState(false);
   const [authState, setAuthState] = useState<"loading" | "signed-in" | "signed-out">("loading");
+  const [signingOut, setSigningOut] = useState(false);
 
   const routeContext = useMemo(() => {
     const [section, routeCaseId] = pathname.split("/").filter(Boolean);
@@ -274,11 +276,21 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
     });
   }
 
+  async function signOut() {
+    setSigningOut(true);
+    try {
+      await authApi.logout();
+    } finally {
+      router.replace("/login");
+      setSigningOut(false);
+    }
+  }
+
   function caseDotColor(status: string): string {
-    if (status === "ready" || status === "completed") {
+    if (status === "completed") {
       return "success.main";
     }
-    if (status === "processing" || status === "uploading" || status === "queued") {
+    if (status === "analyzing" || status === "uploading") {
       return "warning.main";
     }
     if (status === "failed" || status === "cancelled") {
@@ -485,6 +497,17 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
               </Typography>
             </Box>
           )}
+          <Tooltip title="Sign out">
+            <IconButton
+              aria-label="Sign out"
+              disabled={signingOut}
+              size="small"
+              sx={{ color: "#d9e3f5", ml: "auto" }}
+              onClick={() => void signOut()}
+            >
+              <LogoutIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Stack>
       </Box>
 

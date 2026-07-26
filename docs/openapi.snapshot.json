@@ -417,34 +417,26 @@
       "ChatRequest": {
         "properties": {
           "analysis_run_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Analysis Run Id"
+            "minLength": 1,
+            "title": "Analysis Run Id",
+            "type": "string"
           },
           "case_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Case Id"
+            "minLength": 1,
+            "title": "Case Id",
+            "type": "string"
           },
           "message": {
+            "maxLength": 4000,
+            "minLength": 1,
             "title": "Message",
             "type": "string"
           }
         },
         "required": [
-          "message"
+          "message",
+          "case_id",
+          "analysis_run_id"
         ],
         "title": "ChatRequest",
         "type": "object"
@@ -509,7 +501,8 @@
             "type": "string"
           },
           "size_bytes": {
-            "minimum": 0.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 104857600.0,
             "title": "Size Bytes",
             "type": "integer"
           }
@@ -747,6 +740,7 @@
             "required": false,
             "schema": {
               "default": 1,
+              "minimum": 1,
               "title": "Page",
               "type": "integer"
             }
@@ -757,6 +751,8 @@
             "required": false,
             "schema": {
               "default": 25,
+              "maximum": 100,
+              "minimum": 1,
               "title": "Page Size",
               "type": "integer"
             }
@@ -1189,6 +1185,8 @@
             "required": false,
             "schema": {
               "default": 100,
+              "maximum": 500,
+              "minimum": 1,
               "title": "Max Nodes",
               "type": "integer"
             }
@@ -1318,6 +1316,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "format": "date-time",
                   "type": "string"
                 },
                 {
@@ -1334,6 +1333,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "format": "date-time",
                   "type": "string"
                 },
                 {
@@ -1381,6 +1381,8 @@
             "required": false,
             "schema": {
               "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
               "title": "Limit",
               "type": "integer"
             }
@@ -1391,6 +1393,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "minimum": 0,
               "title": "Offset",
               "type": "integer"
             }
@@ -1470,6 +1473,10 @@
             "required": false,
             "schema": {
               "default": "attention",
+              "enum": [
+                "attention",
+                "all"
+              ],
               "title": "Scope",
               "type": "string"
             }
@@ -1480,6 +1487,8 @@
             "required": false,
             "schema": {
               "default": 100,
+              "maximum": 500,
+              "minimum": 1,
               "title": "Limit",
               "type": "integer"
             }
@@ -1490,6 +1499,7 @@
             "required": false,
             "schema": {
               "default": 0,
+              "minimum": 0,
               "title": "Offset",
               "type": "integer"
             }
@@ -1553,6 +1563,12 @@
             "required": false,
             "schema": {
               "default": "golden_signal",
+              "enum": [
+                "golden_signal",
+                "service",
+                "fault_category",
+                "template"
+              ],
               "title": "Group By",
               "type": "string"
             }

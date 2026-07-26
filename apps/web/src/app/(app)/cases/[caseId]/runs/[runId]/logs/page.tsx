@@ -12,7 +12,7 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, EmptyState } from "@/components/ui";
 import { reportsApi } from "@/lib/api";
 import type { LogsResponse } from "@/lib/api";
@@ -25,24 +25,34 @@ export default function LogsPage() {
   const [service, setService] = useState("");
   const [data, setData] = useState<LogsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   async function load() {
+    const currentRequest = ++requestId.current;
     setError(null);
     try {
-      setData(await reportsApi.logs(caseId, runId, {
+      const response = await reportsApi.logs(caseId, runId, {
         q: query || undefined,
         service: service || undefined,
         limit: 500,
         window_start: searchParams.get("window_start") || undefined,
         window_end: searchParams.get("window_end") || undefined,
-      }));
+      });
+      if (requestId.current === currentRequest) {
+        setData(response);
+      }
     } catch (caught) {
-      setError(apiErrorMessage(caught));
+      if (requestId.current === currentRequest) {
+        setError(apiErrorMessage(caught));
+      }
     }
   }
 
   useEffect(() => {
     void load();
+    return () => {
+      requestId.current += 1;
+    };
   }, [caseId, runId]);
 
   return (

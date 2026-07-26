@@ -9,7 +9,7 @@ from typing import Any, Iterator
 
 from logan_analysis.models import AnalysisResult
 from logan_analysis.pipeline import AnalyzeCasePipeline
-from sqlalchemy import URL, create_engine, func, or_, select
+from sqlalchemy import URL, create_engine, event, func, or_, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -50,6 +50,12 @@ def _sqlite_url(database_path: str) -> URL:
     return URL.create("sqlite+pysqlite", database=str(path))
 
 
+def _enable_sqlite_foreign_keys(dbapi_connection: Any, _: Any) -> None:
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 class SQLAlchemyStore:
     def __init__(
         self,
@@ -68,6 +74,8 @@ class SQLAlchemyStore:
         if database_path == ":memory:":
             engine_options["poolclass"] = StaticPool
         self.engine = engine or create_engine(_sqlite_url(database_path), **engine_options)
+        if not event.contains(self.engine, "connect", _enable_sqlite_foreign_keys):
+            event.listen(self.engine, "connect", _enable_sqlite_foreign_keys)
         self.session_factory = sessionmaker(self.engine, expire_on_commit=False, future=True)
         if create_schema:
             Base.metadata.create_all(self.engine)
@@ -417,7 +425,7 @@ class SQLAlchemyStore:
         if not file_paths:
             raise ValueError("at least one completed upload is required")
         run = self.get_analysis_run(run_id)
-        if run is None:
+        if run is None or run.created_by != user_id:
             raise KeyError(run_id)
         case = self.get_case(run.case_id)
         if case is None:
@@ -504,10 +512,9 @@ class SQLAlchemyStore:
             return [self._analysis_run_record(row) for row in rows]
 
     def cancel_analysis_run(self, *, run_id: str, user_id: str) -> AnalysisRunRecord:
-        del user_id
         with self._session() as session:
             row = session.get(tables.AnalysisRun, run_id)
-            if row is None:
+            if row is None or row.created_by != user_id:
                 raise KeyError(run_id)
             if row.status in TERMINAL_ANALYSIS_RUN_STATUSES:
                 return self._analysis_run_record(row)

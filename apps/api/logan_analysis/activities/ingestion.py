@@ -12,6 +12,7 @@ from logan_analysis.models import IngestedFile, RawPhysicalLine
 
 
 SUPPORTED_EXTENSIONS = {".log", ".txt", ".json", ".jsonl", ".zip", ".gz", ".tar", ".tgz"}
+MAX_INPUT_BYTES = 100 * 1024 * 1024
 
 
 def _detect_format(path: Path) -> str:
@@ -62,6 +63,8 @@ def _physical_line(
 def _from_plain_file(path: Path, ingestion_order_start: int) -> tuple[IngestedFile, int]:
     file_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(path.resolve())))
     size_bytes = path.stat().st_size
+    if size_bytes > MAX_INPUT_BYTES:
+        raise ValueError("input exceeds the 100 MiB limit")
     whole_hash = hashlib.sha256()
     lines: list[RawPhysicalLine] = []
     ingestion_order = ingestion_order_start
@@ -101,17 +104,23 @@ def _from_gzip(path: Path, ingestion_order_start: int) -> tuple[IngestedFile, in
     lines: list[RawPhysicalLine] = []
     ingestion_order = ingestion_order_start
     with gzip.open(path, "rb") as handle:
-        for line_number, text in enumerate(_decode_lines(handle), start=1):
-            lines.append(
-                _physical_line(
-                    file_id=file_id,
-                    file_path=path.with_suffix("").name,
-                    line_number=line_number,
-                    text=text,
-                    ingestion_order=ingestion_order,
-                )
+        extracted = handle.read(MAX_INPUT_BYTES + 1)
+    if len(extracted) > MAX_INPUT_BYTES:
+        raise ValueError("archive content exceeds the 100 MiB limit")
+    for line_number, text in enumerate(
+        _decode_lines(extracted.splitlines(keepends=True)),
+        start=1,
+    ):
+        lines.append(
+            _physical_line(
+                file_id=file_id,
+                file_path=path.with_suffix("").name,
+                line_number=line_number,
+                text=text,
+                ingestion_order=ingestion_order,
             )
-            ingestion_order += 1
+        )
+        ingestion_order += 1
     return (
         IngestedFile(
             file_id=file_id,
@@ -130,11 +139,13 @@ def _from_zip(path: Path, ingestion_order_start: int) -> tuple[list[IngestedFile
     files: list[IngestedFile] = []
     ingestion_order = ingestion_order_start
     with zipfile.ZipFile(path) as archive:
-        for name in sorted(archive.namelist()):
-            if name.endswith("/"):
-                continue
+        members = [member for member in archive.infolist() if not member.is_dir()]
+        if sum(member.file_size for member in members) > MAX_INPUT_BYTES:
+            raise ValueError("archive content exceeds the 100 MiB limit")
+        for member in sorted(members, key=lambda item: item.filename):
+            name = member.filename
             file_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"zip:{path.resolve()}:{name}"))
-            raw_bytes = archive.read(name)
+            raw_bytes = archive.read(member)
             lines: list[RawPhysicalLine] = []
             for line_number, text in enumerate(
                 _decode_lines(raw_bytes.splitlines(keepends=True)), start=1
@@ -168,9 +179,10 @@ def _from_tar(path: Path, ingestion_order_start: int) -> tuple[list[IngestedFile
     ingestion_order = ingestion_order_start
     mode = "r:gz" if _detect_format(path) == "tgz" else "r:*"
     with tarfile.open(path, mode) as archive:
-        for member in sorted(archive.getmembers(), key=lambda item: item.name):
-            if not member.isfile():
-                continue
+        members = [member for member in archive.getmembers() if member.isfile()]
+        if sum(member.size for member in members) > MAX_INPUT_BYTES:
+            raise ValueError("archive content exceeds the 100 MiB limit")
+        for member in sorted(members, key=lambda item: item.name):
             extracted = archive.extractfile(member)
             if extracted is None:
                 continue

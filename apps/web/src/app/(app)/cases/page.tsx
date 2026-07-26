@@ -13,7 +13,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import Alert from "@mui/material/Alert";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "@/components/Link";
 import { CaseListResponse, casesApi } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
@@ -25,8 +25,10 @@ export default function CasesPage() {
   const [product, setProduct] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadRequestId = useRef(0);
 
   async function load(nextStatus = status, nextProduct = product) {
+    const currentRequest = ++loadRequestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -35,16 +37,25 @@ export default function CasesPage() {
         product: nextProduct || undefined,
         page_size: 50,
       });
-      setData(response);
+      if (loadRequestId.current === currentRequest) {
+        setData(response);
+      }
     } catch (caught) {
-      setError(apiErrorMessage(caught));
+      if (loadRequestId.current === currentRequest) {
+        setError(apiErrorMessage(caught));
+      }
     } finally {
-      setLoading(false);
+      if (loadRequestId.current === currentRequest) {
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
     void load("", "");
+    return () => {
+      loadRequestId.current += 1;
+    };
   }, []);
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -62,22 +73,22 @@ export default function CasesPage() {
       bg: "rgba(91,92,246,0.12)",
     },
     {
-      label: "Ready",
-      value: String(caseItems.filter((item) => item.status === "ready" || item.status === "completed").length),
-      icon: "RD",
+      label: "Completed",
+      value: String(caseItems.filter((item) => item.status === "completed").length),
+      icon: "CP",
       color: "success.main",
       bg: "rgba(16,185,129,0.14)",
     },
     {
       label: "Processing",
-      value: String(caseItems.filter((item) => ["processing", "uploading", "queued", "running"].includes(item.status)).length),
+      value: String(caseItems.filter((item) => ["analyzing", "uploading"].includes(item.status)).length),
       icon: "PR",
       color: "warning.main",
       bg: "rgba(249,115,22,0.13)",
     },
     {
       label: "Failed / Attention",
-      value: String(caseItems.filter((item) => ["failed", "cancelled", "error"].includes(item.status)).length),
+      value: String(caseItems.filter((item) => ["failed", "cancelled"].includes(item.status)).length),
       icon: "AT",
       color: "error.main",
       bg: "rgba(239,68,68,0.12)",
@@ -162,8 +173,8 @@ export default function CasesPage() {
                 <MenuItem value="">Any</MenuItem>
                 <MenuItem value="created">Created</MenuItem>
                 <MenuItem value="uploading">Uploading</MenuItem>
-                <MenuItem value="processing">Processing</MenuItem>
-                <MenuItem value="ready">Ready</MenuItem>
+                <MenuItem value="analyzing">Analyzing</MenuItem>
+                <MenuItem value="completed">Completed</MenuItem>
                 <MenuItem value="failed">Failed</MenuItem>
                 <MenuItem value="cancelled">Cancelled</MenuItem>
               </Select>

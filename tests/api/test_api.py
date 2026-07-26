@@ -7,10 +7,69 @@ from app.config import Settings
 from app.main import create_app
 from app.store import create_ephemeral_store, sanitize_error_message
 from httpx import ASGITransport, AsyncClient
+from tests.model_gateway_stub import StubModelGateway
 
 
 def test_sanitized_text_accepts_a_length_limit() -> None:
     assert sanitize_error_message("secret=value " + "x" * 20, max_length=12) == "secret=[reda"
+
+
+@pytest.mark.asyncio
+async def test_case_access_is_owner_only() -> None:
+    store = create_ephemeral_store(Settings())
+    owner = store.register_user(
+        email="owner@example.com",
+        username="owner",
+        full_name=None,
+    )
+    other = store.register_user(
+        email="other@example.com",
+        username="other",
+        full_name=None,
+    )
+    case = store.create_case(user_id=owner.id, data={"title": "Private incident"})
+    token, _ = store.create_session(other.id)
+    app = create_app(store=store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"logan_session": token},
+    ) as client:
+        response = await client.get(f"/api/cases/{case.id}")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_chat_rejects_a_run_created_without_llm() -> None:
+    store = create_ephemeral_store(Settings(llm_provider="none"))
+    user = store.register_user(
+        email="owner@example.com",
+        username="owner",
+        full_name=None,
+    )
+    token, _ = store.create_session(user.id)
+    case = store.create_case(user_id=user.id, data={"title": "Incident"})
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+    app = create_app(store=store, model_gateway=StubModelGateway())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"logan_session": token},
+    ) as client:
+        response = await client.post(
+            "/api/chat/stream",
+            json={
+                "message": "What happened?",
+                "case_id": case.id,
+                "analysis_run_id": run.id,
+            },
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "LLM was not enabled for this analysis run"
 
 
 @pytest.mark.asyncio

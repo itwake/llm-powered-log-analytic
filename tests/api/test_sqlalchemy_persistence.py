@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import pytest
+
 from app.config import Settings
 from app.db import Base
 from app.models import tables  # noqa: F401
 from app.sqlalchemy_store import SQLAlchemyStore
+from sqlalchemy.exc import IntegrityError
 
 
 def test_database_contains_only_core_tables() -> None:
@@ -37,3 +40,35 @@ def test_core_records_persist_across_store_instances(tmp_path) -> None:
     assert persisted_case.status == "analyzing"
     assert recreated.get_analysis_run(run.id) is not None
     assert len(recreated.list_analysis_runs(case.id)) == 1
+
+
+def test_sqlite_enforces_foreign_keys() -> None:
+    store = SQLAlchemyStore(
+        app_settings=Settings(),
+        database_path=":memory:",
+    )
+
+    with pytest.raises(IntegrityError):
+        store.create_case(user_id="missing-user", data={"title": "Incident"})
+
+
+def test_only_the_run_owner_can_cancel() -> None:
+    store = SQLAlchemyStore(
+        app_settings=Settings(),
+        database_path=":memory:",
+    )
+    owner = store.register_user(
+        email="owner@example.com",
+        username="owner",
+        full_name=None,
+    )
+    other = store.register_user(
+        email="other@example.com",
+        username="other",
+        full_name=None,
+    )
+    case = store.create_case(user_id=owner.id, data={"title": "Incident"})
+    run = store.create_analysis_run(case_id=case.id, user_id=owner.id)
+
+    with pytest.raises(KeyError):
+        store.cancel_analysis_run(run_id=run.id, user_id=other.id)

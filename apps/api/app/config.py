@@ -111,10 +111,23 @@ class Settings:
         errors: list[str] = []
         if self.normalized_llm_provider not in LLM_PROVIDERS:
             errors.append("LOGAN_LLM_PROVIDER must be ai_platform or none")
-        if self.normalized_llm_provider == "ai_platform" and not (
-            self.ai_platform_chat_host and self.ai_platform_chat_uri
-        ):
-            errors.append("AI Platform chat host and URI are required")
+        if self.normalized_llm_provider == "ai_platform":
+            if not (self.ai_platform_chat_host and self.ai_platform_chat_uri):
+                errors.append("AI Platform chat host and URI are required")
+            has_token = bool((self.ai_platform_token or "").strip())
+            has_exchange_credentials = all(
+                (
+                    (self.ai_platform_ib2b_host or "").strip(),
+                    (self.ai_platform_ib2b_uri or "").strip(),
+                    (self.ai_platform_username or "").strip(),
+                    (self.ai_platform_password or "").strip(),
+                    (self.ai_platform_usercase or "").strip(),
+                )
+            )
+            if not has_token and not has_exchange_credentials:
+                errors.append(
+                    "AI Platform requires a token or complete iB2B credentials"
+                )
         if self.env.strip().lower() == "production":
             if len(self.secret_key.strip()) < 32 or self.secret_key == "change-me":
                 errors.append("LOGAN_SECRET_KEY must contain at least 32 characters")

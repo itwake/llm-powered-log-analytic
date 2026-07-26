@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from logan_analysis.activities.ingestion import MAX_INPUT_BYTES
 from pydantic import BaseModel, Field
 
 
@@ -45,7 +46,7 @@ class CaseResponse(BaseModel):
 class UploadRequest(BaseModel):
     filename: str = Field(min_length=1)
     content_type: str | None = None
-    size_bytes: int = Field(ge=0)
+    size_bytes: int = Field(gt=0, le=MAX_INPUT_BYTES)
 
 
 class UploadStartResponse(BaseModel):

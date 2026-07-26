@@ -1,13 +1,52 @@
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 
 import pytest
+from logan_analysis.activities import ingestion
+from logan_analysis.algorithms.multiline import merge_physical_lines
+from logan_analysis.models import RawPhysicalLine
 from logan_analysis.pipeline import AnalyzeCasePipeline
 
 from tests.model_gateway_stub import StubModelGateway
 
 FIXTURES = Path("tests/fixtures/logs/checkout_incident")
+
+
+def _physical_line(index: int, text: str) -> RawPhysicalLine:
+    return RawPhysicalLine(
+        raw_line_id=f"raw-{index}",
+        file_id="file-1",
+        file_path="plain.log",
+        line_number=index,
+        raw_text=text,
+        sha256=f"hash-{index}",
+        ingestion_order=index,
+    )
+
+
+def test_plain_lines_remain_separate_while_stack_lines_are_merged() -> None:
+    entries = merge_physical_lines(
+        [
+            _physical_line(1, "service started"),
+            _physical_line(2, "request failed"),
+            _physical_line(3, "    at handler.py:10"),
+            _physical_line(4, "request recovered"),
+        ]
+    )
+
+    assert [entry.line_numbers for entry in entries] == [[1], [2, 3], [4]]
+
+
+def test_archive_expansion_is_limited(tmp_path, monkeypatch) -> None:
+    archive_path = tmp_path / "logs.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("service.log", b"more than ten bytes")
+    monkeypatch.setattr(ingestion, "MAX_INPUT_BYTES", 10)
+
+    with pytest.raises(ValueError, match="archive content exceeds"):
+        ingestion.ingest_paths([archive_path])
 
 
 @pytest.mark.asyncio

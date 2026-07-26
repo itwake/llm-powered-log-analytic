@@ -23,9 +23,19 @@ export default function CausalGraphPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+    setData(null);
+    setError(null);
     reportsApi.causalGraph(caseId, runId, { max_nodes: 100, min_confidence: 0.35 })
-      .then(setData)
-      .catch((caught) => setError(apiErrorMessage(caught)));
+      .then((response) => {
+        if (active) setData(response);
+      })
+      .catch((caught) => {
+        if (active) setError(apiErrorMessage(caught));
+      });
+    return () => {
+      active = false;
+    };
   }, [caseId, runId]);
 
   const labels = new Map(data?.nodes.map((node) => [node.id, node.label]) || []);

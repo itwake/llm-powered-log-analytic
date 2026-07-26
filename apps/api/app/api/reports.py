@@ -1,21 +1,16 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from logan_analysis.models import OFFENDING_SIGNALS
+from pydantic import AwareDatetime
 
 from app.dependencies import current_user, get_store, require_case_owner
 from app.store import Store, UserRecord
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
-
-
-def _parse_dt(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def _require_result(store: Store, case_id: str, run_id: str):
@@ -30,9 +25,9 @@ def data_summary(
     case_id: str,
     run_id: str,
     golden_signal: str | None = None,
-    scope: str = "attention",
-    limit: int = 100,
-    offset: int = 0,
+    scope: Literal["attention", "all"] = "attention",
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     user: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, object]:
@@ -42,18 +37,17 @@ def data_summary(
         case_id=case_id,
     )
     result = _require_result(store, case_id, run_id)
-    summary_scope = "all" if scope == "all" else "attention"
     annotations = {annotation.template_id: annotation for annotation in result.annotations}
     samples = {sample.template_id: sample for sample in result.samples}
     items = []
     for template in result.templates:
         annotation = annotations.get(template.template_id)
         signal = annotation.golden_signal if annotation else "unknown"
-        if not annotation and summary_scope != "all":
+        if not annotation and scope != "all":
             continue
         if golden_signal and signal != golden_signal:
             continue
-        if not golden_signal and summary_scope == "attention" and signal not in OFFENDING_SIGNALS:
+        if not golden_signal and scope == "attention" and signal not in OFFENDING_SIGNALS:
             continue
         sample = samples.get(template.template_id)
         items.append(
@@ -90,7 +84,7 @@ def data_summary(
             "offending_templates": offending_total,
             "visible_templates": total,
             "annotated_templates": len(annotations),
-            "scope": summary_scope,
+            "scope": scope,
             "estimated_review_reduction": 1 - (total / raw_count) if raw_count else 0,
         },
     }
@@ -100,7 +94,7 @@ def data_summary(
 def temporal(
     case_id: str,
     run_id: str,
-    group_by: str = "golden_signal",
+    group_by: Literal["golden_signal", "service", "fault_category", "template"] = "golden_signal",
     user: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, object]:
@@ -140,12 +134,12 @@ def temporal(
 def logs(
     case_id: str,
     run_id: str,
-    window_start: str | None = None,
-    window_end: str | None = None,
+    window_start: AwareDatetime | None = None,
+    window_end: AwareDatetime | None = None,
     q: str | None = None,
     service: str | None = None,
-    limit: int = 200,
-    offset: int = 0,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     user: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, object]:
@@ -154,14 +148,12 @@ def logs(
         user=user,
         case_id=case_id,
     )
-    start = _parse_dt(window_start)
-    end = _parse_dt(window_end)
     result = _require_result(store, case_id, run_id)
     rows = result.normalized_logs
-    if start:
-        rows = [line for line in rows if line.timestamp and line.timestamp >= start]
-    if end:
-        rows = [line for line in rows if line.timestamp and line.timestamp <= end]
+    if window_start:
+        rows = [line for line in rows if line.timestamp and line.timestamp >= window_start]
+    if window_end:
+        rows = [line for line in rows if line.timestamp and line.timestamp <= window_end]
     if q:
         lowered = q.lower()
         rows = [
@@ -219,7 +211,7 @@ def logs(
 def causal_graph(
     case_id: str,
     run_id: str,
-    max_nodes: int = 100,
+    max_nodes: int = Query(100, ge=1, le=500),
     min_confidence: float = Query(0.0, ge=0, le=1),
     user: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),

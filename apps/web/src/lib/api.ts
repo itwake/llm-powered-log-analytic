@@ -1,11 +1,17 @@
 import {
+  API_BASE_URL,
+  ApiError,
   apiUrl,
+  errorMessage,
+  parseResponse,
   parseXhrPayload,
   request,
   xhrUpload,
 } from "./api/http";
 
 export {API_BASE_URL, ApiError} from "./api/http";
+
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 export type UploadProgressPhase =
   | "queued"
@@ -314,8 +320,8 @@ export interface CausalSummaryResponse {
 
 export interface ChatRequest {
   message: string;
-  case_id?: string | null;
-  analysis_run_id?: string | null;
+  case_id: string;
+  analysis_run_id: string;
 }
 
 export interface ChatStreamHandlers {
@@ -346,7 +352,6 @@ export const casesApi = {
       body: payload,
     }),
   uploadContent: async (
-    caseId: string,
     upload: UploadStartResponse,
     file: File,
     options?: UploadContentOptions,
@@ -365,6 +370,14 @@ export const casesApi = {
       onProgress?: UploadProgressCallback;
     },
   ) => {
+    for (const file of files) {
+      if (file.size <= 0) {
+        throw new Error(`${file.name || "Selected file"} is empty`);
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        throw new Error(`${file.name || "Selected file"} exceeds the 100 MiB limit`);
+      }
+    }
     const uploaded: UploadContentResponse[] = [];
     for (const [index, file] of files.entries()) {
       const context: UploadProgressContext = {
@@ -387,7 +400,7 @@ export const casesApi = {
         phase: "uploading",
         bytesSent: 0,
       });
-      const completed = await casesApi.uploadContent(caseId, upload, file, {
+      const completed = await casesApi.uploadContent(upload, file, {
         ...context,
       });
       emitUploadProgress(context, file, {
@@ -402,6 +415,147 @@ export const casesApi = {
   },
 };
 
-export {reportsApi, runsApi} from "./api/analysis";
+export const runsApi = {
+  list: (caseId: string) =>
+    request<AnalysisRunListResponse>(`/api/cases/${caseId}/analysis-runs`),
+  start: (caseId: string, payload: AnalysisRunRequest) =>
+    request<AnalysisRunResponse>(`/api/cases/${caseId}/analysis-runs`, {
+      method: "POST",
+      body: payload,
+    }),
+  get: (caseId: string, runId: string) =>
+    request<AnalysisRunResponse>(`/api/cases/${caseId}/analysis-runs/${runId}`),
+  cancel: (caseId: string, runId: string) =>
+    request<AnalysisRunResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/cancel`, {
+      method: "POST",
+    }),
+};
 
-export {chatApi} from "./api/chat";
+export const reportsApi = {
+  summary: (
+    caseId: string,
+    runId: string,
+    query?: {golden_signal?: string; scope?: "attention" | "all"; limit?: number; offset?: number},
+  ) =>
+    request<SummaryResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/summary`, {query}),
+  temporal: (
+    caseId: string,
+    runId: string,
+    query?: {
+      group_by?: "golden_signal" | "service" | "fault_category" | "template";
+    },
+  ) =>
+    request<TemporalResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/temporal`, {query}),
+  logs: (
+    caseId: string,
+    runId: string,
+    query?: {
+      window_start?: string;
+      window_end?: string;
+      q?: string;
+      service?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ) =>
+    request<LogsResponse>(`/api/cases/${caseId}/analysis-runs/${runId}/logs`, {query}),
+  causalGraph: (
+    caseId: string,
+    runId: string,
+    query?: {max_nodes?: number; min_confidence?: number},
+  ) =>
+    request<CausalGraphResponse>(
+      `/api/cases/${caseId}/analysis-runs/${runId}/causal-graph`,
+      {query},
+    ),
+  causalSummary: (caseId: string, runId: string) =>
+    request<CausalSummaryResponse>(
+      `/api/cases/${caseId}/analysis-runs/${runId}/causal-summary`,
+    ),
+};
+
+export const chatApi = {
+  stream: async (
+    payload: ChatRequest,
+    handlers: ChatStreamHandlers,
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      credentials: "include",
+      headers: {"content-type": "application/json"},
+      signal,
+    });
+    if (!response.ok) {
+      const errorPayload = await parseResponse(response);
+      throw new ApiError(response.status, errorMessage(response.status, errorPayload), errorPayload);
+    }
+    if (!response.body) {
+      throw new Error("Streaming response body is unavailable");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, {stream: true});
+      buffer = dispatchSseFrames(buffer, handlers);
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      dispatchSseFrame(buffer, handlers);
+    }
+  },
+};
+
+function dispatchSseFrames(buffer: string, handlers: ChatStreamHandlers): string {
+  const normalized = buffer.replace(/\r\n/g, "\n");
+  const frames = normalized.split("\n\n");
+  const remainder = frames.pop() || "";
+  for (const frame of frames) {
+    dispatchSseFrame(frame, handlers);
+  }
+  return remainder;
+}
+
+function dispatchSseFrame(frame: string, handlers: ChatStreamHandlers): void {
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const line of frame.split(/\r?\n/)) {
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      const data = line.slice(5);
+      dataLines.push(data.startsWith(" ") ? data.slice(1) : data);
+    }
+  }
+  if (dataLines.length === 0) {
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(dataLines.join("\n"));
+  } catch {
+    parsed = {};
+  }
+  if (!parsed || typeof parsed !== "object") {
+    return;
+  }
+  const payload = parsed as Record<string, unknown>;
+
+  if (event === "delta" && typeof payload.delta === "string") {
+    handlers.delta?.(payload.delta);
+  } else if (event === "evidence" && Array.isArray(payload.evidence_refs)) {
+    handlers.evidence?.(payload.evidence_refs as EvidenceRef[]);
+  } else if (event === "done" && typeof payload.message === "string") {
+    handlers.done?.(payload.message);
+  } else if (event === "error" && typeof payload.message === "string") {
+    handlers.error?.(payload.message);
+  }
+}

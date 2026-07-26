@@ -14,7 +14,6 @@ from app.store import Store, UserRecord, sanitize_error_message
 
 
 router = APIRouter(prefix="/api", tags=["runtime"])
-CHAT_FALLBACK_MESSAGE = "No case analysis context was found for this chat request."
 CHAT_INSTRUCTIONS = (
     "You are assisting with an incident analysis workspace. Answer cautiously and stay "
     "evidence-bound. Treat causal chains as candidates that need validation. Use only the "
@@ -29,23 +28,21 @@ async def chat_stream(
     store: Store = Depends(get_store),
     gateway: Any = Depends(get_model_gateway),
 ) -> StreamingResponse:
-    if payload.case_id and payload.analysis_run_id:
-        require_case_owner(
-            store=store,
-            user=user,
-            case_id=payload.case_id,
-        )
+    require_case_owner(
+        store=store,
+        user=user,
+        case_id=payload.case_id,
+    )
     if gateway is None:
         raise HTTPException(status_code=409, detail="LLM is disabled")
+    run = store.get_analysis_run(payload.analysis_run_id)
+    if run is None or run.case_id != payload.case_id:
+        raise HTTPException(status_code=404, detail="analysis run not found")
+    if run.model_provider != "ai_platform":
+        raise HTTPException(status_code=409, detail="LLM was not enabled for this analysis run")
+    context = _analysis_chat_context(store, payload)
 
     async def events() -> AsyncIterator[str]:
-        context = _analysis_chat_context(store, payload)
-        if context is None:
-            yield _sse_frame("delta", {"delta": CHAT_FALLBACK_MESSAGE})
-            yield _sse_frame("evidence", {"evidence_refs": []})
-            yield _sse_frame("done", {"message": CHAT_FALLBACK_MESSAGE})
-            return
-
         evidence_refs = context["evidence_refs"]
         message_parts: list[str] = []
         try:
@@ -105,12 +102,10 @@ def _sse_frame(event: str, data: dict[str, Any]) -> str:
 def _analysis_chat_context(
     store: Store,
     payload: ChatRequest,
-) -> dict[str, Any] | None:
-    if not payload.case_id or not payload.analysis_run_id:
-        return None
+) -> dict[str, Any]:
     result = store.get_analysis_result(payload.case_id, payload.analysis_run_id)
     if result is None:
-        return None
+        raise HTTPException(status_code=409, detail="analysis result is not ready")
 
     evidence_refs = [ref.model_dump(mode="json") for ref in result.causal_summary.evidence_refs[:5]]
     return {

@@ -9,7 +9,6 @@ from typing import Any
 from logan_analysis.models import AnalysisResult
 
 TERMINAL_ANALYSIS_RUN_STATUSES = {"completed", "failed", "cancelled"}
-CANCELLABLE_ANALYSIS_RUN_STATUSES = {"queued", "processing", "running"}
 
 
 class AnalysisRunCancelled(RuntimeError):

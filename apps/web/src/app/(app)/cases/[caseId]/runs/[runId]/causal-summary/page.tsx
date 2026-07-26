@@ -27,6 +27,9 @@ export default function CausalSummaryPage() {
 
   useEffect(() => {
     let active = true;
+    setData(null);
+    setSelectedEvidence(null);
+    setError(null);
     reportsApi.causalSummary(caseId, runId)
       .then((response) => {
         if (!active) return;

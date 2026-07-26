@@ -27,11 +27,19 @@ export default function SummaryPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
     setData(null);
     setError(null);
     reportsApi.summary(caseId, runId, { scope, limit: 200 })
-      .then(setData)
-      .catch((caught) => setError(apiErrorMessage(caught)));
+      .then((response) => {
+        if (active) setData(response);
+      })
+      .catch((caught) => {
+        if (active) setError(apiErrorMessage(caught));
+      });
+    return () => {
+      active = false;
+    };
   }, [caseId, runId, scope]);
 
   return (

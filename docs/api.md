@@ -19,6 +19,9 @@ The API is served under `/api`. Interactive OpenAPI documentation is available a
 - `POST /api/cases/{case_id}/uploads`
 - `PUT /api/cases/{case_id}/uploads/{file_id}/content`
 
+Each upload must be between 1 byte and 100 MiB. The expanded contents of an archive must also fit
+within 100 MiB.
+
 ## Analysis runs
 
 - `POST /api/cases/{case_id}/analysis-runs`

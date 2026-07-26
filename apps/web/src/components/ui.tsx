@@ -22,21 +22,24 @@ interface InfoGridRow {
 }
 
 export function statusTone(status: string | null | undefined): BadgeTone {
-  if (status === "ready" || status === "completed" || status === "success") {
+  if (status === "completed") {
     return "success";
   }
-  if (status === "failed" || status === "error" || status === "cancelled") {
+  if (status === "failed" || status === "cancelled") {
     return "danger";
   }
   if (
+    status === "analyzing" ||
+    status === "hashing" ||
+    status === "preparing" ||
     status === "processing" ||
     status === "uploading" ||
     status === "queued" ||
-    status === "running"
+    status === "verifying"
   ) {
     return "warning";
   }
-  if (status === "created" || status === "pending") {
+  if (status === "created") {
     return "info";
   }
   return "neutral";

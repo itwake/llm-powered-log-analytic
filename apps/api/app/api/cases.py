@@ -4,7 +4,8 @@ import asyncio
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from logan_analysis.activities.ingestion import MAX_INPUT_BYTES
 
 from app.dependencies import current_user, get_model_gateway, get_store, require_case_owner
 from app.schemas.case import (
@@ -113,13 +114,11 @@ def create_case(
 def list_cases(
     status: str | None = None,
     product: str | None = None,
-    page: int = 1,
-    page_size: int = 25,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
     user: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),
 ) -> dict[str, object]:
-    page = max(page, 1)
-    page_size = min(max(page_size, 1), 100)
     items, total = store.list_cases_for_user(
         user,
         status=status,
@@ -231,7 +230,14 @@ async def upload_content(
         case_id=case_id,
     )
     upload = _upload_for_case(store, case_id, file_id)
-    content = await request.body()
+    chunks: list[bytes] = []
+    received_bytes = 0
+    async for chunk in request.stream():
+        received_bytes += len(chunk)
+        if received_bytes > MAX_INPUT_BYTES:
+            raise HTTPException(status_code=413, detail="upload exceeds the 100 MiB limit")
+        chunks.append(chunk)
+    content = b"".join(chunks)
     sha256, size_bytes = digest_bytes(content)
     if upload.size_bytes != size_bytes:
         raise HTTPException(status_code=400, detail="upload size does not match request")

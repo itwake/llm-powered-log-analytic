@@ -13,17 +13,28 @@ import { reportsApi } from "@/lib/api";
 import type { TemporalResponse } from "@/lib/api";
 import { apiErrorMessage, formatDateTime } from "@/lib/format";
 
+type TemporalGroup = "golden_signal" | "service" | "fault_category" | "template";
+
 export default function TemporalPage() {
   const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
-  const [groupBy, setGroupBy] = useState("golden_signal");
+  const [groupBy, setGroupBy] = useState<TemporalGroup>("golden_signal");
   const [data, setData] = useState<TemporalResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
     setData(null);
+    setError(null);
     reportsApi.temporal(caseId, runId, { group_by: groupBy })
-      .then(setData)
-      .catch((caught) => setError(apiErrorMessage(caught)));
+      .then((response) => {
+        if (active) setData(response);
+      })
+      .catch((caught) => {
+        if (active) setError(apiErrorMessage(caught));
+      });
+    return () => {
+      active = false;
+    };
   }, [caseId, runId, groupBy]);
 
   const maxCount = useMemo(
@@ -38,7 +49,13 @@ export default function TemporalPage() {
           <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">Temporal Activity</Typography>
           <Typography color="text.secondary">Counts grouped into analysis windows.</Typography>
         </Box>
-        <TextField select label="Group by" size="small" value={groupBy} onChange={(event) => setGroupBy(event.target.value)}>
+        <TextField
+          select
+          label="Group by"
+          size="small"
+          value={groupBy}
+          onChange={(event) => setGroupBy(event.target.value as TemporalGroup)}
+        >
           <MenuItem value="golden_signal">Signal</MenuItem>
           <MenuItem value="service">Service</MenuItem>
           <MenuItem value="fault_category">Fault category</MenuItem>

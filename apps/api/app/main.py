@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from logan_analysis.ports import ModelGateway
@@ -11,12 +15,26 @@ from app.services.model_gateway_factory import create_model_gateway
 from app.store import Store, create_store
 
 
+@asynccontextmanager
+async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    yield
+    tasks = list(getattr(app.state, "analysis_tasks", {}).values())
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    close_gateway = getattr(app.state.model_gateway, "aclose", None)
+    if callable(close_gateway):
+        await close_gateway()
+
+
 def create_app(
     store: Store | None = None,
     *,
     model_gateway: ModelGateway | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="LogAn Platform API", version="0.1.0")
+    app = FastAPI(title="LogAn Platform API", version="0.1.0", lifespan=app_lifespan)
 
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, str]:
@@ -25,7 +43,11 @@ def create_app(
     app.state.store = store or create_store()
     validate_runtime_settings(app.state.store.settings)
     configure_logging(app.state.store.settings)
-    app.state.model_gateway = model_gateway or create_model_gateway(app.state.store.settings)
+    app.state.model_gateway = (
+        model_gateway
+        if model_gateway is not None
+        else create_model_gateway(app.state.store.settings)
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=app.state.store.settings.cors_origins(),
