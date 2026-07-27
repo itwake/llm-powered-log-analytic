@@ -25,7 +25,8 @@ JSON is the source for every report endpoint, so report reads do not maintain a 
 schema.
 
 Uploaded files use `file://` object URIs rooted at `LOGAN_LOCAL_OBJECT_STORE_DIR`. Metadata and
-analysis results use the SQLite database at `LOGAN_DATABASE_PATH`.
+analysis results use the SQLite database at `LOGAN_DATABASE_PATH`. Alembic owns the database
+schema and applies ordered revisions before the API process starts.
 
 The browser authenticates with an HTTP-only session cookie issued after the SSO callback. The web
 application sends API requests directly to `NEXT_PUBLIC_API_BASE_URL`.

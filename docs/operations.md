@@ -7,7 +7,17 @@
 ## Data
 
 The default SQLite database is `.logan/logan.db`. Uploaded files are under
-`.logan/object-store`. Back up both locations together.
+`.logan/object-store`. Back up both locations together. The `alembic_version` table records the
+schema revision.
+
+Apply migrations before starting a new API version:
+
+```bash
+python -m alembic -c apps/api/alembic.ini upgrade head
+```
+
+The API container runs this command before Uvicorn. A migration failure prevents the API process
+from starting.
 
 ## Deployment
 

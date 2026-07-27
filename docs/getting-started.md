@@ -41,6 +41,7 @@ in separate PowerShell windows:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
+python -m alembic -c apps/api/alembic.ini upgrade head
 python -m uvicorn app.main:app --reload --env-file .env --app-dir apps/api --host 127.0.0.1 --port 8000
 ```
 
@@ -65,6 +66,7 @@ in separate terminals:
 
 ```bash
 source .venv/bin/activate
+python -m alembic -c apps/api/alembic.ini upgrade head
 python -m uvicorn app.main:app --reload --env-file .env --app-dir apps/api --host 127.0.0.1 --port 8000
 ```
 
@@ -82,9 +84,9 @@ Create `.env` first, then run:
 docker compose up --build
 ```
 
-Compose starts the same two applications and stores the SQLite database and uploaded files
-in the `logan-data` volume. `NEXT_PUBLIC_API_BASE_URL` is a web build argument, so rebuild
-the web image after changing it.
+Compose applies pending database migrations, starts the two applications, and stores the SQLite
+database and uploaded files in the `logan-data` volume. `NEXT_PUBLIC_API_BASE_URL` is a web build
+argument, so rebuild the web image after changing it.
 
 ## LLM mode
 

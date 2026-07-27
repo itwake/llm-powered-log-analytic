@@ -32,6 +32,7 @@ npm ci
 Configure the SSO values in `.env`, then start the API and web app in separate terminals:
 
 ```bash
+python -m alembic -c apps/api/alembic.ini upgrade head
 python -m uvicorn app.main:app --reload --env-file .env --app-dir apps/api --host 127.0.0.1 --port 8000
 npm run dev --workspace @logan/web
 ```
@@ -52,6 +53,7 @@ The API reads `.env` at startup through the local command above. The web app use
 
 SQLite data and uploaded files are stored under `.logan/` by default. Set
 `LOGAN_DATABASE_PATH` and `LOGAN_LOCAL_OBJECT_STORE_DIR` to use other local paths.
+Alembic migrations in `apps/api/migrations` manage the database schema.
 
 ## Development
 

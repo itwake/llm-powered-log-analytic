@@ -16,7 +16,11 @@ Store = SQLAlchemyStore
 
 
 def create_ephemeral_store(app_settings: Settings = settings) -> Store:
-    return Store(app_settings=app_settings, database_path=":memory:")
+    return Store(
+        app_settings=app_settings,
+        database_path=":memory:",
+        create_schema=True,
+    )
 
 
 def create_store(app_settings: Settings = settings) -> Store:

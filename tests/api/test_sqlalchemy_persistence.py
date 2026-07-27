@@ -22,7 +22,11 @@ def test_database_contains_only_core_tables() -> None:
 def test_core_records_persist_across_store_instances(tmp_path) -> None:
     database_path = str(tmp_path / "logan.db")
     settings = Settings(database_path=database_path)
-    store = SQLAlchemyStore(app_settings=settings, database_path=database_path)
+    store = SQLAlchemyStore(
+        app_settings=settings,
+        database_path=database_path,
+        create_schema=True,
+    )
     user = store.register_user(
         email="owner@example.com",
         username="owner",
@@ -46,6 +50,7 @@ def test_sqlite_enforces_foreign_keys() -> None:
     store = SQLAlchemyStore(
         app_settings=Settings(),
         database_path=":memory:",
+        create_schema=True,
     )
 
     with pytest.raises(IntegrityError):
@@ -56,6 +61,7 @@ def test_only_the_run_owner_can_cancel() -> None:
     store = SQLAlchemyStore(
         app_settings=Settings(),
         database_path=":memory:",
+        create_schema=True,
     )
     owner = store.register_user(
         email="owner@example.com",

@@ -2,7 +2,7 @@ COMPOSE ?= docker compose
 PYTHON ?= python3
 NPM ?= npm
 
-.PHONY: setup up down test lint typecheck check api web openapi
+.PHONY: setup up down test lint typecheck check migrate api web openapi
 
 setup:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -25,7 +25,10 @@ typecheck:
 
 check: lint typecheck test
 
-api:
+migrate:
+	$(PYTHON) -m alembic -c apps/api/alembic.ini upgrade head
+
+api: migrate
 	$(PYTHON) -m uvicorn app.main:app --reload --env-file .env --app-dir apps/api --host 127.0.0.1 --port 8000
 
 web:

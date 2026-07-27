@@ -14,4 +14,21 @@ An analysis result contains ingested files, normalized log lines, templates, sam
 model annotations, temporal aggregates, a causal graph, and a summary. It is stored once in
 `analysis_runs.result_json` and validated with the `AnalysisResult` Pydantic model when read.
 
-SQLAlchemy creates the SQLite schema when the API starts.
+## Schema migrations
+
+Alembic revisions in `apps/api/migrations/versions` are the source of truth for the SQLite
+schema. Apply every pending revision before starting the API:
+
+```bash
+python -m alembic -c apps/api/alembic.ini upgrade head
+```
+
+After changing the SQLAlchemy models, generate and review a revision:
+
+```bash
+python -m alembic -c apps/api/alembic.ini revision --autogenerate -m "describe change"
+python -m alembic -c apps/api/alembic.ini check
+```
+
+Every committed revision must define both `upgrade()` and `downgrade()`. Application startup does
+not create or alter file-backed database tables.

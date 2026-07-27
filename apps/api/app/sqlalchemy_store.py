@@ -63,7 +63,7 @@ class SQLAlchemyStore:
         app_settings: Settings = settings,
         database_path: str,
         engine: Engine | None = None,
-        create_schema: bool = True,
+        create_schema: bool = False,
     ) -> None:
         self.settings = app_settings
         self.database_path = database_path
