@@ -51,3 +51,11 @@ def test_web_manifest_matches_lockfile() -> None:
     locked = lockfile["packages"]["apps/web"]
     assert locked["dependencies"] == manifest["dependencies"]
     assert locked["devDependencies"] == manifest["devDependencies"]
+
+
+def test_windows_launcher_starts_current_applications() -> None:
+    launcher = (ROOT / "scripts/local.bat").read_text(encoding="utf-8").lower()
+    assert "-m alembic -c apps/api/alembic.ini upgrade head" in launcher
+    assert "-m uvicorn app.main:app" in launcher
+    assert "npm run dev --workspace @logan/web" in launcher
+    assert "npm ci" in launcher

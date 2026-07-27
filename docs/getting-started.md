@@ -19,7 +19,23 @@ http://localhost:8000/api/auth/sso/callback
 
 ## Windows PowerShell
 
-From the repository root:
+From Command Prompt or PowerShell, the quickest setup is:
+
+```bat
+scripts\local.bat
+```
+
+The launcher creates `.venv`, installs missing Python and npm dependencies, copies `.env.example`
+when `.env` is missing, applies Alembic migrations, opens the web application in a new window, and
+runs the API in the current window. Configure the SSO values in `.env` before signing in.
+
+Available options are:
+
+- `-ApiOnly`
+- `-WebOnly`
+- `-SkipInstall`
+
+For a manual setup, run the following from the repository root:
 
 ```powershell
 python -m venv .venv

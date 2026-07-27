@@ -22,6 +22,18 @@ candidates, and a summary.
 
 Requirements: Python 3.11+, Node.js 22+, and an OAuth-compatible SSO application.
 
+On Windows, the local launcher creates the virtual environment, installs missing dependencies,
+copies `.env.example` when needed, applies database migrations, and starts both applications:
+
+```bat
+scripts\local.bat
+```
+
+Configure the SSO values in `.env` before signing in. Use `-ApiOnly`, `-WebOnly`, or
+`-SkipInstall` when only part of the startup flow is needed.
+
+For a manual setup:
+
 ```bash
 cp .env.example .env
 python -m venv .venv
