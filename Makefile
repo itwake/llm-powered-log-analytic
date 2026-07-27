@@ -19,6 +19,7 @@ test:
 
 lint:
 	$(PYTHON) -m ruff check apps tests scripts
+	$(NPM) run lint
 
 typecheck:
 	$(NPM) run typecheck

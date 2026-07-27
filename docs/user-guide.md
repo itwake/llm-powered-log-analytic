@@ -92,7 +92,8 @@ need manual review.
 
 ## Temporal View
 
-Temporal View displays counts over time. Group the series by:
+Temporal View displays aligned log counts as a stacked time chart. Use the legend and zoom controls
+to compare series, or select a bar to open the matching log window. Group the series by:
 
 - golden signal
 - service
@@ -111,8 +112,10 @@ physical line number. Evidence links from other views open the corresponding log
 
 ## Causal Graph
 
-Causal Graph lists templates with offending signals and supported directed associations. Nodes are
-ranked as root-cause candidates; edges show confidence, lag, support, and evidence components.
+Causal Graph draws templates and their strongest supported directed associations. Node size
+represents causal rank, red rings identify root-cause candidates, and dashed edges require
+validation. Select a node or edge for details; the table below the graph contains the complete
+edge list with confidence, lag, and support.
 
 Treat the graph as a prioritized validation plan. It reports temporal associations and never
 declares a proven root cause.

@@ -35,6 +35,10 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install web dependencies
         run: npm ci
+      - name: Lint web
+        run: npm run lint --workspace @logan/web
+      - name: Typecheck web
+        run: npm run typecheck --workspace @logan/web
       - name: Build web
         run: npm run build --workspace @logan/web
 

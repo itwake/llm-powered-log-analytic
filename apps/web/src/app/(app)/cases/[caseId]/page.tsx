@@ -11,7 +11,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "@/components/Link";
 import {
   AnalysisRunResponse,
@@ -130,7 +130,7 @@ export default function CaseWorkspacePage() {
   const [caseIncidentEnd, setCaseIncidentEnd] = useState("");
   const loadRequestId = useRef(0);
 
-  async function load() {
+  const load = useCallback(async () => {
     const currentRequest = ++loadRequestId.current;
     setLoading(true);
     setError(null);
@@ -156,9 +156,9 @@ export default function CaseWorkspacePage() {
         setLoading(false);
       }
     }
-  }
+  }, [caseId]);
 
-  function upsertRun(run: AnalysisRunResponse) {
+  const upsertRun = useCallback((run: AnalysisRunResponse) => {
     setRuns((current) => {
       const existing = current.findIndex((item) => item.analysis_run_id === run.analysis_run_id);
       const next = existing >= 0 ? [...current] : [run, ...current];
@@ -167,13 +167,13 @@ export default function CaseWorkspacePage() {
       }
       return next.sort((left, right) => right.run_number - left.run_number);
     });
-  }
+  }, []);
 
-  async function refreshRunProgress(runId: string) {
+  const refreshRunProgress = useCallback(async (runId: string) => {
     const run = await runsApi.get(caseId, runId);
     upsertRun(run);
     return run;
-  }
+  }, [caseId, upsertRun]);
 
   function handleUploadProgress(event: UploadProgressEvent) {
     setUploadItems((current) => {
@@ -208,7 +208,7 @@ export default function CaseWorkspacePage() {
     return () => {
       loadRequestId.current += 1;
     };
-  }, [caseId]);
+  }, [load]);
 
   useEffect(() => {
     if (!caseRecord) {
@@ -225,17 +225,18 @@ export default function CaseWorkspacePage() {
 
   const latestRun = runs[0] || null;
   const trackedRun = runs.find((run) => run.analysis_run_id === activeRunId) || latestRun;
+  const trackedRunId = trackedRun?.analysis_run_id;
+  const trackedRunStatus = trackedRun?.status;
 
   useEffect(() => {
-    if (!trackedRun) {
+    if (!trackedRunId || !trackedRunStatus) {
       return;
     }
-    const runId = trackedRun.analysis_run_id;
     function refresh() {
-      void refreshRunProgress(runId).catch(() => undefined);
+      void refreshRunProgress(trackedRunId).catch(() => undefined);
     }
     refresh();
-    if (terminalRunStatus(trackedRun.status)) {
+    if (terminalRunStatus(trackedRunStatus)) {
       return;
     }
     const timer = window.setInterval(() => {
@@ -244,7 +245,7 @@ export default function CaseWorkspacePage() {
     return () => {
       window.clearInterval(timer);
     };
-  }, [caseId, trackedRun?.analysis_run_id, trackedRun?.status]);
+  }, [refreshRunProgress, trackedRunId, trackedRunStatus]);
 
   function handleFileSelection(files: File[]) {
     setSelectedFiles(files);

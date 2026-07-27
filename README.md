@@ -9,7 +9,7 @@ candidates, and a summary.
 - FastAPI and SQLAlchemy
 - SQLite
 - Local filesystem uploads
-- Next.js and Material UI
+- Next.js, Material UI, ECharts, and Cytoscape.js
 - Optional AI Platform integration
 
 `LOGAN_LLM_PROVIDER` has two valid values:
@@ -60,6 +60,7 @@ Alembic migrations in `apps/api/migrations` manage the database schema.
 ```bash
 python -m pytest -q
 python -m ruff check apps tests scripts
+npm run lint
 npm run typecheck
 npm run build
 ```

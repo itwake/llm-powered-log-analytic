@@ -13,7 +13,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import Alert from "@mui/material/Alert";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "@/components/Link";
 import { CaseListResponse, casesApi } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
@@ -27,7 +27,7 @@ export default function CasesPage() {
   const [error, setError] = useState<string | null>(null);
   const loadRequestId = useRef(0);
 
-  async function load(nextStatus = status, nextProduct = product) {
+  const load = useCallback(async (nextStatus: string, nextProduct: string) => {
     const currentRequest = ++loadRequestId.current;
     setLoading(true);
     setError(null);
@@ -49,18 +49,18 @@ export default function CasesPage() {
         setLoading(false);
       }
     }
-  }
+  }, []);
 
   useEffect(() => {
     void load("", "");
     return () => {
       loadRequestId.current += 1;
     };
-  }, []);
+  }, [load]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void load();
+    void load(status, product);
   }
 
   const caseItems = data?.items || [];

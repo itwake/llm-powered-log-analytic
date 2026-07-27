@@ -12,7 +12,7 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, EmptyState } from "@/components/ui";
 import { reportsApi } from "@/lib/api";
 import type { LogsResponse } from "@/lib/api";
@@ -21,22 +21,25 @@ import { apiErrorMessage, formatDateTime } from "@/lib/format";
 export default function LogsPage() {
   const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState(searchParams.get("q") || "");
+  const initialQuery = searchParams.get("q") || "";
+  const windowStart = searchParams.get("window_start") || undefined;
+  const windowEnd = searchParams.get("window_end") || undefined;
+  const [query, setQuery] = useState(initialQuery);
   const [service, setService] = useState("");
   const [data, setData] = useState<LogsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
 
-  async function load() {
+  const load = useCallback(async (nextQuery: string, nextService: string) => {
     const currentRequest = ++requestId.current;
     setError(null);
     try {
       const response = await reportsApi.logs(caseId, runId, {
-        q: query || undefined,
-        service: service || undefined,
+        q: nextQuery || undefined,
+        service: nextService || undefined,
         limit: 500,
-        window_start: searchParams.get("window_start") || undefined,
-        window_end: searchParams.get("window_end") || undefined,
+        window_start: windowStart,
+        window_end: windowEnd,
       });
       if (requestId.current === currentRequest) {
         setData(response);
@@ -46,14 +49,14 @@ export default function LogsPage() {
         setError(apiErrorMessage(caught));
       }
     }
-  }
+  }, [caseId, runId, windowEnd, windowStart]);
 
   useEffect(() => {
-    void load();
+    void load(initialQuery, "");
     return () => {
       requestId.current += 1;
     };
-  }, [caseId, runId]);
+  }, [initialQuery, load]);
 
   return (
     <Stack spacing={2.5}>
@@ -62,9 +65,9 @@ export default function LogsPage() {
         <Typography color="text.secondary">Search the redacted log lines in this run.</Typography>
       </Box>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-        <TextField fullWidth label="Search" size="small" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void load(); }} />
+        <TextField fullWidth label="Search" size="small" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void load(query, service); }} />
         <TextField label="Service" size="small" value={service} onChange={(event) => setService(event.target.value)} />
-        <Button onClick={() => void load()}>Search</Button>
+        <Button onClick={() => void load(query, service)}>Search</Button>
       </Stack>
       {error && <Alert severity="error">{error}</Alert>}
       {!data && !error && <Card><EmptyState title="Loading logs" /></Card>}
