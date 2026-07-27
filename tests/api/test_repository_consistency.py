@@ -14,6 +14,7 @@ RUNTIME_ENV = re.compile(r"\b((?:LOGAN|NEXT_PUBLIC)_[A-Z0-9_]+)\b")
 def test_relative_markdown_links_resolve() -> None:
     missing: list[str] = []
     files = [
+        ROOT / "AGENTS.md",
         ROOT / "README.md",
         ROOT / "CONTRIBUTING.md",
         *(ROOT / "docs").glob("*.md"),
