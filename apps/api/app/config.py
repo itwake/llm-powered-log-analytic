@@ -21,6 +21,10 @@ def _env_first(*names: str) -> str | None:
 
 
 LLM_PROVIDERS = {"ai_platform", "none"}
+LOCAL_WEB_ORIGINS = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+)
 
 
 @dataclass(frozen=True)
@@ -35,7 +39,7 @@ class Settings:
     web_base_url: str | None = _env_first("LOGAN_WEB_BASE_URL")
     cors_allowed_origins: str = os.getenv(
         "LOGAN_CORS_ALLOWED_ORIGINS",
-        "http://localhost:3000",
+        ",".join(LOCAL_WEB_ORIGINS),
     )
     log_level: str = os.getenv("LOGAN_LOG_LEVEL", "INFO")
     sso_authorize_url: str = os.getenv("LOGAN_SSO_AUTHORIZE_URL", "")
@@ -144,11 +148,14 @@ class Settings:
             raise ValueError("Invalid configuration: " + "; ".join(errors))
 
     def cors_origins(self) -> list[str]:
-        return [
+        origins = [
             origin.strip()
             for origin in self.cors_allowed_origins.split(",")
             if origin.strip()
         ]
+        if self.env.strip().lower() == "development":
+            origins.extend(origin for origin in LOCAL_WEB_ORIGINS if origin not in origins)
+        return origins
 
     def public_web_base_url(self) -> str | None:
         if self.web_base_url:

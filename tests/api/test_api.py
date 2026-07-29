@@ -10,6 +10,40 @@ from httpx import ASGITransport, AsyncClient
 from tests.model_gateway_stub import StubModelGateway
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+)
+async def test_development_api_allows_loopback_web_origins(origin: str) -> None:
+    store = create_ephemeral_store(
+        Settings(
+            env="development",
+            cors_allowed_origins="http://localhost:3000",
+        )
+    )
+    app = create_app(store=store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://localhost:8000",
+    ) as client:
+        response = await client.options(
+            "/api/cases",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+    assert response.headers["access-control-allow-credentials"] == "true"
+
+
 def test_sanitized_text_accepts_a_length_limit() -> None:
     assert sanitize_error_message("secret=value " + "x" * 20, max_length=12) == "secret=[reda"
 

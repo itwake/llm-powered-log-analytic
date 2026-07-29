@@ -151,8 +151,21 @@ has the API callback URL and that `LOGAN_SSO_AUTHORIZE_URL`, `LOGAN_SSO_TOKEN_UR
 
 ### The browser receives an authentication or CORS error
 
-Set `LOGAN_CORS_ALLOWED_ORIGINS` to the exact web origin, including scheme and port. The web
-app sends API requests directly to `NEXT_PUBLIC_API_BASE_URL` with the session cookie.
+Open the local web application at `http://localhost:3000`. Development mode also accepts
+`http://127.0.0.1:3000`; when configuring the origins explicitly, use:
+
+```text
+LOGAN_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+```
+
+The web app sends API requests directly to `NEXT_PUBLIC_API_BASE_URL` with the session cookie.
+Keep `LOGAN_WEB_BASE_URL`, the browser URL, and the API host consistent through the SSO flow.
+
+### The development WebSocket disconnects
+
+Confirm that the web terminal opened by `scripts\local.bat` is still running. Stop any existing
+process on port 3000, close stale browser tabs, run the launcher again, and open
+`http://localhost:3000`. The launcher refuses to start when ports 3000 or 8000 are already in use.
 
 ### AI Platform configuration is rejected at startup
 

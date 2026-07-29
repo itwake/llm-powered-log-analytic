@@ -62,3 +62,5 @@ def test_windows_launcher_starts_current_applications() -> None:
     assert "npm ci" in launcher
     assert r"node_modules\.bin\next.cmd" in launcher
     assert "npm ls --workspace @logan/web --depth=0" in launcher
+    assert "call :ensure_port_available 3000 web" in launcher
+    assert "call :ensure_port_available 8000 api" in launcher

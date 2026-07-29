@@ -45,6 +45,16 @@ if defined API_ONLY if defined WEB_ONLY (
 set "VENV_PYTHON=%REPO_ROOT%\.venv\Scripts\python.exe"
 
 if not defined WEB_ONLY (
+    call :ensure_port_available 8000 API
+    if errorlevel 1 exit /b 1
+)
+
+if not defined API_ONLY (
+    call :ensure_port_available 3000 web
+    if errorlevel 1 exit /b 1
+)
+
+if not defined WEB_ONLY (
     if not defined SKIP_INSTALL (
         call :install_api
         if errorlevel 1 exit /b 1
@@ -102,6 +112,15 @@ echo Press Ctrl+C to stop the API.
 echo.
 "%VENV_PYTHON%" -m uvicorn app.main:app --reload --env-file .env --app-dir apps/api --host 127.0.0.1 --port 8000
 exit /b %ERRORLEVEL%
+
+:ensure_port_available
+powershell -NoProfile -NonInteractive -Command ^
+    "if (Get-NetTCPConnection -State Listen -LocalPort %~1 -ErrorAction SilentlyContinue) { exit 1 }"
+if errorlevel 1 (
+    echo Port %~1 is already in use. Stop the existing %~2 process and run this launcher again.
+    exit /b 1
+)
+exit /b 0
 
 :install_api
 where python >nul 2>nul
