@@ -58,7 +58,7 @@ async def test_sso_callback_provisions_user_and_session() -> None:
             base_url="http://testserver",
         ) as client:
             login = await client.get(
-                "/api/auth/sso/login",
+                "/api/auth/login",
                 params={"next": "/cases"},
                 follow_redirects=False,
             )
@@ -83,6 +83,45 @@ async def test_sso_callback_provisions_user_and_session() -> None:
                 "username": "logan.engineer",
                 "full_name": "Logan Engineer",
             }
+
+
+@pytest.mark.asyncio
+async def test_development_login_uses_default_user_without_sso() -> None:
+    settings = Settings(
+        env="development",
+        web_base_url="http://localhost:3000",
+        sso_authorize_url="",
+        sso_token_url="",
+        sso_client_id="",
+    )
+    store = create_ephemeral_store(settings)
+    app = create_app(store=store)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        login = await client.get(
+            "/api/auth/login",
+            params={"next": "/cases"},
+            follow_redirects=False,
+        )
+
+        assert login.status_code == 302
+        assert login.headers["location"] == "http://localhost:3000/cases"
+        assert client.cookies.get("logan_session")
+
+        me = await client.get("/api/auth/me")
+        user = me.json()["user"]
+        assert user == {
+            "id": store.get_user_by_external_id("logan-local-user").id,
+            "email": "local@logan.invalid",
+            "username": "local",
+            "full_name": "Local User",
+        }
+
+        created = await client.post("/api/cases", json={"title": "Local case"})
+        assert created.status_code == 200
+        assert created.json()["title"] == "Local case"
 
 
 def test_sso_requires_complete_configuration() -> None:

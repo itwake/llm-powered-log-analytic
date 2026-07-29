@@ -1,8 +1,8 @@
 # LogAn
 
-LogAn is a focused incident log analysis application. Users sign in with SSO, create a case,
-upload logs, run one analysis pipeline, and review structured logs, temporal activity, causal
-candidates, and a summary.
+LogAn is a focused incident log analysis application. Users create a case, upload logs, run one
+analysis pipeline, and review structured logs, temporal activity, causal candidates, and a
+summary.
 
 ## Stack
 
@@ -20,7 +20,8 @@ candidates, and a summary.
 
 ## Run locally
 
-Requirements: Python 3.11+, Node.js 22+, and an OAuth-compatible SSO application.
+Requirements: Python 3.11+ and Node.js 22+. An OAuth-compatible SSO application is required only
+when SSO is enabled.
 
 On Windows, the local launcher creates the virtual environment, installs missing dependencies,
 copies `.env.example` when needed, applies database migrations, and starts both applications:
@@ -29,8 +30,9 @@ copies `.env.example` when needed, applies database migrations, and starts both 
 scripts\local.bat
 ```
 
-Configure the SSO values in `.env` before signing in. Use `-ApiOnly`, `-WebOnly`, or
-`-SkipInstall` when only part of the startup flow is needed.
+With the default `.env`, development signs in as the local default user. Set
+`LOGAN_SSO_AUTHORIZE_URL`, `LOGAN_SSO_TOKEN_URL`, and `LOGAN_SSO_CLIENT_ID` to enable SSO. Use
+`-ApiOnly`, `-WebOnly`, or `-SkipInstall` when only part of the startup flow is needed.
 
 For a manual setup:
 
@@ -41,7 +43,7 @@ python -m pip install -e ".[dev]"
 npm ci
 ```
 
-Configure the SSO values in `.env`, then start the API and web app in separate terminals:
+Start the API and web app in separate terminals:
 
 ```bash
 python -m alembic -c apps/api/alembic.ini upgrade head
@@ -66,6 +68,10 @@ The API reads `.env` at startup through the local command above. The web app use
 SQLite data and uploaded files are stored under `.logan/` by default. Set
 `LOGAN_DATABASE_PATH` and `LOGAN_LOCAL_OBJECT_STORE_DIR` to use other local paths.
 Alembic migrations in `apps/api/migrations` manage the database schema.
+
+In development, an empty `LOGAN_SSO_AUTHORIZE_URL` uses the local default user. When the authorize
+URL is set, the token URL and client id are also required and login uses SSO. Production requires
+complete SSO configuration.
 
 ## Development
 

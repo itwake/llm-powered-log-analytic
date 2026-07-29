@@ -4,7 +4,7 @@ The database contains five application tables:
 
 | Table | Purpose |
 | --- | --- |
-| `users` | SSO-provisioned user profiles |
+| `users` | Authenticated user profiles |
 | `sessions` | Hashed browser session tokens |
 | `cases` | Incident context and ownership |
 | `raw_files` | Uploaded file metadata and local object URI |

@@ -1,7 +1,8 @@
 # Security
 
-LogAn accepts SSO authentication only. The callback provisions a local profile from the external
-subject, email, and username. Browser sessions use a random token in an HTTP-only, same-site
+Production authentication uses SSO. The callback provisions a local profile from the external
+subject, email, and username. Development uses a single local default user when
+`LOGAN_SSO_AUTHORIZE_URL` is empty. Browser sessions use a random token in an HTTP-only, same-site
 cookie; only its SHA-256 hash is stored.
 
 Each case belongs to the user who created it. Case, upload, run, report, and chat routes verify that
@@ -19,6 +20,7 @@ For production:
 
 - use HTTPS for the web app, API, SSO provider, and AI Platform
 - set a unique `LOGAN_SECRET_KEY`
+- configure the SSO authorize URL, token URL, and client id
 - keep TLS verification enabled
 - restrict CORS to the deployed web origin
 - restrict access to the database and local upload directory

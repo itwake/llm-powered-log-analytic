@@ -106,7 +106,7 @@ validation actions. A customer update is separated from the internal diagnostic 
 
 ## Access and storage controls
 
-- Authentication is SSO-only.
+- Production authentication is SSO-only; development can use the local default user.
 - Each case is visible only to its creator.
 - Case, upload, run, report, and chat routes enforce ownership.
 - Browser session tokens are random; only their SHA-256 hashes are stored.

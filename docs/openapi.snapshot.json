@@ -614,6 +614,25 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/auth/login": {
+      "get": {
+        "operationId": "login_api_auth_login_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/auth/logout": {
       "post": {
         "operationId": "logout_api_auth_logout_post",
@@ -674,25 +693,6 @@
           }
         },
         "summary": "Sso Callback",
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/api/auth/sso/login": {
-      "get": {
-        "operationId": "sso_login_api_auth_sso_login_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Sso Login",
         "tags": [
           "auth"
         ]

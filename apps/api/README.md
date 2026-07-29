@@ -1,7 +1,7 @@
 # API
 
-The FastAPI application provides SSO sessions, cases, local uploads, background analysis, reports,
-chat, and health.
+The FastAPI application provides authentication sessions, cases, local uploads, background
+analysis, reports, chat, and health.
 
 Run from the repository root:
 

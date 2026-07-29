@@ -80,7 +80,6 @@ if not defined API_ONLY (
 if not exist ".env" (
     copy /y ".env.example" ".env" >nul
     echo Created .env from .env.example.
-    echo Configure the SSO values in .env before signing in.
 )
 
 for /f "usebackq eol=# tokens=1* delims==" %%A in (".env") do call :set_env_var "%%A" "%%~B"

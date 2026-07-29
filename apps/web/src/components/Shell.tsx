@@ -536,7 +536,7 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
             {authState === "loading" && <Chip color="default" label="Checking session" variant="outlined" />}
             {authState === "signed-in" && <Chip label="Signed in" variant="outlined" />}
             {authState === "signed-out" && (
-              <Chip component={Link} clickable href="/login" label="Continue with SSO" variant="outlined" />
+              <Chip component={Link} clickable href="/login" label="Sign in" variant="outlined" />
             )}
           </Box>
         </Box>

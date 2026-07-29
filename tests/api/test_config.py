@@ -26,6 +26,26 @@ def test_production_cors_uses_only_configured_origins() -> None:
     assert settings.cors_origins() == ["https://logan.example.com"]
 
 
+def test_development_uses_default_user_when_sso_authorize_url_is_empty() -> None:
+    settings = Settings(env="development", sso_authorize_url="")
+
+    assert settings.default_user_enabled
+    assert not settings.sso_enabled
+
+
+def test_non_development_requires_sso() -> None:
+    with pytest.raises(ValueError, match="SSO URLs and client id"):
+        Settings(env="staging").validate_for_runtime()
+
+
+def test_sso_authorize_url_requires_token_url_and_client_id() -> None:
+    with pytest.raises(ValueError, match="LOGAN_SSO_TOKEN_URL"):
+        Settings(
+            env="development",
+            sso_authorize_url="https://sso.example.test/authorize",
+        ).validate_for_runtime()
+
+
 def test_ai_platform_requires_usable_credentials() -> None:
     with pytest.raises(ValueError, match="token or complete iB2B credentials"):
         Settings(

@@ -6,11 +6,11 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useEffect, useRef, useState } from "react";
 import { Button, Card } from "@/components/ui";
-import { buildSsoLoginUrl } from "@/lib/auth";
+import { buildLoginUrl } from "@/lib/auth";
 import { safeNextPath } from "@/lib/navigation";
 
 export default function LoginPage() {
-  const [ssoUrl, setSsoUrl] = useState(() => buildSsoLoginUrl("/cases"));
+  const [loginUrl, setLoginUrl] = useState(() => buildLoginUrl("/cases"));
   const redirectStartedRef = useRef(false);
 
   useEffect(() => {
@@ -18,8 +18,8 @@ export default function LoginPage() {
       return;
     }
     redirectStartedRef.current = true;
-    const url = buildSsoLoginUrl(safeNextPath(window.location.search));
-    setSsoUrl(url);
+    const url = buildLoginUrl(safeNextPath(window.location.search));
+    setLoginUrl(url);
     window.location.replace(url);
   }, []);
 
@@ -29,16 +29,15 @@ export default function LoginPage() {
         <Card>
           <Stack spacing={2}>
             <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
-              Continue with SSO
+              Continue to LogAn
             </Typography>
-            <Typography>Redirecting to corporate sign-in for LogAn Platform access.</Typography>
+            <Typography>Starting your LogAn session.</Typography>
             <Typography color="text.secondary">
-              LogAn only supports corporate single sign-on. Your account is provisioned automatically
-              the first time you complete SSO.
+              Authentication is selected by the server configuration.
             </Typography>
             <Box>
-              <Button component="a" href={ssoUrl} variant="primary">
-                Continue with SSO
+              <Button component="a" href={loginUrl} variant="primary">
+                Continue
               </Button>
             </Box>
           </Stack>

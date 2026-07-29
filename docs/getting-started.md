@@ -8,10 +8,10 @@ the FastAPI API on port 8000 and the Next.js web app on port 3000.
 - Git
 - Python 3.11 or newer
 - Node.js 22 or newer with npm
-- An OAuth-compatible SSO application
+- An OAuth-compatible SSO application when enabling SSO
 - Docker Desktop only when using Docker Compose
 
-Configure the SSO application to allow this callback URL for local development:
+When using SSO, allow this callback URL for local development:
 
 ```text
 http://localhost:8000/api/auth/sso/callback
@@ -27,7 +27,7 @@ scripts\local.bat
 
 The launcher creates `.venv`, installs missing Python and npm dependencies, copies `.env.example`
 when `.env` is missing, applies Alembic migrations, opens the web application in a new window, and
-runs the API in the current window. Configure the SSO values in `.env` before signing in.
+runs the API in the current window. The default configuration signs in as the local default user.
 
 Available options are:
 
@@ -52,8 +52,7 @@ current user and open a new terminal:
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-Edit `.env` with the SSO authorize URL, token URL, and client id. Start the API and web app
-in separate PowerShell windows:
+Start the API and web app in separate PowerShell windows:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -77,8 +76,7 @@ npm ci
 cp .env.example .env
 ```
 
-Edit `.env` with the SSO authorize URL, token URL, and client id. Start the API and web app
-in separate terminals:
+Start the API and web app in separate terminals:
 
 ```bash
 source .venv/bin/activate
@@ -90,7 +88,17 @@ python -m uvicorn app.main:app --reload --env-file .env --app-dir apps/api --hos
 npm run dev --workspace @logan/web
 ```
 
-Open `http://localhost:3000`. The login page redirects to the configured SSO provider.
+Open `http://localhost:3000`. With an empty `LOGAN_SSO_AUTHORIZE_URL`, development creates a
+session for the local default user. To enable SSO, set:
+
+```text
+LOGAN_SSO_AUTHORIZE_URL=https://sso.example.com/oauth2/authorize
+LOGAN_SSO_TOKEN_URL=https://sso.example.com/oauth2/token
+LOGAN_SSO_CLIENT_ID=logan
+```
+
+The login page then redirects to the configured SSO provider. Production requires all three
+settings.
 
 ## Docker Compose
 
@@ -159,7 +167,7 @@ LOGAN_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```
 
 The web app sends API requests directly to `NEXT_PUBLIC_API_BASE_URL` with the session cookie.
-Keep `LOGAN_WEB_BASE_URL`, the browser URL, and the API host consistent through the SSO flow.
+Keep `LOGAN_WEB_BASE_URL`, the browser URL, and the API host consistent.
 
 ### The development WebSocket disconnects
 

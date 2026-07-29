@@ -28,5 +28,6 @@ Uploaded files use `file://` object URIs rooted at `LOGAN_LOCAL_OBJECT_STORE_DIR
 analysis results use the SQLite database at `LOGAN_DATABASE_PATH`. Alembic owns the database
 schema and applies ordered revisions before the API process starts.
 
-The browser authenticates with an HTTP-only session cookie issued after the SSO callback. The web
-application sends API requests directly to `NEXT_PUBLIC_API_BASE_URL`.
+The browser authenticates with an HTTP-only session cookie. The login endpoint either starts the
+configured SSO flow or signs in the development default user. The web application sends API
+requests directly to `NEXT_PUBLIC_API_BASE_URL`.

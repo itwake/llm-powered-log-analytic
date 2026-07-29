@@ -4,10 +4,13 @@ The API is served under `/api`. Interactive OpenAPI documentation is available a
 
 ## Authentication
 
-- `GET /api/auth/sso/login`
+- `GET /api/auth/login`
 - `GET /api/auth/sso/callback`
 - `GET /api/auth/me`
 - `POST /api/auth/logout`
+
+In development, the login endpoint creates a session for the local default user when
+`LOGAN_SSO_AUTHORIZE_URL` is empty. Otherwise it begins the configured SSO flow.
 
 ## Cases and uploads
 

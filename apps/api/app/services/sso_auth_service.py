@@ -71,11 +71,7 @@ class SsoAuthService:
         self.http_client = http_client
 
     def ensure_configured(self) -> None:
-        if not (
-            self.settings.sso_authorize_url
-            and self.settings.sso_token_url
-            and self.settings.sso_client_id
-        ):
+        if not self.settings.sso_configured:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="SSO is not configured",

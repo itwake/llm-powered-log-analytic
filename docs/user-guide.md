@@ -5,8 +5,9 @@ files, and one or more analysis runs.
 
 ## Sign in
 
-Open the web application and continue with SSO. The first successful callback creates the local
-user profile automatically. A session cookie keeps subsequent API requests authenticated.
+Open the web application and continue to LogAn. Development signs in as the local default user
+when SSO is not configured. With SSO enabled, the first successful callback creates the local user
+profile automatically. A session cookie keeps subsequent API requests authenticated.
 
 Use the sign-out button at the bottom of the sidebar to revoke the current session.
 

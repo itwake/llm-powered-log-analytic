@@ -1,8 +1,7 @@
 # AGENTS.md
 
-LogAn is a focused incident log analysis application. Users sign in with SSO, create a case,
-upload logs, run an analysis, and review the resulting logs, temporal activity, causal candidates,
-and summary.
+LogAn is a focused incident log analysis application. Users create a case, upload logs, run an
+analysis, and review the resulting logs, temporal activity, causal candidates, and summary.
 
 The repository contains two deployable applications:
 
@@ -88,8 +87,9 @@ providers.
   paths must not appear in progress metadata, stored error messages, logs, or model diagnostics.
 - Redact log content before template generation, model input, and report display. Model calls may
   receive only bounded, redacted representative samples and evidence packets.
-- Keep authentication SSO-only. Browser sessions use HTTP-only cookies, and every case-related
-  route must enforce ownership.
+- Keep production authentication SSO-only. Development may use the local default user only when
+  `LOGAN_SSO_AUTHORIZE_URL` is empty. Browser sessions use HTTP-only cookies, and every
+  case-related route must enforce ownership.
 - Do not weaken TLS verification in production or commit `.env`, `.logan/`, credentials, SSO
   responses, access tokens, model responses containing customer data, or raw customer logs.
 - Keep unit tests deterministic and offline. Use synthetic fixtures and injected gateways for

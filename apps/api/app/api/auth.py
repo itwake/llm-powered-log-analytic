@@ -17,6 +17,10 @@ from app.store import Store, UserRecord
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 SSO_STATE_COOKIE_NAME = "logan_sso_state"
 SSO_STATE_SALT = "logan-sso-state"
+DEFAULT_USER_EMAIL = "local@logan.invalid"
+DEFAULT_USER_EXTERNAL_ID = "logan-local-user"
+DEFAULT_USER_FULL_NAME = "Local User"
+DEFAULT_USER_USERNAME = "local"
 
 
 def _safe_next_path(value: str | None, fallback: str = "/cases") -> str:
@@ -79,14 +83,65 @@ def _sso_service(request: Request, store: Store) -> SsoAuthService:
     )
 
 
-@router.get("/sso/login")
-def sso_login(
+def _default_user(store: Store) -> UserRecord:
+    user = store.get_user_by_external_id(DEFAULT_USER_EXTERNAL_ID)
+    if user is not None:
+        return user
+    try:
+        return store.register_user(
+            email=DEFAULT_USER_EMAIL,
+            username=DEFAULT_USER_USERNAME,
+            full_name=DEFAULT_USER_FULL_NAME,
+            external_id=DEFAULT_USER_EXTERNAL_ID,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="default user could not be created",
+        ) from exc
+
+
+def _session_redirect(
+    *,
+    request: Request,
+    store: Store,
+    user: UserRecord,
+    next_path: str,
+) -> RedirectResponse:
+    token, session = store.create_session(user.id)
+    base_url = store.settings.public_web_base_url() or str(request.base_url).rstrip("/")
+    response = RedirectResponse(
+        f"{base_url}{next_path}",
+        status_code=status.HTTP_302_FOUND,
+    )
+    response.delete_cookie(SSO_STATE_COOKIE_NAME)
+    response.set_cookie(
+        "logan_session",
+        token,
+        httponly=True,
+        secure=store.settings.secure_cookies,
+        samesite="lax",
+        max_age=max(int((session.expires_at - session.created_at).total_seconds()), 0),
+    )
+    return response
+
+
+@router.get("/login")
+def login(
     request: Request,
     store: Store = Depends(get_store),
 ) -> RedirectResponse:
+    next_path = _safe_next_path(request.query_params.get("next"))
+    if store.settings.default_user_enabled:
+        return _session_redirect(
+            request=request,
+            store=store,
+            user=_default_user(store),
+            next_path=next_path,
+        )
+
     service = _sso_service(request, store)
     service.ensure_configured()
-    next_path = _safe_next_path(request.query_params.get("next"))
     nonce = secrets.token_urlsafe(24)
     state = _sign_state(next_path, nonce, store.settings.secret_key)
     response = RedirectResponse(
@@ -126,22 +181,12 @@ async def sso_callback(
         code=request.query_params.get("code") or "",
     )
     user = service.provision_user(store, profile)
-    token, session = store.create_session(user.id)
-    base_url = store.settings.public_web_base_url() or str(request.base_url).rstrip("/")
-    response = RedirectResponse(
-        f"{base_url}{state['next']}",
-        status_code=status.HTTP_302_FOUND,
+    return _session_redirect(
+        request=request,
+        store=store,
+        user=user,
+        next_path=state["next"],
     )
-    response.delete_cookie(SSO_STATE_COOKIE_NAME)
-    response.set_cookie(
-        "logan_session",
-        token,
-        httponly=True,
-        secure=store.settings.secure_cookies,
-        samesite="lax",
-        max_age=max(int((session.expires_at - session.created_at).total_seconds()), 0),
-    )
-    return response
 
 
 @router.post("/logout")

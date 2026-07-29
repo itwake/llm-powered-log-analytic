@@ -28,6 +28,9 @@ Production configuration requires:
 - TLS verification enabled for SSO and, when configured, AI Platform
 - a persistent database and upload directory
 
+Development uses the local default user when `LOGAN_SSO_AUTHORIZE_URL` is empty. Non-development
+deployments require complete SSO configuration.
+
 Start one API process per instance because analysis runs use in-process background tasks.
 See [Getting started](getting-started.md) for local and Docker startup instructions.
 

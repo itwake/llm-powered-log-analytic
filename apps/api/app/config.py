@@ -108,11 +108,37 @@ class Settings:
         return self.llm_provider.strip().lower()
 
     @property
+    def sso_enabled(self) -> bool:
+        return bool(self.sso_authorize_url.strip())
+
+    @property
+    def sso_configured(self) -> bool:
+        return all(
+            value.strip()
+            for value in (
+                self.sso_authorize_url,
+                self.sso_token_url,
+                self.sso_client_id,
+            )
+        )
+
+    @property
+    def default_user_enabled(self) -> bool:
+        return self.env.strip().lower() == "development" and not self.sso_enabled
+
+    @property
     def secure_cookies(self) -> bool:
         return self.env.strip().lower() == "production"
 
     def validate_for_runtime(self) -> None:
         errors: list[str] = []
+        if self.sso_enabled and not self.sso_configured:
+            errors.append(
+                "LOGAN_SSO_TOKEN_URL and LOGAN_SSO_CLIENT_ID are required "
+                "when LOGAN_SSO_AUTHORIZE_URL is configured"
+            )
+        elif self.env.strip().lower() != "development" and not self.sso_configured:
+            errors.append("SSO URLs and client id are required")
         if self.normalized_llm_provider not in LLM_PROVIDERS:
             errors.append("LOGAN_LLM_PROVIDER must be ai_platform or none")
         if self.normalized_llm_provider == "ai_platform":
@@ -135,8 +161,6 @@ class Settings:
         if self.env.strip().lower() == "production":
             if len(self.secret_key.strip()) < 32 or self.secret_key == "change-me":
                 errors.append("LOGAN_SECRET_KEY must contain at least 32 characters")
-            if not (self.sso_authorize_url and self.sso_token_url and self.sso_client_id):
-                errors.append("SSO URLs and client id are required")
             if not self.sso_tls_verify:
                 errors.append("LOGAN_SSO_TLS_VERIFY must be true")
             if (

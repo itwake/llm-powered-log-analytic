@@ -6,7 +6,7 @@ from pathlib import Path
 from scripts.export_openapi import current_openapi_schema
 
 REQUIRED = {
-    "/api/auth/sso/login": {"get"},
+    "/api/auth/login": {"get"},
     "/api/auth/sso/callback": {"get"},
     "/api/auth/me": {"get"},
     "/api/auth/logout": {"post"},
