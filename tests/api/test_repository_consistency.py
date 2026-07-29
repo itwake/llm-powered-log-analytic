@@ -60,3 +60,5 @@ def test_windows_launcher_starts_current_applications() -> None:
     assert "-m uvicorn app.main:app" in launcher
     assert "npm run dev --workspace @logan/web" in launcher
     assert "npm ci" in launcher
+    assert r"node_modules\.bin\next.cmd" in launcher
+    assert "npm ls --workspace @logan/web --depth=0" in launcher

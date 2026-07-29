@@ -169,3 +169,10 @@ in `.env.full.example`.
 
 Each file must contain at least one byte and be no larger than 100 MiB. The combined expanded
 content of a zip, gzip, tar, or tgz input must also be no larger than 100 MiB.
+
+### The web application reports that `next` is not recognized
+
+Run `scripts\local.bat` without `-SkipInstall`. The launcher verifies the web workspace
+dependencies and installs them with `npm ci` when they are missing or incomplete. If installation
+still fails, run `npm ci` from the repository root and resolve the reported npm error before
+starting the launcher again.

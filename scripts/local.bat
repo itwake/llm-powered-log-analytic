@@ -44,12 +44,24 @@ if defined API_ONLY if defined WEB_ONLY (
 
 set "VENV_PYTHON=%REPO_ROOT%\.venv\Scripts\python.exe"
 
-if not defined SKIP_INSTALL (
-    if not defined WEB_ONLY (
+if not defined WEB_ONLY (
+    if not defined SKIP_INSTALL (
         call :install_api
         if errorlevel 1 exit /b 1
     )
-    if not defined API_ONLY (
+)
+
+if not defined API_ONLY (
+    if defined SKIP_INSTALL (
+        call :require_npm
+        if errorlevel 1 exit /b 1
+        call :web_dependencies_ready
+        if errorlevel 1 (
+            echo Web dependencies are missing or incomplete.
+            echo Run scripts\local.bat without -SkipInstall to install them.
+            exit /b 1
+        )
+    ) else (
         call :install_web
         if errorlevel 1 exit /b 1
     )
@@ -64,11 +76,6 @@ if not exist ".env" (
 for /f "usebackq eol=# tokens=1* delims==" %%A in (".env") do call :set_env_var "%%A" "%%~B"
 
 if defined WEB_ONLY (
-    where npm >nul 2>nul
-    if errorlevel 1 (
-        echo npm was not found on PATH. Install Node.js 22 or newer and reopen the terminal.
-        exit /b 1
-    )
     echo Starting web application at http://localhost:3000
     call npm run dev --workspace @logan/web
     exit /b %ERRORLEVEL%
@@ -115,19 +122,36 @@ if errorlevel 1 (
 )
 exit /b 0
 
-:install_web
+:require_npm
 where npm >nul 2>nul
 if errorlevel 1 (
     echo npm was not found on PATH. Install Node.js 22 or newer and reopen the terminal.
     exit /b 1
 )
-call npm ls --depth=0 >nul 2>nul
+exit /b 0
+
+:install_web
+call :require_npm
+if errorlevel 1 exit /b 1
+call :web_dependencies_ready
+if not errorlevel 1 exit /b 0
+echo Installing web dependencies ...
+call npm ci
 if errorlevel 1 (
-    echo Installing web dependencies ...
-    call npm ci
-    if errorlevel 1 exit /b 1
+    echo Failed to install web dependencies with npm ci.
+    exit /b 1
+)
+call :web_dependencies_ready
+if errorlevel 1 (
+    echo Web dependency installation completed without a usable Next.js executable.
+    exit /b 1
 )
 exit /b 0
+
+:web_dependencies_ready
+if not exist "%REPO_ROOT%\node_modules\.bin\next.cmd" exit /b 1
+call npm ls --workspace @logan/web --depth=0 >nul 2>nul
+exit /b %ERRORLEVEL%
 
 :set_env_var
 set "_name=%~1"
