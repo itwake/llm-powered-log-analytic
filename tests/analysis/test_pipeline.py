@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import zipfile
 from pathlib import Path
 
@@ -83,3 +84,64 @@ async def test_pipeline_uses_one_gateway_for_annotation_and_summary() -> None:
     assert result.causal_summary.evidence_refs
     assert result.progress["current_step"] == "completed"
     assert gateway.calls
+
+
+@pytest.mark.asyncio
+async def test_annotation_model_input_is_bounded_and_redacted(tmp_path: Path) -> None:
+    archive_path = tmp_path / "logs.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "customer/private/service.log",
+            (
+                "2026-07-30T10:00:00Z ERROR gateway "
+                "Authorization: Bearer raw-log-token password=raw-log-password\n"
+            ),
+        )
+
+    gateway = StubModelGateway()
+    await AnalyzeCasePipeline().run(
+        case_id="case-1",
+        analysis_run_id="run-1",
+        paths=[str(archive_path)],
+        case_context={
+            "title": "Authorization: Bearer raw-case-token",
+            "issue_description": "password=hunter2 " + ("x" * 1000),
+            "product": "checkout",
+            "service": "gateway",
+            "environment": "test",
+            "model": "private-model",
+            "reasoning_effort": "high",
+            "user_id": "private-user",
+        },
+        gateway=gateway,
+    )
+
+    annotation_call = next(
+        call
+        for call in gateway.calls
+        if call.get("metadata", {}).get("purpose") == "template_annotation"
+    )
+    input_text = annotation_call["input"][0]["content"][0]["text"]
+    payload = json.loads(input_text)
+
+    assert set(payload["case_context"]) == {
+        "case_id",
+        "analysis_run_id",
+        "title",
+        "issue_description",
+        "product",
+        "service",
+        "environment",
+    }
+    assert len(payload["case_context"]["issue_description"]) <= 600
+    assert payload["template_context"]["files"] == ["service.log"]
+    for sensitive in (
+        "raw-case-token",
+        "hunter2",
+        "raw-log-token",
+        "raw-log-password",
+        "customer/private",
+        "private-model",
+        "private-user",
+    ):
+        assert sensitive not in input_text

@@ -24,6 +24,10 @@ UUID_RE = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
 )
 CARD_RE = re.compile(r"\b(?:\d[ -]*?){13,19}\b")
+SENSITIVE_FIELD_WORD_RE = re.compile(
+    r"(?i)\b(authorization|bearer|password|passwd|secret|api[_-]?key|access[_-]?token|"
+    r"source[_-]?token|token)\b"
+)
 
 
 @dataclass(frozen=True)
@@ -77,3 +81,14 @@ class Redactor:
 
 def redact_text(text: str) -> str:
     return Redactor().redact(text).text
+
+
+def redact_bounded_text(value: object, *, max_length: int) -> str:
+    text = redact_text(str(value or ""))
+    text = SENSITIVE_FIELD_WORD_RE.sub("<REDACTED_FIELD>", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= max_length:
+        return text
+    if max_length <= 3:
+        return text[:max_length]
+    return f"{text[: max_length - 3]}..."

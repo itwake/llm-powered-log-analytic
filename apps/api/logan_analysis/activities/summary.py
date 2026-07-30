@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Literal
 
-from logan_analysis.algorithms.redactors import redact_text
+from logan_analysis.algorithms.redactors import redact_bounded_text
 from logan_analysis.models import (
     CausalGraph,
     CausalSummary,
@@ -43,10 +43,6 @@ _FORBIDDEN_PACKET_KEYS = {
     "source_token",
     "token",
 }
-_SECRET_WORD_RE = re.compile(
-    r"(?i)\b(authorization|bearer|password|passwd|secret|api[_-]?key|access[_-]?token|"
-    r"source[_-]?token|token)\b"
-)
 _UNREDACTED_SECRET_VALUE_RE = re.compile(
     r"(?i)(authorization\s*[:=]\s*bearer\s+(?!<)[^\s,;]+|"
     r"bearer\s+(?!<)[A-Za-z0-9._~+/=-]+|"
@@ -136,12 +132,7 @@ class CausalSummaryModelOutput(BaseModel):
 
 
 def _safe_text(value: object, *, max_length: int = MAX_PACKET_TEXT) -> str:
-    text = redact_text(str(value or ""))
-    text = _SECRET_WORD_RE.sub("<REDACTED_FIELD>", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    if len(text) > max_length:
-        return f"{text[: max_length - 3]}..."
-    return text
+    return redact_bounded_text(value, max_length=max_length)
 
 
 def _iso_time(value: Any) -> str | None:

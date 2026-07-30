@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from app.api.cases import _track_task
 from app.config import Settings
 from app.main import create_app
 from app.services.object_store import file_uri_to_path
 from app.store import create_ephemeral_store, sanitize_error_message
 from httpx import ASGITransport, AsyncClient
+from starlette.requests import Request
 from tests.model_gateway_stub import StubModelGateway
 
 
@@ -48,6 +51,44 @@ async def test_development_api_allows_loopback_web_origins(origin: str) -> None:
 
 def test_sanitized_text_accepts_a_length_limit() -> None:
     assert sanitize_error_message("secret=value " + "x" * 20, max_length=12) == "secret=[reda"
+
+
+def test_error_sanitization_removes_credentials_and_absolute_paths() -> None:
+    message = (
+        "Authorization: Bearer raw-token "
+        "source_token=gho_raw_token_123456 "
+        "database=postgresql://logan:database-password@db/logan "
+        r"C:\customer\incident.log /srv/customer/incident.log"
+    )
+
+    sanitized = sanitize_error_message(message)
+
+    for sensitive in (
+        "raw-token",
+        "gho_raw_token_123456",
+        "database-password",
+        r"C:\customer\incident.log",
+        "/srv/customer/incident.log",
+    ):
+        assert sensitive not in sanitized
+    assert "<path>" in sanitized
+
+
+@pytest.mark.asyncio
+async def test_analysis_task_failure_log_does_not_include_exception_text(caplog) -> None:
+    async def fail() -> None:
+        raise RuntimeError("Authorization: Bearer raw-task-token")
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    request = Request({"type": "http", "app": app})
+    task = asyncio.create_task(fail())
+    _track_task(request, "run-1", task)
+
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    assert "analysis failed" in caplog.text
+    assert "raw-task-token" not in caplog.text
 
 
 @pytest.mark.asyncio

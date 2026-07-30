@@ -104,7 +104,7 @@ def _track_task(request: Request, run_id: str, task: asyncio.Task[Any]) -> None:
         try:
             completed.result()
         except Exception:
-            logger.exception("analysis failed", extra={"analysis_run_id": run_id})
+            logger.error("analysis failed", extra={"analysis_run_id": run_id})
 
     task.add_done_callback(done)
 

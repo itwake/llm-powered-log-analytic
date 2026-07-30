@@ -6,9 +6,38 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from logan_analysis.algorithms.redactors import redact_text
 from logan_analysis.models import AnalysisResult
 
 TERMINAL_ANALYSIS_RUN_STATUSES = {"completed", "failed", "cancelled"}
+_SENSITIVE_ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s,;]+"),
+        r"\1[redacted]",
+    ),
+    (re.compile(r"(?i)(bearer\s+)[^\s,;]+"), r"\1[redacted]"),
+    (
+        re.compile(
+            r"(?i)\b(token|api[_-]?key|password|passwd|secret|credential|"
+            r"source[_-]?token)\s*[:=]\s*[^,\s;]+"
+        ),
+        r"\1=[redacted]",
+    ),
+    (
+        re.compile(
+            r"\b(?:github_pat_[A-Za-z0-9_]+|gh[opsru]_[A-Za-z0-9_]+|"
+            r"sk-[A-Za-z0-9_-]{10,}|"
+            r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\b"
+        ),
+        "[redacted-token]",
+    ),
+    (
+        re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://[^/\s:@]+:)[^@\s/]+(@)"),
+        r"\1[redacted]\2",
+    ),
+)
+_WINDOWS_PATH_RE = re.compile(r"(?i)(?:\b[A-Z]:[\\/]|\\\\)[^,\s;]+")
+_POSIX_PATH_RE = re.compile(r"(?<![A-Za-z0-9:/])/(?:[^,\s;]+)")
 
 
 class AnalysisRunCancelled(RuntimeError):
@@ -83,8 +112,12 @@ class AnalysisRunRecord:
 
 def sanitize_error_message(error: BaseException | str, *, max_length: int = 1000) -> str:
     message = str(error).strip() or "analysis failed"
-    message = re.sub(r"(?i)(password|token|secret|authorization)=?[^,\s]*", r"\1=[redacted]", message)
     home = str(Path.home())
     if home:
-        message = message.replace(home, "<home>")
+        message = message.replace(home, "<path>")
+    message = redact_text(message)
+    for pattern, replacement in _SENSITIVE_ERROR_PATTERNS:
+        message = pattern.sub(replacement, message)
+    message = _WINDOWS_PATH_RE.sub("<path>", message)
+    message = _POSIX_PATH_RE.sub("<path>", message)
     return message[:max_length]

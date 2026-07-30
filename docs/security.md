@@ -13,8 +13,11 @@ and sanitized filenames. Analysis accepts completed upload identifiers, not arbi
 paths.
 
 Log preprocessing masks common secrets before model input or report display. Analysis progress
-contains pipeline-generated counts, and error messages are sanitized before storage. AI Platform
-credentials are read from process environment variables and are not stored in the database.
+contains pipeline-generated counts. Model requests contain bounded, redacted case context,
+representative samples, and evidence; runtime routing settings and full source paths are excluded.
+Error messages are sanitized before storage, and failure logs do not include exception content. AI
+Platform credentials are read from process environment variables and are not stored in the
+database.
 
 For production:
 
