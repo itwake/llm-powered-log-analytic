@@ -56,6 +56,12 @@ def test_web_manifest_matches_lockfile() -> None:
 
 def test_windows_launcher_starts_current_applications() -> None:
     launcher = (ROOT / "scripts/local.bat").read_text(encoding="utf-8").lower()
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+    labels = set(re.findall(r"^:([a-z0-9_]+)\s*$", launcher, re.MULTILINE))
+    called_labels = set(re.findall(r"\bcall\s+:([a-z0-9_]+)\b", launcher))
+
+    assert "*.bat text eol=crlf" in attributes
+    assert called_labels <= labels
     assert "-m alembic -c apps/api/alembic.ini upgrade head" in launcher
     assert "-m uvicorn app.main:app" in launcher
     assert "npm run dev --workspace @logan/web" in launcher

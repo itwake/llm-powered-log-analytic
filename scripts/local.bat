@@ -1,5 +1,5 @@
 @echo off
-rem Starts the LogAn API and web application for local development.
+rem Bootstraps and starts the LogAn API and web application for local development.
 rem
 rem Usage:
 rem   scripts\local.bat               API in this window, web in a new window
