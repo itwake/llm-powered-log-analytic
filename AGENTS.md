@@ -35,6 +35,13 @@ python -m uvicorn app.main:app --reload --env-file .env --app-dir apps/api --hos
 npm run dev --workspace @logan/web
 ```
 
+## Browser CLI
+
+When a Browser CLI command accepts `--session`, use `--session default` unless the user explicitly
+requests an isolated session. The default session reuses the user's existing browser state,
+including authenticated sessions. Do not invent a task-specific session name for routine page
+inspection, snapshots, or interaction.
+
 ## Architecture
 
 - `apps/api/app` owns HTTP routes, authentication, configuration, persistence, and external
