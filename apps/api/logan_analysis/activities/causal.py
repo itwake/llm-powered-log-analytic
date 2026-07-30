@@ -21,26 +21,38 @@ def _clamp(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
+# Support/lag statistics stay accurate on an evenly-spaced sample, while keeping
+# pairwise edge scoring linear in the sample size instead of raw line counts.
+MAX_EVENT_TIMES_PER_TEMPLATE = 2000
+
+
 def _event_times(logs: list[NormalizedLogLine]) -> dict[str, list[datetime]]:
     grouped: dict[str, list[datetime]] = defaultdict(list)
     for line in logs:
         if line.template_id and line.timestamp and line.golden_signal in OFFENDING_SIGNALS:
             grouped[line.template_id].append(line.timestamp)
-    return {template_id: sorted(times) for template_id, times in grouped.items()}
+    sampled: dict[str, list[datetime]] = {}
+    for template_id, times in grouped.items():
+        times.sort()
+        if len(times) > MAX_EVENT_TIMES_PER_TEMPLATE:
+            step = -(-len(times) // MAX_EVENT_TIMES_PER_TEMPLATE)
+            times = times[::step]
+        sampled[template_id] = times
+    return sampled
 
 
 def _support(
-    source_times: list[datetime],
-    target_times: list[datetime],
+    source_epochs: list[int],
+    target_epochs: list[int],
     max_lag_seconds: int,
 ) -> tuple[int, int | None]:
     lags: list[int] = []
-    for target in target_times:
-        index = bisect_right(source_times, target)
+    for target in target_epochs:
+        index = bisect_right(source_epochs, target)
         if index == 0:
             continue
-        lag = int((target - source_times[index - 1]).total_seconds())
-        if 0 <= lag <= max_lag_seconds:
+        lag = target - source_epochs[index - 1]
+        if lag <= max_lag_seconds:
             lags.append(lag)
     return (
         len(lags),
@@ -49,23 +61,11 @@ def _support(
 
 
 def _shared_context(
-    source_lines: list[NormalizedLogLine],
-    target_lines: list[NormalizedLogLine],
+    source_services: set[str],
+    source_entities: set[str],
+    target_services: set[str],
+    target_entities: set[str],
 ) -> float:
-    source_services = {line.service for line in source_lines if line.service}
-    target_services = {line.service for line in target_lines if line.service}
-    source_entities = {
-        value
-        for line in source_lines
-        for values in line.entities.values()
-        for value in values
-    }
-    target_entities = {
-        value
-        for line in target_lines
-        for values in line.entities.values()
-        for value in values
-    }
     if source_services & target_services:
         return 1.0
     if source_services & target_entities or target_services & source_entities:
@@ -75,6 +75,12 @@ def _shared_context(
     return 0.0
 
 
+# Edge inference is quadratic in node count; bounding nodes keeps the graph
+# readable and the computation predictable on runs with many offending templates.
+MAX_CAUSAL_NODES = 200
+MAX_EDGES_PER_TARGET = 6
+
+
 def infer_causal_graph(
     *,
     case_id: str,
@@ -82,6 +88,8 @@ def infer_causal_graph(
     templates: list[LogTemplate],
     logs: list[NormalizedLogLine],
     max_lag_seconds: int = 600,
+    max_nodes: int = MAX_CAUSAL_NODES,
+    max_edges_per_target: int = MAX_EDGES_PER_TARGET,
 ) -> CausalGraph:
     templates_by_id = {template.template_id: template for template in templates}
     lines_by_template: dict[str, list[NormalizedLogLine]] = defaultdict(list)
@@ -115,31 +123,68 @@ def infer_causal_graph(
             )
         )
 
-    edges: list[CausalEdge] = []
+    # Per-template context is precomputed in one pass; the pairwise loop below
+    # must not rescan raw log lines.
+    severity_by_template: dict[str, float] = {}
+    services_by_template: dict[str, set[str]] = {}
+    entities_by_template: dict[str, set[str]] = {}
+    for template_id, template_lines in lines_by_template.items():
+        severity = 0.0
+        services: set[str] = set()
+        entity_values: set[str] = set()
+        for line in template_lines:
+            if line.severity_score > severity:
+                severity = line.severity_score
+            if line.service:
+                services.add(line.service)
+            for values in line.entities.values():
+                entity_values.update(values)
+        severity_by_template[template_id] = severity
+        services_by_template[template_id] = services
+        entities_by_template[template_id] = entity_values
+
+    if len(nodes) > max_nodes:
+        nodes.sort(
+            key=lambda node: (
+                -severity_by_template.get(node.template_id, 0.0),
+                -node.occurrence_count,
+                node.template_id,
+            )
+        )
+        nodes = nodes[:max_nodes]
+
+    # Integer epochs keep the pairwise support loop in cheap int math instead of
+    # datetime arithmetic.
+    epochs_by_template = {
+        template_id: [int(time.timestamp()) for time in times]
+        for template_id, times in times_by_template.items()
+    }
+
+    candidate_edges: list[CausalEdge] = []
     for source in nodes:
         for target in nodes:
             if source.id == target.id or not source.first_seen or not target.first_seen:
                 continue
             if source.first_seen > target.first_seen:
                 continue
-            source_times = times_by_template[source.template_id]
-            target_times = times_by_template[target.template_id]
+            source_epochs = epochs_by_template[source.template_id]
+            target_epochs = epochs_by_template[target.template_id]
             support, lag_seconds = _support(
-                source_times,
-                target_times,
+                source_epochs,
+                target_epochs,
                 max_lag_seconds,
             )
             if support == 0:
                 continue
-            support_score = support / max(1, len(target_times))
+            support_score = support / max(1, len(target_epochs))
             lag_score = 1.0 - min(1.0, (lag_seconds or 0) / max(1, max_lag_seconds))
             context_score = _shared_context(
-                lines_by_template[source.template_id],
-                lines_by_template[target.template_id],
+                services_by_template[source.template_id],
+                entities_by_template[source.template_id],
+                services_by_template[target.template_id],
+                entities_by_template[target.template_id],
             )
-            source_severity = max(
-                line.severity_score for line in lines_by_template[source.template_id]
-            )
+            source_severity = severity_by_template[source.template_id]
             confidence = _clamp(
                 0.45 * support_score
                 + 0.30 * lag_score
@@ -148,7 +193,7 @@ def infer_causal_graph(
             )
             if confidence < 0.35:
                 continue
-            edges.append(
+            candidate_edges.append(
                 CausalEdge(
                     id=str(
                         uuid.uuid5(
@@ -172,6 +217,20 @@ def infer_causal_graph(
                 )
             )
 
+    # In a dense burst almost every early template correlates with every later
+    # one; keeping only the strongest explanations per effect keeps the graph
+    # readable and the persisted artifact small.
+    edges_by_target: dict[str, list[CausalEdge]] = defaultdict(list)
+    for edge in candidate_edges:
+        edges_by_target[edge.target_template_id].append(edge)
+    edges = [
+        edge
+        for grouped_edges in edges_by_target.values()
+        for edge in sorted(grouped_edges, key=lambda item: -item.confidence)[
+            :max_edges_per_target
+        ]
+    ]
+
     outgoing: dict[str, list[float]] = defaultdict(list)
     for edge in edges:
         outgoing[edge.source_template_id].append(edge.confidence)
@@ -189,10 +248,7 @@ def infer_causal_graph(
             if outgoing[node.template_id]
             else 0.0
         )
-        severity = max(
-            (line.severity_score for line in lines_by_template[node.template_id]),
-            default=0.0,
-        )
+        severity = severity_by_template.get(node.template_id, 0.0)
         node.rank_score = round(
             _clamp(0.5 * early_score + 0.3 * edge_score + 0.2 * severity),
             4,

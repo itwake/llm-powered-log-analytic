@@ -63,22 +63,35 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _line_id(file_id: str, file_path: str, line_number: int, text: str) -> str:
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{file_id}:{file_path}:{line_number}:{text}"))
+_RAW_LINE_FIELDS = set(RawPhysicalLine.model_fields)
 
 
 def _physical_line(
     *, file_id: str, file_path: str, line_number: int, text: str, ingestion_order: int
 ) -> RawPhysicalLine:
-    return RawPhysicalLine(
-        raw_line_id=_line_id(file_id, file_path, line_number, text),
-        file_id=file_id,
-        file_path=file_path,
-        line_number=line_number,
-        raw_text=text,
-        sha256=hashlib.sha256(text.encode()).hexdigest(),
-        ingestion_order=ingestion_order,
+    # Per-line ids must be unique and stable within a run; deriving them from the
+    # file id and line number avoids per-line hashing, and the direct instance
+    # assembly avoids per-field construction overhead — both dominate ingestion
+    # cost on multi-million-line inputs (see tests/analysis/test_boundaries.py
+    # for the slot-layout guarantee).
+    line = object.__new__(RawPhysicalLine)
+    object.__setattr__(
+        line,
+        "__dict__",
+        {
+            "raw_line_id": f"{file_id[:13]}:{line_number}",
+            "file_id": file_id,
+            "file_path": file_path,
+            "line_number": line_number,
+            "raw_text": text,
+            "sha256": "",
+            "ingestion_order": ingestion_order,
+        },
     )
+    object.__setattr__(line, "__pydantic_fields_set__", _RAW_LINE_FIELDS)
+    object.__setattr__(line, "__pydantic_extra__", None)
+    object.__setattr__(line, "__pydantic_private__", None)
+    return line
 
 
 def _from_plain_file(
