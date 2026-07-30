@@ -141,10 +141,13 @@ server paths.
 Progress snapshots contain generated counts and sanitized failures. CPU-bound steps run outside
 the API event loop. After the ten pipeline steps, `finalizing` covers result encoding and the
 atomic database commit; the run becomes `completed` only after that commit succeeds. A successful
-run stores one validated, compressed `AnalysisResult` envelope, and every report endpoint reads
-that result. The persisted envelope excludes raw intermediates and duplicate per-line text while
-retaining redacted report rows and evidence identity. Causal edges remain investigation candidates
-rather than proof.
+run stores a small result manifest in SQLite and compressed, validated report artifacts below
+`LOGAN_LOCAL_OBJECT_STORE_DIR`. Summary, temporal, graph, and RCA sections are independent; log
+rows are stored in 10,000-row chunks with precomputed default facets. Opening one report tab
+therefore does not decode the complete result, and an unfiltered Logs page reads only the chunks
+covering its requested offset and limit. The persisted artifacts exclude raw intermediates and
+duplicate per-line text while retaining redacted report rows and evidence identity. Causal edges
+remain investigation candidates rather than proof.
 
 `LOGAN_LLM_PROVIDER=none` skips model annotation and produces a deterministic evidence summary.
 `LOGAN_LLM_PROVIDER=ai_platform` enables template annotation, generated summary text, and completed

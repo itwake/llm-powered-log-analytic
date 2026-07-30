@@ -103,21 +103,28 @@ def _analysis_chat_context(
     store: Store,
     payload: ChatRequest,
 ) -> dict[str, Any]:
-    result = store.get_analysis_result(payload.case_id, payload.analysis_run_id)
-    if result is None:
+    summary = store.get_analysis_report_summary(
+        payload.case_id,
+        payload.analysis_run_id,
+    )
+    causal_summary = store.get_analysis_causal_summary(
+        payload.case_id,
+        payload.analysis_run_id,
+    )
+    if summary is None or causal_summary is None:
         raise HTTPException(status_code=409, detail="analysis result is not ready")
 
-    evidence_refs = [ref.model_dump(mode="json") for ref in result.causal_summary.evidence_refs[:5]]
+    evidence_refs = [ref.model_dump(mode="json") for ref in causal_summary.evidence_refs[:5]]
     return {
         "user_message": _compact_context_text(payload.message, max_length=1000),
         "case_id": payload.case_id,
         "analysis_run_id": payload.analysis_run_id,
         "causal_summary": _compact_context_text(
-            result.causal_summary.summary_markdown,
+            causal_summary.summary_markdown,
             max_length=2500,
         ),
         "evidence_refs": evidence_refs,
-        "summary_rows": _summary_rows(result),
+        "summary_rows": _summary_rows(summary),
     }
 
 

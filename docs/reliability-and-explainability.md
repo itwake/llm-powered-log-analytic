@@ -122,6 +122,10 @@ The current deployment shape intentionally favors a single-instance system:
 - Analysis tasks run inside one API process and are not resumed after an abrupt process failure.
 - SQLite and local file storage require the API database and upload directory to remain together.
 - An API instance does not share in-memory task state with another instance.
+- Result manifests reference local compressed artifacts, so the SQLite database and
+  `LOGAN_LOCAL_OBJECT_STORE_DIR` must be backed up and restored together.
+- Filtered or searched Logs requests scan all chunks and can be slower than unfiltered pagination
+  for very large runs, although the scan keeps memory bounded.
 - Model annotation availability affects enriched labels and therefore the causal graph.
 - Rule-based parsing, templating, redaction, and temporal association have domain-specific limits.
 - The automated tests verify contracts and deterministic fixtures, not production incident

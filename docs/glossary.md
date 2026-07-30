@@ -1,7 +1,7 @@
 # Glossary
 
-- **Analysis result** — the validated output of one run, stored in
-  `analysis_runs.result_json` and used by every report endpoint.
+- **Analysis result** — the validated output of one run, represented by the manifest in
+  `analysis_runs.result_json` and its report artifacts, and used by every report endpoint.
 - **Analysis run** — one execution over selected completed uploads. Its lifecycle is
   `queued`, `processing`, then `completed`, `failed`, or `cancelled`.
 - **Annotation** — AI Platform classification of one template into a golden signal, fault

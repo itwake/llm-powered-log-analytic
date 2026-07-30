@@ -206,6 +206,17 @@ class CausalSummary(BaseModel):
     confidence: float
 
 
+class AnalysisReportSummary(BaseModel):
+    case_id: str
+    analysis_run_id: str
+    files: list[IngestedFile]
+    templates: list[LogTemplate]
+    samples: list[RepresentativeSample]
+    annotations: list[TemplateAnnotation]
+    log_facets: dict[str, dict[str, int]] = Field(default_factory=dict)
+    progress: dict[str, Any] = Field(default_factory=dict)
+
+
 class AnalysisResult(BaseModel):
     case_id: str
     analysis_run_id: str
@@ -218,4 +229,5 @@ class AnalysisResult(BaseModel):
     temporal: list[WindowAggregate]
     causal_graph: CausalGraph
     causal_summary: CausalSummary
+    log_facets: dict[str, dict[str, int]] = Field(default_factory=dict)
     progress: dict[str, Any] = Field(default_factory=dict)

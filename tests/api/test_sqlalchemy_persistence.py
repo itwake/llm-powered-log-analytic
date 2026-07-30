@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import threading
-import zlib
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +11,8 @@ from app import sqlalchemy_store
 from app.config import Settings
 from app.db import Base
 from app.models import tables  # noqa: F401
+from app.services import analysis_result_artifacts
+from app.services.analysis_result_artifacts import read_artifact
 from app.sqlalchemy_store import SQLAlchemyStore
 from sqlalchemy.exc import IntegrityError
 
@@ -138,7 +139,7 @@ def _analysis_fixture(
 
 
 @pytest.mark.asyncio
-async def test_completed_result_uses_a_compact_redacted_envelope(
+async def test_completed_result_uses_segmented_redacted_artifacts(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -154,14 +155,18 @@ async def test_completed_result_uses_a_compact_redacted_envelope(
     assert completed.status == "completed"
     with store.session_factory() as session:
         payload = session.get(tables.AnalysisRun, run.id).result_json
-    assert payload["format"] == "logan.analysis-result"
-    raw = zlib.decompress(base64.b64decode(payload["payload"]))
-    persisted = json.loads(raw)
-    assert "raw-secret" not in raw.decode("utf-8")
-    assert "raw_entries" not in persisted
-    assert "lines" not in persisted["files"][0]
-    assert "message" not in persisted["normalized_logs"][0]
+    assert payload["format"] == "logan.analysis-result-manifest"
+    summary_raw = read_artifact(payload["sections"]["summary"], settings=store.settings)
+    logs_raw = read_artifact(payload["logs"]["chunks"][0], settings=store.settings)
+    persisted_summary = json.loads(summary_raw)
+    persisted_logs = json.loads(logs_raw)
+    assert "raw-secret" not in summary_raw.decode("utf-8")
+    assert "raw-secret" not in logs_raw.decode("utf-8")
+    assert persisted_summary["files"][0]["lines"] == []
+    assert "message" not in persisted_logs[0]
+    assert payload["logs"]["total"] == 1
 
+    store._clear_analysis_result_cache()
     result = store.get_analysis_result(case.id, run.id)
     assert result is not None
     assert result.normalized_logs[0].redacted_message.endswith(
@@ -169,6 +174,8 @@ async def test_completed_result_uses_a_compact_redacted_envelope(
     )
     assert result.raw_entries == []
     assert result.files[0].lines == []
+
+    store._clear_analysis_result_cache()
 
     def unexpected_decode(payload):  # noqa: ANN001
         raise AssertionError("run metadata must not decode the result")
@@ -179,6 +186,42 @@ async def test_completed_result_uses_a_compact_redacted_envelope(
 
 
 @pytest.mark.asyncio
+async def test_legacy_completed_result_is_cached_across_report_reads(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, user, case, path = _analysis_fixture(tmp_path)
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+    await store.run_analysis(
+        run_id=run.id,
+        user_id=user.id,
+        file_paths=[path],
+    )
+    completed_result = store.get_analysis_result(case.id, run.id)
+    assert completed_result is not None
+    with store._session() as session:
+        row = session.get(tables.AnalysisRun, run.id)
+        row.result_json = sqlalchemy_store._encode_analysis_result(completed_result)
+
+    original_decode = sqlalchemy_store._decode_analysis_result
+    decode_calls = 0
+
+    def counting_decode(payload):  # noqa: ANN001
+        nonlocal decode_calls
+        decode_calls += 1
+        return original_decode(payload)
+
+    monkeypatch.setattr(sqlalchemy_store, "_decode_analysis_result", counting_decode)
+
+    store._clear_analysis_result_cache()
+    first_read = store.get_analysis_result(case.id, run.id)
+    second_read = store.get_analysis_result(case.id, run.id)
+
+    assert first_read is second_read
+    assert decode_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_finalization_failure_marks_the_run_and_case_failed(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
@@ -186,10 +229,14 @@ async def test_finalization_failure_marks_the_run_and_case_failed(
     store, user, case, path = _analysis_fixture(tmp_path)
     run = store.create_analysis_run(case_id=case.id, user_id=user.id)
 
-    def fail_encoding(result):  # noqa: ANN001
+    def fail_encoding(result, *, settings):  # noqa: ANN001
         raise RuntimeError("result persistence failed")
 
-    monkeypatch.setattr(sqlalchemy_store, "_encode_analysis_result", fail_encoding)
+    monkeypatch.setattr(
+        sqlalchemy_store,
+        "write_analysis_result_manifest",
+        fail_encoding,
+    )
     with pytest.raises(RuntimeError, match="result persistence failed"):
         await store.run_analysis(
             run_id=run.id,
@@ -214,14 +261,18 @@ async def test_finalization_is_visible_and_does_not_block_status_reads(
     run = store.create_analysis_run(case_id=case.id, user_id=user.id)
     entered = threading.Event()
     release = threading.Event()
-    original_encode = sqlalchemy_store._encode_analysis_result
+    original_encode = sqlalchemy_store.write_analysis_result_manifest
 
-    def blocking_encode(result):  # noqa: ANN001
+    def blocking_encode(result, *, settings):  # noqa: ANN001
         entered.set()
         release.wait(timeout=2)
-        return original_encode(result)
+        return original_encode(result, settings=settings)
 
-    monkeypatch.setattr(sqlalchemy_store, "_encode_analysis_result", blocking_encode)
+    monkeypatch.setattr(
+        sqlalchemy_store,
+        "write_analysis_result_manifest",
+        blocking_encode,
+    )
     task = asyncio.create_task(
         store.run_analysis(
             run_id=run.id,
@@ -241,6 +292,60 @@ async def test_finalization_is_visible_and_does_not_block_status_reads(
 
     release.set()
     assert (await task).status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_segmented_logs_read_only_the_page_chunks(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(analysis_result_artifacts, "RESULT_LOG_CHUNK_SIZE", 2)
+    store, user, case, path = _analysis_fixture(tmp_path)
+    Path(path).write_text(
+        "\n".join(
+            f"2026-01-01T00:00:0{index}Z ERROR api request {index} failed"
+            for index in range(5)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+    await store.run_analysis(run_id=run.id, user_id=user.id, file_paths=[path])
+
+    with store.session_factory() as session:
+        manifest = session.get(tables.AnalysisRun, run.id).result_json
+    assert [chunk["record_count"] for chunk in manifest["logs"]["chunks"]] == [2, 2, 1]
+
+    original_read = sqlalchemy_store.read_log_chunk
+    chunk_reads = 0
+
+    def counting_read(entry, *, settings):  # noqa: ANN001
+        nonlocal chunk_reads
+        chunk_reads += 1
+        return original_read(entry, settings=settings)
+
+    monkeypatch.setattr(sqlalchemy_store, "read_log_chunk", counting_read)
+    page = store.get_analysis_logs_page(case.id, run.id, offset=2, limit=2)
+
+    assert page is not None
+    assert page.total == 5
+    assert [row.line_number for row in page.rows] == [3, 4]
+    assert chunk_reads == 1
+
+    filtered = store.get_analysis_logs_page(
+        case.id,
+        run.id,
+        q="request 4",
+        limit=2,
+    )
+    assert filtered is not None
+    assert filtered.total == 1
+    assert [row.line_number for row in filtered.rows] == [5]
+    assert filtered.facets == {
+        "service": {"unknown": 1},
+        "golden_signal": {"unknown": 1},
+        "fault_category": {},
+    }
 
 
 def test_interrupted_runs_are_failed_on_startup_reconciliation(tmp_path) -> None:

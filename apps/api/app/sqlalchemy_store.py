@@ -5,12 +5,21 @@ import base64
 import hashlib
 import uuid
 import zlib
+from collections import Counter
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock, Timer
 from typing import Any, Iterator
 
-from logan_analysis.models import AnalysisResult
+from logan_analysis.models import (
+    AnalysisReportSummary,
+    AnalysisResult,
+    CausalGraph,
+    CausalSummary,
+    NormalizedLogLine,
+    WindowAggregate,
+)
 from logan_analysis.pipeline import AnalyzeCasePipeline
 from sqlalchemy import URL, create_engine, event, func, or_, select
 from sqlalchemy.engine import Engine
@@ -22,9 +31,22 @@ from app.config import Settings, settings
 from app.core.security import default_session_expiry, hash_token, issue_session_token
 from app.db import Base
 from app.models import tables
+from app.services.analysis_result_artifacts import (
+    delete_analysis_result_artifacts,
+    is_analysis_result_manifest,
+    iter_log_chunks,
+    read_causal_graph,
+    read_causal_summary,
+    read_full_analysis_result,
+    read_log_chunk,
+    read_report_summary,
+    read_temporal,
+    write_analysis_result_manifest,
+)
 from app.services.object_store import local_upload_object_uri, safe_filename
 from app.records import (
     TERMINAL_ANALYSIS_RUN_STATUSES,
+    AnalysisLogPageRecord,
     AnalysisRunCancelled,
     AnalysisRunRecord,
     CaseRecord,
@@ -48,6 +70,7 @@ def _utc(value: datetime | None) -> datetime | None:
 _RESULT_FORMAT = "logan.analysis-result"
 _RESULT_ENCODING = "zlib+base64"
 _RESULT_VERSION = 1
+_RESULT_CACHE_TTL_SECONDS = 5 * 60
 _PERSISTED_RESULT_EXCLUDE = {
     "files": {"__all__": {"lines"}},
     "raw_entries": True,
@@ -126,18 +149,55 @@ class SQLAlchemyStore:
         if not event.contains(self.engine, "connect", _enable_sqlite_foreign_keys):
             event.listen(self.engine, "connect", _enable_sqlite_foreign_keys)
         self.session_factory = sessionmaker(self.engine, expire_on_commit=False, future=True)
+        self._database_lock = RLock()
         if create_schema:
             Base.metadata.create_all(self.engine)
+        self._analysis_result_cache: tuple[str, AnalysisResult] | None = None
+        self._analysis_result_cache_generation = 0
+        self._analysis_result_cache_lock = RLock()
+        self._analysis_result_cache_timer: Timer | None = None
 
     @contextmanager
     def _session(self) -> Iterator[Session]:
-        with self.session_factory() as session:
-            try:
-                yield session
-                session.commit()
-            except Exception:
-                session.rollback()
-                raise
+        with self._database_lock:
+            with self.session_factory() as session:
+                try:
+                    yield session
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    raise
+
+    def _expire_analysis_result_cache(self, generation: int) -> None:
+        with self._analysis_result_cache_lock:
+            if generation != self._analysis_result_cache_generation:
+                return
+            self._analysis_result_cache = None
+            self._analysis_result_cache_timer = None
+
+    def _cache_analysis_result(self, result: AnalysisResult) -> None:
+        with self._analysis_result_cache_lock:
+            self._analysis_result_cache_generation += 1
+            generation = self._analysis_result_cache_generation
+            if self._analysis_result_cache_timer is not None:
+                self._analysis_result_cache_timer.cancel()
+            self._analysis_result_cache = (result.analysis_run_id, result)
+            timer = Timer(
+                _RESULT_CACHE_TTL_SECONDS,
+                self._expire_analysis_result_cache,
+                args=(generation,),
+            )
+            timer.daemon = True
+            self._analysis_result_cache_timer = timer
+            timer.start()
+
+    def _clear_analysis_result_cache(self) -> None:
+        with self._analysis_result_cache_lock:
+            self._analysis_result_cache_generation += 1
+            if self._analysis_result_cache_timer is not None:
+                self._analysis_result_cache_timer.cancel()
+            self._analysis_result_cache = None
+            self._analysis_result_cache_timer = None
 
     def register_user(
         self,
@@ -551,29 +611,39 @@ class SQLAlchemyStore:
         run_id: str,
         result: AnalysisResult,
     ) -> AnalysisRunRecord:
-        encoded_result = _encode_analysis_result(result)
-        with self._session() as session:
-            row = session.get(tables.AnalysisRun, run_id)
-            if row is None:
-                raise KeyError(run_id)
-            if row.status == "cancelled":
-                return self._analysis_run_record(row)
-            completed_at = _now()
-            row.status = "completed"
-            row.result_json = encoded_result
-            row.progress_json = {
-                **result.progress,
-                "current_step": "completed",
-                "completed_at": completed_at.isoformat(),
-            }
-            row.completed_at = completed_at
-            row.error_message = None
-            case_row = session.get(tables.Case, row.case_id)
-            if case_row is not None:
-                case_row.status = "completed"
-                case_row.updated_at = completed_at
-            session.flush()
-            return self._analysis_run_record(row)
+        encoded_result = write_analysis_result_manifest(result, settings=self.settings)
+        keep_artifacts = False
+        try:
+            with self._session() as session:
+                row = session.get(tables.AnalysisRun, run_id)
+                if row is None:
+                    raise KeyError(run_id)
+                if row.status == "cancelled":
+                    completed_record = self._analysis_run_record(row)
+                else:
+                    completed_at = _now()
+                    row.status = "completed"
+                    row.result_json = encoded_result
+                    row.progress_json = {
+                        **result.progress,
+                        "current_step": "completed",
+                        "completed_at": completed_at.isoformat(),
+                    }
+                    row.completed_at = completed_at
+                    row.error_message = None
+                    case_row = session.get(tables.Case, row.case_id)
+                    if case_row is not None:
+                        case_row.status = "completed"
+                        case_row.updated_at = completed_at
+                    session.flush()
+                    completed_record = self._analysis_run_record(row)
+                    keep_artifacts = True
+        except Exception:
+            delete_analysis_result_artifacts(encoded_result, settings=self.settings)
+            raise
+        if not keep_artifacts:
+            delete_analysis_result_artifacts(encoded_result, settings=self.settings)
+        return completed_record
 
     def _fail_analysis_run(
         self,
@@ -674,6 +744,28 @@ class SQLAlchemyStore:
                 run.progress_json = clean_progress
 
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
+        with self._analysis_result_cache_lock:
+            cached = self._analysis_result_cache
+            if cached is not None and cached[0] == run_id:
+                result = cached[1]
+                if result.case_id != case_id:
+                    return None
+                self._cache_analysis_result(result)
+                return result
+        payload = self._get_analysis_result_payload(case_id, run_id)
+        if payload is None:
+            return None
+        if is_analysis_result_manifest(payload):
+            return read_full_analysis_result(payload, settings=self.settings)
+        result = _decode_analysis_result(payload)
+        self._cache_analysis_result(result)
+        return result
+
+    def _get_analysis_result_payload(
+        self,
+        case_id: str,
+        run_id: str,
+    ) -> dict[str, Any] | None:
         with self._session() as session:
             row = session.execute(
                 select(
@@ -683,7 +775,221 @@ class SQLAlchemyStore:
             ).one_or_none()
             if row is None or row.case_id != case_id or row.result_json is None:
                 return None
-            return _decode_analysis_result(row.result_json)
+            return dict(row.result_json)
+
+    def get_analysis_report_summary(
+        self,
+        case_id: str,
+        run_id: str,
+    ) -> AnalysisReportSummary | None:
+        payload = self._get_analysis_result_payload(case_id, run_id)
+        if payload is None:
+            return None
+        if is_analysis_result_manifest(payload):
+            return read_report_summary(payload, settings=self.settings)
+        result = self.get_analysis_result(case_id, run_id)
+        if result is None:
+            return None
+        return AnalysisReportSummary(
+            case_id=result.case_id,
+            analysis_run_id=result.analysis_run_id,
+            files=result.files,
+            templates=result.templates,
+            samples=result.samples,
+            annotations=result.annotations,
+            log_facets=result.log_facets,
+            progress=result.progress,
+        )
+
+    def get_analysis_temporal(
+        self,
+        case_id: str,
+        run_id: str,
+    ) -> list[WindowAggregate] | None:
+        payload = self._get_analysis_result_payload(case_id, run_id)
+        if payload is None:
+            return None
+        if is_analysis_result_manifest(payload):
+            return read_temporal(payload, settings=self.settings)
+        result = self.get_analysis_result(case_id, run_id)
+        return result.temporal if result is not None else None
+
+    def get_analysis_causal_graph(
+        self,
+        case_id: str,
+        run_id: str,
+    ) -> CausalGraph | None:
+        payload = self._get_analysis_result_payload(case_id, run_id)
+        if payload is None:
+            return None
+        if is_analysis_result_manifest(payload):
+            return read_causal_graph(payload, settings=self.settings)
+        result = self.get_analysis_result(case_id, run_id)
+        return result.causal_graph if result is not None else None
+
+    def get_analysis_causal_summary(
+        self,
+        case_id: str,
+        run_id: str,
+    ) -> CausalSummary | None:
+        payload = self._get_analysis_result_payload(case_id, run_id)
+        if payload is None:
+            return None
+        if is_analysis_result_manifest(payload):
+            return read_causal_summary(payload, settings=self.settings)
+        result = self.get_analysis_result(case_id, run_id)
+        return result.causal_summary if result is not None else None
+
+    def get_analysis_logs_page(
+        self,
+        case_id: str,
+        run_id: str,
+        *,
+        window_start: datetime | None = None,
+        window_end: datetime | None = None,
+        q: str | None = None,
+        service: str | None = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> AnalysisLogPageRecord | None:
+        payload = self._get_analysis_result_payload(case_id, run_id)
+        if payload is None:
+            return None
+        if not is_analysis_result_manifest(payload):
+            result = self.get_analysis_result(case_id, run_id)
+            if result is None:
+                return None
+            templates = {
+                template.template_id: template.template_text
+                for template in result.templates
+            }
+            rows = [
+                line
+                for line in result.normalized_logs
+                if self._analysis_log_matches(
+                    line,
+                    template_text_by_id=templates,
+                    window_start=window_start,
+                    window_end=window_end,
+                    q=q,
+                    service=service,
+                )
+            ]
+            facets = (
+                result.log_facets
+                if not any((window_start, window_end, q, service)) and result.log_facets
+                else self._analysis_log_facets(rows)
+            )
+            return AnalysisLogPageRecord(
+                rows=rows[offset : offset + limit],
+                total=len(rows),
+                facets=facets,
+                template_text_by_id=templates,
+            )
+
+        summary = read_report_summary(payload, settings=self.settings)
+        templates = {
+            template.template_id: template.template_text for template in summary.templates
+        }
+        logs_manifest = payload.get("logs", {})
+        if not any((window_start, window_end, q, service)):
+            page_end = offset + limit
+            page_rows: list[NormalizedLogLine] = []
+            for entry in logs_manifest.get("chunks", []):
+                chunk_start = int(entry.get("start_offset") or 0)
+                chunk_end = chunk_start + int(entry.get("record_count") or 0)
+                if chunk_end <= offset or chunk_start >= page_end:
+                    continue
+                chunk = read_log_chunk(entry, settings=self.settings)
+                local_start = max(offset - chunk_start, 0)
+                local_end = min(page_end - chunk_start, len(chunk))
+                page_rows.extend(chunk[local_start:local_end])
+            return AnalysisLogPageRecord(
+                rows=page_rows,
+                total=int(logs_manifest.get("total") or 0),
+                facets={
+                    str(name): {str(key): int(value) for key, value in values.items()}
+                    for name, values in dict(logs_manifest.get("facets") or {}).items()
+                    if isinstance(values, dict)
+                },
+                template_text_by_id=templates,
+            )
+
+        page_rows = []
+        total = 0
+        service_counts: Counter[str] = Counter()
+        signal_counts: Counter[str] = Counter()
+        fault_counts: Counter[str] = Counter()
+        for _, chunk in iter_log_chunks(payload, settings=self.settings):
+            for line in chunk:
+                if not self._analysis_log_matches(
+                    line,
+                    template_text_by_id=templates,
+                    window_start=window_start,
+                    window_end=window_end,
+                    q=q,
+                    service=service,
+                ):
+                    continue
+                if offset <= total < offset + limit:
+                    page_rows.append(line)
+                total += 1
+                service_counts[line.service or "unknown"] += 1
+                signal_counts[line.golden_signal] += 1
+                fault_counts.update(line.fault_categories)
+        return AnalysisLogPageRecord(
+            rows=page_rows,
+            total=total,
+            facets={
+                "service": dict(service_counts),
+                "golden_signal": dict(signal_counts),
+                "fault_category": dict(fault_counts),
+            },
+            template_text_by_id=templates,
+        )
+
+    @staticmethod
+    def _analysis_log_matches(
+        line: NormalizedLogLine,
+        *,
+        template_text_by_id: dict[str, str],
+        window_start: datetime | None,
+        window_end: datetime | None,
+        q: str | None,
+        service: str | None,
+    ) -> bool:
+        if window_start and (line.timestamp is None or line.timestamp < window_start):
+            return False
+        if window_end and (line.timestamp is None or line.timestamp > window_end):
+            return False
+        if service and line.service != service:
+            return False
+        if q:
+            lowered = q.lower()
+            if (
+                lowered not in line.redacted_message.lower()
+                and lowered
+                not in template_text_by_id.get(line.template_id or "", "").lower()
+                and not any(
+                    lowered in value.lower()
+                    for values in line.entities.values()
+                    for value in values
+                )
+            ):
+                return False
+        return True
+
+    @staticmethod
+    def _analysis_log_facets(
+        rows: list[NormalizedLogLine],
+    ) -> dict[str, dict[str, int]]:
+        return {
+            "service": dict(Counter(line.service or "unknown" for line in rows)),
+            "golden_signal": dict(Counter(line.golden_signal for line in rows)),
+            "fault_category": dict(
+                Counter(category for line in rows for category in line.fault_categories)
+            ),
+        }
 
     def fail_interrupted_analysis_runs(self) -> int:
         with self._session() as session:

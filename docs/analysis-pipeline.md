@@ -165,14 +165,21 @@ graphs can be empty. Use the `all` scope in Data Summary to review extracted tem
 ## Persistence and reports
 
 Progress is stored on the analysis-run row while the task runs. On completion, one validated
-`AnalysisResult` is stored as a versioned, checksummed, compressed envelope in
-`analysis_runs.result_json`. Analysis-only raw-line and raw-entry collections, duplicate message
-forms, and per-line template copies are omitted from the persisted envelope. The original uploads
-remain in protected local storage, while report rows retain the redacted message and evidence
-identity required by the UI.
+logical `AnalysisResult` is stored as a versioned manifest in `analysis_runs.result_json` with
+checksummed, compressed artifacts in local object storage. Analysis-only raw-line and raw-entry
+collections, duplicate message forms, and per-line template copies are omitted from the persisted
+artifacts. The original uploads remain in protected local storage, while report rows retain the
+redacted message and evidence identity required by the UI.
 
 Data Summary, Temporal View, Tabular Logs, Causal Graph, Causal Summary, and analysis chat all read
-that same validated result. There is no second analytical schema to reconcile.
+the same logical validated result. Physically, completion writes independently compressed summary,
+temporal, graph, and causal-summary artifacts plus 10,000-row log chunks, then commits a compact
+manifest to SQLite. Each report endpoint validates only its section. The default Tabular Logs
+request reads only the chunks intersecting the requested page; filtered searches scan chunks
+sequentially with bounded memory. There is no second analytical schema to reconcile.
+
+The manifest stores aggregate log-facet counts used by the initial Tabular Logs view. Filtered or
+searched views recompute facets from matching rows while scanning the chunks.
 
 ## Traceability
 

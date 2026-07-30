@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from app import sqlalchemy_store
 from app.api.cases import _track_task
 from app.config import Settings
 from app.main import create_app
@@ -150,7 +151,9 @@ async def test_chat_rejects_a_run_created_without_llm() -> None:
 
 
 @pytest.mark.asyncio
-async def test_case_upload_analysis_and_reports() -> None:
+async def test_case_upload_analysis_and_reports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     store = create_ephemeral_store(Settings())
     user = store.register_user(
         email="owner@example.com",
@@ -197,11 +200,32 @@ async def test_case_upload_analysis_and_reports() -> None:
             await asyncio.sleep(0.01)
         assert run.json()["status"] == "completed", run.text
 
-        summary = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
-        logs = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/logs")
-        assert summary.status_code == 200
-        assert logs.status_code == 200
-        assert logs.json()["total"] == 1
+        decode_calls = 0
+
+        def counting_decode(payload):  # noqa: ANN001
+            nonlocal decode_calls
+            decode_calls += 1
+            raise AssertionError("segmented reports must not decode the full result")
+
+        monkeypatch.setattr(sqlalchemy_store, "_decode_analysis_result", counting_decode)
+        store._clear_analysis_result_cache()
+        report_paths = {
+            "summary": "summary",
+            "timeline": "temporal",
+            "logs": "logs",
+            "graph": "causal-graph",
+            "rca": "causal-summary",
+        }
+        reports = {
+            name: await client.get(
+                f"/api/cases/{case_id}/analysis-runs/{run_id}/{path}"
+            )
+            for name, path in report_paths.items()
+        }
+
+        assert all(response.status_code == 200 for response in reports.values())
+        assert reports["logs"].json()["total"] == 1
+        assert decode_calls == 0
         assert run.json()["progress"]["steps"]
 
 

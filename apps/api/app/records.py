@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from logan_analysis.algorithms.redactors import redact_text
-from logan_analysis.models import AnalysisResult
+from logan_analysis.models import AnalysisResult, NormalizedLogLine
 
 TERMINAL_ANALYSIS_RUN_STATUSES = {"completed", "failed", "cancelled"}
 _SENSITIVE_ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -108,6 +108,14 @@ class AnalysisRunRecord:
     error_message: str | None = None
     result: AnalysisResult | None = None
     progress: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AnalysisLogPageRecord:
+    rows: list[NormalizedLogLine]
+    total: int
+    facets: dict[str, dict[str, int]]
+    template_text_by_id: dict[str, str]
 
 
 def sanitize_error_message(error: BaseException | str, *, max_length: int = 1000) -> str:

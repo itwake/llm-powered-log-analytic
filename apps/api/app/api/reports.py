@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
-from typing import Literal
+from collections import defaultdict
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from logan_analysis.models import OFFENDING_SIGNALS
@@ -13,10 +13,14 @@ from app.store import Store, UserRecord
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
 
-def _require_result(store: Store, case_id: str, run_id: str):
-    result = store.get_analysis_result(case_id, run_id)
-    if result:
-        return result
+def _require_report_value(
+    store: Store,
+    case_id: str,
+    run_id: str,
+    value: Any,
+) -> Any:
+    if value is not None:
+        return value
     run = store.get_analysis_run(run_id)
     if run is None or run.case_id != case_id:
         raise HTTPException(status_code=404, detail="analysis run not found")
@@ -45,7 +49,12 @@ def data_summary(
         user=user,
         case_id=case_id,
     )
-    result = _require_result(store, case_id, run_id)
+    result = _require_report_value(
+        store,
+        case_id,
+        run_id,
+        store.get_analysis_report_summary(case_id, run_id),
+    )
     annotations = {annotation.template_id: annotation for annotation in result.annotations}
     samples = {sample.template_id: sample for sample in result.samples}
     items = []
@@ -114,9 +123,14 @@ def temporal(
         user=user,
         case_id=case_id,
     )
-    result = _require_result(store, case_id, run_id)
+    aggregates = _require_report_value(
+        store,
+        case_id,
+        run_id,
+        store.get_analysis_temporal(case_id, run_id),
+    )
     grouped: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    for aggregate in result.temporal:
+    for aggregate in aggregates:
         if group_by == "service":
             name = aggregate.service or "unknown"
         elif group_by == "fault_category":
@@ -127,7 +141,7 @@ def temporal(
             name = aggregate.golden_signal
         grouped[name][aggregate.window_start.isoformat()] += aggregate.count
     return {
-        "window_size_seconds": (result.temporal[0].window_size_seconds if result.temporal else 60),
+        "window_size_seconds": (aggregates[0].window_size_seconds if aggregates else 60),
         "series": [
             {
                 "name": name,
@@ -159,41 +173,27 @@ def logs(
         user=user,
         case_id=case_id,
     )
-    result = _require_result(store, case_id, run_id)
-    rows = result.normalized_logs
-    templates = {template.template_id: template.template_text for template in result.templates}
-    if window_start:
-        rows = [line for line in rows if line.timestamp and line.timestamp >= window_start]
-    if window_end:
-        rows = [line for line in rows if line.timestamp and line.timestamp <= window_end]
-    if q:
-        lowered = q.lower()
-        rows = [
-            line
-            for line in rows
-            if lowered in line.redacted_message.lower()
-            or lowered in templates.get(line.template_id or "", "").lower()
-            or any(
-                lowered in value.lower() for values in line.entities.values() for value in values
-            )
-        ]
-    if service:
-        rows = [line for line in rows if line.service == service]
+    page = _require_report_value(
+        store,
+        case_id,
+        run_id,
+        store.get_analysis_logs_page(
+            case_id,
+            run_id,
+            window_start=window_start,
+            window_end=window_end,
+            q=q,
+            service=service,
+            limit=limit,
+            offset=offset,
+        ),
+    )
     facets = {
-        "service": [
+        name: [
             {"value": key, "count": count}
-            for key, count in Counter(line.service or "unknown" for line in rows).items()
-        ],
-        "golden_signal": [
-            {"value": key, "count": count}
-            for key, count in Counter(line.golden_signal for line in rows).items()
-        ],
-        "fault_category": [
-            {"value": key, "count": count}
-            for key, count in Counter(
-                category for line in rows for category in line.fault_categories
-            ).items()
-        ],
+            for key, count in page.facets.get(name, {}).items()
+        ]
+        for name in ("service", "golden_signal", "fault_category")
     }
     return {
         "items": [
@@ -207,14 +207,14 @@ def logs(
                 "line_numbers": line.line_numbers,
                 "message": line.redacted_message,
                 "template_id": line.template_id,
-                "template_text": templates.get(line.template_id or ""),
+                "template_text": page.template_text_by_id.get(line.template_id or ""),
                 "golden_signal": line.golden_signal,
                 "fault_categories": line.fault_categories,
                 "entities": line.entities,
             }
-            for line in rows[offset : offset + limit]
+            for line in page.rows
         ],
-        "total": len(rows),
+        "total": page.total,
         "facets": facets,
     }
 
@@ -233,8 +233,12 @@ def causal_graph(
         user=user,
         case_id=case_id,
     )
-    result = _require_result(store, case_id, run_id)
-    graph = result.causal_graph
+    graph = _require_report_value(
+        store,
+        case_id,
+        run_id,
+        store.get_analysis_causal_graph(case_id, run_id),
+    )
     node_ids = {node.id for node in graph.nodes[:max_nodes]}
     edges = [
         edge
@@ -266,5 +270,10 @@ def causal_summary(
         user=user,
         case_id=case_id,
     )
-    result = _require_result(store, case_id, run_id)
-    return result.causal_summary.model_dump(mode="json")
+    result = _require_report_value(
+        store,
+        case_id,
+        run_id,
+        store.get_analysis_causal_summary(case_id, run_id),
+    )
+    return result.model_dump(mode="json")

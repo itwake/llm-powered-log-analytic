@@ -8,17 +8,19 @@ The database contains five application tables:
 | `sessions` | Hashed browser session tokens |
 | `cases` | Incident context and ownership |
 | `raw_files` | Uploaded file metadata and local object URI |
-| `analysis_runs` | Run state, progress, and compressed final-result envelope |
+| `analysis_runs` | Run state, progress, and compact final-result manifest |
 
 An analysis result contains input-file metadata, redacted normalized log lines, templates,
-samples, optional model annotations, temporal aggregates, a causal graph, and a summary. It is
-stored once in `analysis_runs.result_json` as a versioned, checksummed `zlib+base64` envelope and
-validated with the `AnalysisResult` Pydantic model when read. Existing uncompressed result objects
-remain readable.
+samples, optional model annotations, temporal aggregates, a causal graph, and a summary. Existing
+single-envelope and uncompressed result objects remain readable for compatibility.
 
-The persisted result excludes raw physical lines, merged raw entries, and duplicate per-line
-message/template fields that report endpoints can derive from the retained redacted result. Raw
-uploads remain below `LOGAN_LOCAL_OBJECT_STORE_DIR`.
+`analysis_runs.result_json` contains a compact result manifest. Independently compressed summary,
+temporal, graph, and RCA artifacts and 10,000-row log chunks live below
+`LOGAN_LOCAL_OBJECT_STORE_DIR`. The artifacts exclude raw physical lines, merged raw entries, and
+duplicate per-line message/template fields that report endpoints can derive from the retained
+redacted result. The manifest includes aggregate log-facet counts so the default Logs page does
+not scan every normalized row merely to render filters. Raw uploads remain in the same protected
+object-store root.
 
 ## Schema migrations
 

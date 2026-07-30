@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from datetime import UTC, datetime
@@ -15,13 +16,23 @@ from logan_analysis.activities.sampling import select_samples
 from logan_analysis.activities.summary import render_causal_summary
 from logan_analysis.activities.templating import extract_templates
 from logan_analysis.activities.temporal_aggregation import build_time_window_aggregates
-from logan_analysis.models import AnalysisResult
+from logan_analysis.models import AnalysisResult, NormalizedLogLine
 from logan_analysis.ports import ModelGateway
 
 ProgressCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 MAX_ANNOTATION_TEMPLATES = 64
 MAX_SAMPLE_MESSAGE_CHARS = 1200
 MAX_SAMPLES_PER_TEMPLATE = 3
+
+
+def _build_log_facets(logs: list[NormalizedLogLine]) -> dict[str, dict[str, int]]:
+    return {
+        "service": dict(Counter(line.service or "unknown" for line in logs)),
+        "golden_signal": dict(Counter(line.golden_signal for line in logs)),
+        "fault_category": dict(
+            Counter(category for line in logs for category in line.fault_categories)
+        ),
+    }
 
 
 def _update_progress(
@@ -224,6 +235,7 @@ class AnalyzeCasePipeline:
                 "summary_source": value.details.get("source"),
             },
         )
+        log_facets = await asyncio.to_thread(_build_log_facets, enriched)
         return AnalysisResult(
             case_id=case_id,
             analysis_run_id=analysis_run_id,
@@ -236,6 +248,7 @@ class AnalyzeCasePipeline:
             temporal=temporal,
             causal_graph=causal_graph,
             causal_summary=causal_summary,
+            log_facets=log_facets,
             progress={
                 **progress,
                 "files_total": len(file_summaries),

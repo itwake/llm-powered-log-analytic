@@ -39,6 +39,22 @@ persisted `queued` or `processing` run is marked `failed` with an interruption m
 not remain indefinitely stuck in an active state. The user can then start a new run with the
 already completed uploads.
 
+New analysis results are partitioned into report-specific compressed artifacts. Summary, Timeline,
+Graph, RCA, and chat do not load log rows. An unfiltered Logs request reads only the chunks for its
+requested page. Filters and free-text searches currently scan all log chunks, but validate them
+one at a time so memory use remains bounded. Results created by older application versions retain
+the single-envelope format and use a five-minute decoded-result compatibility cache.
+
+Run the repeatable report-path benchmark with a chunked two-million-row synthetic result:
+
+```bash
+python scripts/benchmark_report_api.py --records 2000000
+```
+
+The benchmark creates its database and object-store artifacts in a temporary directory, calls the
+actual FastAPI report routes, prints per-route latency and process working-set measurements, then
+disposes the database connection and removes the temporary data.
+
 ## Logs
 
 Application logs use standard output. Analysis failures are recorded on the run and returned in a
