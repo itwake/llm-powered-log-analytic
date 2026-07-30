@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 import uuid
 from pathlib import Path
@@ -15,6 +17,8 @@ from logan_analysis.models import (
 )
 from logan_analysis.ports import ModelGateway
 from pydantic import ValidationError
+
+logger = logging.getLogger("logan.analysis")
 
 PROMPT_VERSION = "annotation_v1"
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "annotation_prompt.md"
@@ -150,6 +154,9 @@ def build_annotation_payload(
     }
 
 
+MAX_CONCURRENT_ANNOTATIONS = 8
+
+
 async def annotate_templates(
     *,
     analysis_run_id: str,
@@ -160,15 +167,18 @@ async def annotate_templates(
     max_templates: int | None = None,
     max_sample_message_chars: int | None = None,
     max_samples_per_template: int | None = None,
+    max_concurrency: int = MAX_CONCURRENT_ANNOTATIONS,
 ) -> list[TemplateAnnotation]:
     samples_by_template: dict[str, list[RepresentativeSample]] = {}
     for sample in samples:
         samples_by_template.setdefault(sample.template_id, []).append(sample)
 
-    annotations: list[TemplateAnnotation] = []
     model = str(case_context.get("model") or "gpt-5.4")
     reasoning_effort = str(case_context.get("reasoning_effort") or "high")
-    for template in _prioritized_templates(templates, max_templates=max_templates):
+    instructions = _load_annotation_prompt()
+    semaphore = asyncio.Semaphore(max(1, max_concurrency))
+
+    async def annotate_one(template: LogTemplate) -> TemplateAnnotation:
         payload = build_annotation_payload(
             case_context=case_context,
             template=template,
@@ -176,35 +186,36 @@ async def annotate_templates(
             max_sample_message_chars=max_sample_message_chars,
             max_samples_per_template=max_samples_per_template,
         )
-        response = await gateway.responses(
-            user_id=case_context.get("user_id", "local"),
-            model=model,
-            instructions=_load_annotation_prompt(),
-            input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": json.dumps(
-                                payload,
-                                separators=(",", ":"),
-                                sort_keys=True,
-                            ),
-                        }
-                    ],
-                }
-            ],
-            stream=False,
-            metadata={
-                "case_id": case_context.get("case_id"),
-                "analysis_run_id": analysis_run_id,
-                "purpose": "template_annotation",
-                "prompt_version": PROMPT_VERSION,
-            },
-            reasoning_effort=reasoning_effort,
-            response_format={"type": "json_object"},
-        )
+        async with semaphore:
+            response = await gateway.responses(
+                user_id=case_context.get("user_id", "local"),
+                model=model,
+                instructions=instructions,
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": json.dumps(
+                                    payload,
+                                    separators=(",", ":"),
+                                    sort_keys=True,
+                                ),
+                            }
+                        ],
+                    }
+                ],
+                stream=False,
+                metadata={
+                    "case_id": case_context.get("case_id"),
+                    "analysis_run_id": analysis_run_id,
+                    "purpose": "template_annotation",
+                    "prompt_version": PROMPT_VERSION,
+                },
+                reasoning_effort=reasoning_effort,
+                response_format={"type": "json_object"},
+            )
         if not isinstance(response, dict):
             raise ValueError("template annotation gateway returned a stream")
         raw = response.get("output_json", response)
@@ -219,18 +230,35 @@ async def annotate_templates(
                 confidence=0.0,
                 rationale="Model output could not be validated.",
             )
-        annotations.append(
-            TemplateAnnotation(
-                annotation_id=str(
-                    uuid.uuid5(uuid.NAMESPACE_URL, f"{template.template_id}:annotation_v1")
-                ),
-                template_id=template.template_id,
-                analysis_run_id=analysis_run_id,
-                model_provider=getattr(gateway, "provider", "ai_platform"),
-                model_name=model,
-                prompt_version=PROMPT_VERSION,
-                raw_model_response=raw if isinstance(raw, dict) else {"raw": raw},
-                **parsed.model_dump(),
-            )
+        return TemplateAnnotation(
+            annotation_id=str(
+                uuid.uuid5(uuid.NAMESPACE_URL, f"{template.template_id}:annotation_v1")
+            ),
+            template_id=template.template_id,
+            analysis_run_id=analysis_run_id,
+            model_provider=getattr(gateway, "provider", "ai_platform"),
+            model_name=model,
+            prompt_version=PROMPT_VERSION,
+            raw_model_response=raw if isinstance(raw, dict) else {"raw": raw},
+            **parsed.model_dump(),
         )
+
+    selected = _prioritized_templates(templates, max_templates=max_templates)
+    results = await asyncio.gather(
+        *(annotate_one(template) for template in selected),
+        return_exceptions=True,
+    )
+    # One failing model call must not fail the whole run: templates whose
+    # annotation errored keep their heuristic annotation (the pipeline merges by
+    # template id).
+    annotations: list[TemplateAnnotation] = []
+    for template, outcome in zip(selected, results):
+        if isinstance(outcome, BaseException):
+            logger.warning(
+                "template annotation failed; keeping heuristic annotation",
+                extra={"template_id": template.template_id},
+                exc_info=outcome,
+            )
+            continue
+        annotations.append(outcome)
     return annotations

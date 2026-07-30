@@ -15,6 +15,7 @@ const PIPELINE_STEPS = [
   ["preprocess_redact", "Redact"],
   ["template_extraction", "Template"],
   ["representative_sampling", "Sample"],
+  ["heuristic_annotation", "Classify"],
   ["ai_platform_annotation", "Annotate"],
   ["broadcast_annotations", "Broadcast"],
   ["temporal_aggregation", "Temporal"],

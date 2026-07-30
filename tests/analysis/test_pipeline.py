@@ -97,7 +97,15 @@ async def test_pipeline_without_llm_produces_deterministic_reports() -> None:
     assert result.raw_entries == []
     assert result.normalized_logs
     assert result.templates
-    assert result.annotations == []
+    assert result.annotations
+    assert all(
+        annotation.model_provider == "heuristic" for annotation in result.annotations
+    )
+    assert {annotation.template_id for annotation in result.annotations} == {
+        template.template_id for template in result.templates
+    }
+    assert result.causal_graph.nodes
+    assert result.causal_graph.root_cause_candidates
     assert result.progress["current_step"] == "completed"
 
 

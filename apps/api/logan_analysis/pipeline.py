@@ -9,6 +9,7 @@ from typing import Any
 
 from logan_analysis.activities.broadcasting import broadcast_annotations
 from logan_analysis.activities.causal import infer_causal_graph
+from logan_analysis.activities.heuristics import annotate_templates_heuristically
 from logan_analysis.activities.inference import annotate_templates
 from logan_analysis.activities.ingestion import DEFAULT_MAX_INPUT_BYTES, ingest_paths
 from logan_analysis.activities.preprocessing import merge_entries, preprocess_entries
@@ -167,20 +168,33 @@ class AnalyzeCasePipeline:
             ),
             lambda value: {"samples": len(value)},
         )
+        # Deterministic annotations cover every template so the causal graph, RCA,
+        # and attention-scoped summary work without a model provider; the LLM pass
+        # then upgrades the highest-volume templates when a gateway is configured.
+        heuristic_annotations = await run_step(
+            "heuristic_annotation",
+            lambda: annotate_templates_heuristically(
+                analysis_run_id=analysis_run_id,
+                templates=templates,
+                logs=normalized,
+                samples=samples,
+            ),
+            lambda value: {"heuristic_annotations": len(value)},
+        )
         if gateway is None:
-            annotations = []
+            annotations = heuristic_annotations
             await update_step(
                 step_name="ai_platform_annotation",
                 status="skipped",
                 metadata={
                     "llm_enabled": False,
-                    "annotations": 0,
+                    "annotations": len(annotations),
                     "annotation_templates_total": len(templates),
                     "annotation_templates_selected": 0,
                 },
             )
         else:
-            annotations = await run_step(
+            llm_annotations = await run_step(
                 "ai_platform_annotation",
                 lambda: annotate_templates(
                     analysis_run_id=analysis_run_id,
@@ -200,6 +214,15 @@ class AnalyzeCasePipeline:
                     "annotation_budget": MAX_ANNOTATION_TEMPLATES,
                 },
             )
+            llm_template_ids = {annotation.template_id for annotation in llm_annotations}
+            annotations = [
+                *llm_annotations,
+                *(
+                    annotation
+                    for annotation in heuristic_annotations
+                    if annotation.template_id not in llm_template_ids
+                ),
+            ]
         enriched = await run_step(
             "broadcast_annotations",
             lambda: broadcast_annotations(normalized, annotations),

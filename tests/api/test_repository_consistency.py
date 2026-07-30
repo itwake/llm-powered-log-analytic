@@ -68,3 +68,16 @@ def test_windows_launcher_starts_current_applications() -> None:
     assert "npm ls --workspace @logan/web --depth=0" in launcher
     assert "get-nettcpconnection -state listen -localport 3000" in launcher
     assert "get-nettcpconnection -state listen -localport 8000" in launcher
+
+
+def test_web_progress_panel_mirrors_pipeline_steps() -> None:
+    pipeline = (ROOT / "apps/api/logan_analysis/pipeline.py").read_text(encoding="utf-8")
+    panel = (
+        ROOT / "apps/web/src/components/AnalysisProgressPanel.tsx"
+    ).read_text(encoding="utf-8")
+
+    step_names = set(re.findall(r'step_name="([a-z_]+)"', pipeline))
+    step_names.update(re.findall(r'run_step\(\s*"([a-z_]+)"', pipeline))
+    assert step_names, "pipeline step names not found"
+    missing = [name for name in step_names if f'"{name}"' not in panel]
+    assert missing == [], f"AnalysisProgressPanel is missing pipeline steps: {missing}"
