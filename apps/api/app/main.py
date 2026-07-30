@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -14,9 +15,17 @@ from app.logging_config import configure_logging
 from app.services.model_gateway_factory import create_model_gateway
 from app.store import Store, create_store
 
+logger = logging.getLogger("logan.analysis")
+
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    interrupted = await asyncio.to_thread(app.state.store.fail_interrupted_analysis_runs)
+    if interrupted:
+        logger.warning(
+            "marked interrupted analysis runs as failed",
+            extra={"analysis_run_count": interrupted},
+        )
     yield
     tasks = list(getattr(app.state, "analysis_tasks", {}).values())
     for task in tasks:

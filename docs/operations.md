@@ -34,6 +34,11 @@ deployments require complete SSO configuration.
 Start one API process per instance because analysis runs use in-process background tasks.
 See [Getting started](getting-started.md) for local and Docker startup instructions.
 
+An abrupt process exit cannot resume an in-memory analysis task. On the next API startup, any
+persisted `queued` or `processing` run is marked `failed` with an interruption message so cases do
+not remain indefinitely stuck in an active state. The user can then start a new run with the
+already completed uploads.
+
 ## Logs
 
 Application logs use standard output. Analysis failures are recorded on the run and returned in a

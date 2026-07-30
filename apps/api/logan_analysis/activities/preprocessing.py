@@ -37,7 +37,7 @@ def preprocess_entries(
         parsed_fields = {
             key: value
             for key, value in parsed.items()
-            if key not in {"message", "level", "service"}
+            if key not in {"json", "message", "level", "service"}
         }
         parsed_fields["redaction_counts"] = redacted.replacements
         if len(entry.line_numbers) > 1:
@@ -56,7 +56,7 @@ def preprocess_entries(
                 timestamp_quality=timestamp_quality,
                 level=parsed.get("level"),
                 service=parsed.get("service"),
-                message=str(parsed.get("message") or entry.raw_message),
+                message=redacted.text,
                 normalized_message=normalize_message(redacted.text),
                 redacted_message=redacted.text,
                 parsed_fields=parsed_fields,

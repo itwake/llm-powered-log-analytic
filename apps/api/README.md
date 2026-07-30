@@ -138,10 +138,13 @@ server paths.
 9. `causal_graph`
 10. `causal_summary`
 
-Progress snapshots contain generated counts and sanitized failures. A successful run stores one
-validated `AnalysisResult`; every report endpoint reads that result. The analysis package retains
-evidence identifiers and source lines through transformations. Causal edges remain investigation
-candidates rather than proof.
+Progress snapshots contain generated counts and sanitized failures. CPU-bound steps run outside
+the API event loop. After the ten pipeline steps, `finalizing` covers result encoding and the
+atomic database commit; the run becomes `completed` only after that commit succeeds. A successful
+run stores one validated, compressed `AnalysisResult` envelope, and every report endpoint reads
+that result. The persisted envelope excludes raw intermediates and duplicate per-line text while
+retaining redacted report rows and evidence identity. Causal edges remain investigation candidates
+rather than proof.
 
 `LOGAN_LLM_PROVIDER=none` skips model annotation and produces a deterministic evidence summary.
 `LOGAN_LLM_PROVIDER=ai_platform` enables template annotation, generated summary text, and completed

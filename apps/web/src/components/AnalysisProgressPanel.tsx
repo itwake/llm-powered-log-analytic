@@ -123,11 +123,12 @@ export function AnalysisProgressPanel({
   const completedSteps = stepRows.filter((step) => step.status === "completed").length;
   const failed = run.status === "failed" || stepRows.some((step) => step.status === "failed");
   const cancelled = run.status === "cancelled";
+  const finalizing = run.status === "processing" && run.current_step === "finalizing";
   const completionPercent = failed
     ? Math.max(8, Math.round((completedSteps / PIPELINE_STEPS.length) * 100))
     : run.status === "completed"
       ? 100
-      : Math.max(8, Math.round((completedSteps / PIPELINE_STEPS.length) * 100));
+      : Math.min(98, Math.max(8, Math.round((completedSteps / PIPELINE_STEPS.length) * 100)));
   const canCancel = !terminalRunStatus(run.status) && Boolean(onCancel);
   return (
     <Card>
@@ -138,7 +139,7 @@ export function AnalysisProgressPanel({
               Analysis Progress
             </Typography>
             <Typography color="text.secondary">
-              Run #{run.run_number} - {run.current_step}
+              Run #{run.run_number} - {finalizing ? "preparing reports" : run.current_step}
             </Typography>
           </Box>
           <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>

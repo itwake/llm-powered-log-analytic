@@ -278,6 +278,8 @@ to Tabular Logs where the response exposes source references.
 
 Update `PIPELINE_STEPS` in `AnalysisProgressPanel.tsx` at the same time as
 `apps/api/logan_analysis/pipeline.py` and `docs/analysis-pipeline.md`.
+`finalizing` is a post-pipeline persistence state: keep the progress bar below 100% until the API
+reports the run as `completed`.
 
 ### Change shared presentation
 

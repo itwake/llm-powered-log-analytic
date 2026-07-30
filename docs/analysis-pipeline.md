@@ -24,6 +24,12 @@ queued -> processing -> completed
 
 Starting a run creates an asynchronous task in the API process. Cancelling the run cancels that
 task and records the terminal state. A graceful API shutdown also cancels active tasks.
+Synchronous file and CPU work runs outside the API event loop so case and progress requests remain
+responsive while large inputs are analyzed.
+
+After `causal_summary` completes, the run enters `finalizing` while the report result is encoded
+and committed. The run does not become `completed`, and report endpoints do not expose a result,
+until that commit succeeds. A finalization failure moves both the run and case to `failed`.
 
 ## Inputs
 
@@ -158,15 +164,21 @@ graphs can be empty. Use the `all` scope in Data Summary to review extracted tem
 
 ## Persistence and reports
 
-Progress is stored on the analysis-run row while the task runs. On completion, the full
-`AnalysisResult` is serialized once in `analysis_runs.result_json`.
+Progress is stored on the analysis-run row while the task runs. On completion, one validated
+`AnalysisResult` is stored as a versioned, checksummed, compressed envelope in
+`analysis_runs.result_json`. Analysis-only raw-line and raw-entry collections, duplicate message
+forms, and per-line template copies are omitted from the persisted envelope. The original uploads
+remain in protected local storage, while report rows retain the redacted message and evidence
+identity required by the UI.
 
 Data Summary, Temporal View, Tabular Logs, Causal Graph, Causal Summary, and analysis chat all read
 that same validated result. There is no second analytical schema to reconcile.
 
 ## Traceability
 
-An `EvidenceRef` carries:
+During ingestion, raw physical lines and merged entries carry SHA-256 hashes. Those raw
+intermediates are released after preprocessing rather than copied into the final report result.
+An `EvidenceRef` carries the durable report identity:
 
 - case id
 - analysis run id

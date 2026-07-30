@@ -20,9 +20,10 @@ The API owns background analysis tasks. A run follows one ordered pipeline:
 9. score causal candidates
 10. render the incident summary
 
-Run progress and the final `AnalysisResult` are persisted by the same API process. The result
-JSON is the source for every report endpoint, so report reads do not maintain a second analytical
-schema.
+Run progress and the final `AnalysisResult` are persisted by the same API process. CPU-bound
+pipeline activities and final-result encoding run on worker threads so they do not block the API
+event loop. The compressed result envelope is the source for every report endpoint, so report
+reads do not maintain a second analytical schema.
 
 Uploaded files use `file://` object URIs rooted at `LOGAN_LOCAL_OBJECT_STORE_DIR`. Metadata and
 analysis results use the SQLite database at `LOGAN_DATABASE_PATH`. Alembic owns the database

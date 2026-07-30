@@ -74,7 +74,9 @@ Run states are:
 - `cancelled`
 
 The progress panel shows the current pipeline step and available counts. A processing run can be
-terminated from the progress panel or run history.
+terminated from the progress panel or run history. After the ten analysis steps finish,
+**preparing reports** means the result is still being finalized. Open report views after the run
+status changes to `completed`.
 
 Select a run in **Analysis Runs** to inspect its status. Report links are tied to a specific run id,
 so historical results remain separate.

@@ -68,8 +68,8 @@ class NormalizedLogLine(BaseModel):
     timestamp_quality: str = "missing"
     level: str | None = None
     service: str | None = None
-    message: str
-    normalized_message: str
+    message: str = ""
+    normalized_message: str = ""
     redacted_message: str
     parsed_fields: dict[str, Any] = Field(default_factory=dict)
     parser_name: str = "logan_regex_v1"
@@ -210,7 +210,7 @@ class AnalysisResult(BaseModel):
     case_id: str
     analysis_run_id: str
     files: list[IngestedFile]
-    raw_entries: list[LogEntry]
+    raw_entries: list[LogEntry] = Field(default_factory=list)
     normalized_logs: list[NormalizedLogLine]
     templates: list[LogTemplate]
     samples: list[RepresentativeSample]

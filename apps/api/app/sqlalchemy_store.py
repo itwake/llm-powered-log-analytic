@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import uuid
+import zlib
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,7 +15,7 @@ from logan_analysis.pipeline import AnalyzeCasePipeline
 from sqlalchemy import URL, create_engine, event, func, or_, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, defer, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.config import Settings, settings
@@ -40,6 +43,52 @@ def _utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+_RESULT_FORMAT = "logan.analysis-result"
+_RESULT_ENCODING = "zlib+base64"
+_RESULT_VERSION = 1
+_PERSISTED_RESULT_EXCLUDE = {
+    "files": {"__all__": {"lines"}},
+    "raw_entries": True,
+    "normalized_logs": {
+        "__all__": {
+            "message",
+            "normalized_message",
+            "parsed_fields",
+            "template_text",
+        }
+    },
+}
+
+
+def _encode_analysis_result(result: AnalysisResult) -> dict[str, Any]:
+    raw = result.model_dump_json(exclude=_PERSISTED_RESULT_EXCLUDE).encode("utf-8")
+    compressed = zlib.compress(raw, level=1)
+    return {
+        "format": _RESULT_FORMAT,
+        "version": _RESULT_VERSION,
+        "encoding": _RESULT_ENCODING,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "payload": base64.b64encode(compressed).decode("ascii"),
+    }
+
+
+def _decode_analysis_result(payload: dict[str, Any]) -> AnalysisResult:
+    if payload.get("format") != _RESULT_FORMAT:
+        return AnalysisResult.model_validate(payload)
+    try:
+        if payload.get("version") != _RESULT_VERSION:
+            raise ValueError("unsupported analysis result version")
+        if payload.get("encoding") != _RESULT_ENCODING:
+            raise ValueError("unsupported analysis result encoding")
+        compressed = base64.b64decode(str(payload["payload"]), validate=True)
+        raw = zlib.decompress(compressed)
+        if hashlib.sha256(raw).hexdigest() != payload.get("sha256"):
+            raise ValueError("analysis result checksum mismatch")
+        return AnalysisResult.model_validate_json(raw)
+    except Exception as exc:
+        raise ValueError("stored analysis result is invalid") from exc
 
 
 def _sqlite_url(database_path: str) -> URL:
@@ -440,11 +489,15 @@ class SQLAlchemyStore:
             row.status = "processing"
             row.started_at = _now()
 
-        def record_progress(progress: dict[str, Any]) -> None:
-            current = self.get_analysis_run(run_id)
+        async def record_progress(progress: dict[str, Any]) -> None:
+            current = await asyncio.to_thread(self.get_analysis_run, run_id)
             if current is None or current.status == "cancelled":
                 raise AnalysisRunCancelled("analysis run was cancelled")
-            self.update_analysis_progress(run_id=run_id, progress=progress)
+            await asyncio.to_thread(
+                self.update_analysis_progress,
+                run_id=run_id,
+                progress=progress,
+            )
 
         try:
             result = await AnalyzeCasePipeline().run(
@@ -464,21 +517,41 @@ class SQLAlchemyStore:
                 progress_callback=record_progress,
                 max_input_bytes=self.settings.max_upload_bytes,
             )
+            finalizing_progress = {
+                **result.progress,
+                "current_step": "finalizing",
+                "finalizing_started_at": _now().isoformat(),
+            }
+            await asyncio.to_thread(
+                self.update_analysis_progress,
+                run_id=run_id,
+                progress=finalizing_progress,
+            )
+            return await asyncio.to_thread(
+                self._complete_analysis_run,
+                run_id=run_id,
+                result=result,
+            )
         except (AnalysisRunCancelled, asyncio.CancelledError):
             return self.cancel_analysis_run(run_id=run_id, user_id=user_id)
         except Exception as exc:
-            with self._session() as session:
-                row = session.get(tables.AnalysisRun, run_id)
-                if row is not None and row.status != "cancelled":
-                    row.status = "failed"
-                    row.completed_at = _now()
-                    row.error_message = sanitize_error_message(exc)
-                    case_row = session.get(tables.Case, row.case_id)
-                    if case_row is not None:
-                        case_row.status = "failed"
-                        case_row.updated_at = _now()
+            try:
+                await asyncio.to_thread(
+                    self._fail_analysis_run,
+                    run_id=run_id,
+                    error=exc,
+                )
+            except Exception:
+                pass
             raise
 
+    def _complete_analysis_run(
+        self,
+        *,
+        run_id: str,
+        result: AnalysisResult,
+    ) -> AnalysisRunRecord:
+        encoded_result = _encode_analysis_result(result)
         with self._session() as session:
             row = session.get(tables.AnalysisRun, run_id)
             if row is None:
@@ -487,8 +560,12 @@ class SQLAlchemyStore:
                 return self._analysis_run_record(row)
             completed_at = _now()
             row.status = "completed"
-            row.result_json = result.model_dump(mode="json")
-            row.progress_json = dict(result.progress)
+            row.result_json = encoded_result
+            row.progress_json = {
+                **result.progress,
+                "current_step": "completed",
+                "completed_at": completed_at.isoformat(),
+            }
             row.completed_at = completed_at
             row.error_message = None
             case_row = session.get(tables.Case, row.case_id)
@@ -498,15 +575,49 @@ class SQLAlchemyStore:
             session.flush()
             return self._analysis_run_record(row)
 
+    def _fail_analysis_run(
+        self,
+        *,
+        run_id: str,
+        error: BaseException | str,
+    ) -> None:
+        with self._session() as session:
+            row = session.get(
+                tables.AnalysisRun,
+                run_id,
+                options=(defer(tables.AnalysisRun.result_json),),
+            )
+            if row is None or row.status == "cancelled":
+                return
+            failed_at = _now()
+            error_message = sanitize_error_message(error)
+            progress = dict(row.progress_json or {})
+            progress["current_step"] = "failed"
+            progress["failed_at"] = failed_at.isoformat()
+            progress["error_message"] = error_message
+            row.status = "failed"
+            row.progress_json = progress
+            row.completed_at = failed_at
+            row.error_message = error_message
+            case_row = session.get(tables.Case, row.case_id)
+            if case_row is not None:
+                case_row.status = "failed"
+                case_row.updated_at = failed_at
+
     def get_analysis_run(self, run_id: str) -> AnalysisRunRecord | None:
         with self._session() as session:
-            row = session.get(tables.AnalysisRun, run_id)
+            row = session.get(
+                tables.AnalysisRun,
+                run_id,
+                options=(defer(tables.AnalysisRun.result_json),),
+            )
             return self._analysis_run_record(row) if row else None
 
     def list_analysis_runs(self, case_id: str) -> list[AnalysisRunRecord]:
         with self._session() as session:
             rows = session.scalars(
                 select(tables.AnalysisRun)
+                .options(defer(tables.AnalysisRun.result_json))
                 .where(tables.AnalysisRun.case_id == case_id)
                 .order_by(tables.AnalysisRun.run_number.desc())
             ).all()
@@ -514,7 +625,11 @@ class SQLAlchemyStore:
 
     def cancel_analysis_run(self, *, run_id: str, user_id: str) -> AnalysisRunRecord:
         with self._session() as session:
-            row = session.get(tables.AnalysisRun, run_id)
+            row = session.get(
+                tables.AnalysisRun,
+                run_id,
+                options=(defer(tables.AnalysisRun.result_json),),
+            )
             if row is None or row.created_by != user_id:
                 raise KeyError(run_id)
             if row.status in TERMINAL_ANALYSIS_RUN_STATUSES:
@@ -550,16 +665,51 @@ class SQLAlchemyStore:
                 step["error_message"] = sanitize_error_message(str(step["error_message"]))
         clean_progress["steps"] = steps
         with self._session() as session:
-            run = session.get(tables.AnalysisRun, run_id)
-            if run is not None:
+            run = session.get(
+                tables.AnalysisRun,
+                run_id,
+                options=(defer(tables.AnalysisRun.result_json),),
+            )
+            if run is not None and run.status not in TERMINAL_ANALYSIS_RUN_STATUSES:
                 run.progress_json = clean_progress
 
     def get_analysis_result(self, case_id: str, run_id: str) -> AnalysisResult | None:
         with self._session() as session:
-            row = session.get(tables.AnalysisRun, run_id)
+            row = session.execute(
+                select(
+                    tables.AnalysisRun.case_id,
+                    tables.AnalysisRun.result_json,
+                ).where(tables.AnalysisRun.id == run_id)
+            ).one_or_none()
             if row is None or row.case_id != case_id or row.result_json is None:
                 return None
-            return AnalysisResult.model_validate(row.result_json)
+            return _decode_analysis_result(row.result_json)
+
+    def fail_interrupted_analysis_runs(self) -> int:
+        with self._session() as session:
+            rows = session.scalars(
+                select(tables.AnalysisRun)
+                .options(defer(tables.AnalysisRun.result_json))
+                .where(tables.AnalysisRun.status.in_({"queued", "processing"}))
+            ).all()
+            if not rows:
+                return 0
+            failed_at = _now()
+            error_message = "analysis was interrupted by an API restart"
+            for row in rows:
+                progress = dict(row.progress_json or {})
+                progress["current_step"] = "failed"
+                progress["failed_at"] = failed_at.isoformat()
+                progress["error_message"] = error_message
+                row.status = "failed"
+                row.progress_json = progress
+                row.completed_at = failed_at
+                row.error_message = error_message
+                case_row = session.get(tables.Case, row.case_id)
+                if case_row is not None:
+                    case_row.status = "failed"
+                    case_row.updated_at = failed_at
+            return len(rows)
 
     def _user_record(self, row: tables.User) -> UserRecord:
         return UserRecord(
@@ -612,7 +762,6 @@ class SQLAlchemyStore:
         )
 
     def _analysis_run_record(self, row: tables.AnalysisRun) -> AnalysisRunRecord:
-        result = AnalysisResult.model_validate(row.result_json) if row.result_json else None
         return AnalysisRunRecord(
             id=row.id,
             case_id=row.case_id,
@@ -624,6 +773,6 @@ class SQLAlchemyStore:
             started_at=_utc(row.started_at),
             completed_at=_utc(row.completed_at),
             error_message=row.error_message,
-            result=result,
+            result=None,
             progress=dict(row.progress_json or {}),
         )

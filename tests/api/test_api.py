@@ -289,3 +289,29 @@ async def test_analysis_requires_completed_upload() -> None:
             json={"input_file_ids": []},
         )
         assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_reports_distinguish_an_unfinished_run_from_a_missing_result() -> None:
+    store = create_ephemeral_store(Settings())
+    user = store.register_user(
+        email="owner@example.com",
+        username="owner",
+        full_name=None,
+    )
+    token, _ = store.create_session(user.id)
+    case = store.create_case(user_id=user.id, data={"title": "Incident"})
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+    app = create_app(store=store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"logan_session": token},
+    ) as client:
+        response = await client.get(
+            f"/api/cases/{case.id}/analysis-runs/{run.id}/summary"
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "analysis result is not ready"

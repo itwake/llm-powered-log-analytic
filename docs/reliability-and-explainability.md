@@ -66,8 +66,9 @@ packet. Annotation transport failures fail the run instead of silently creating 
 ## Evidence-first results
 
 Normalized lines retain their file, line, timestamp, and run identity. Raw entries and ingested
-lines retain SHA-256 hashes. Templates, samples, causal nodes, summary claims, and next actions
-carry or derive from those identities.
+lines carry SHA-256 hashes while they pass through preprocessing, then are released instead of
+being duplicated in the final result. Templates, samples, causal nodes, summary claims, and next
+actions carry or derive from the durable normalized identities.
 
 The report views expose this chain:
 

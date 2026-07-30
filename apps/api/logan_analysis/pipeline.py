@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from datetime import UTC, datetime
@@ -94,7 +95,7 @@ class AnalyzeCasePipeline:
         ) -> Any:
             await update_step(step_name=step_name, status="processing")
             try:
-                value = action()
+                value = await asyncio.to_thread(action)
                 if isinstance(value, Awaitable):
                     value = await value
             except Exception as exc:
@@ -119,6 +120,8 @@ class AnalyzeCasePipeline:
                 "raw_lines": sum(len(file.lines) for file in value),
             },
         )
+        file_summaries = [file.model_copy(update={"lines": []}) for file in files]
+        raw_line_count = sum(len(file.lines) for file in files)
         raw_entries = await run_step(
             "merge_entries",
             lambda: merge_entries(files),
@@ -133,6 +136,8 @@ class AnalyzeCasePipeline:
             ),
             lambda value: {"normalized_lines": len(value)},
         )
+        files.clear()
+        raw_entries.clear()
         normalized, templates = await run_step(
             "template_extraction",
             lambda: extract_templates(
@@ -222,8 +227,8 @@ class AnalyzeCasePipeline:
         return AnalysisResult(
             case_id=case_id,
             analysis_run_id=analysis_run_id,
-            files=files,
-            raw_entries=raw_entries,
+            files=file_summaries,
+            raw_entries=[],
             normalized_logs=enriched,
             templates=templates,
             samples=samples,
@@ -233,9 +238,9 @@ class AnalyzeCasePipeline:
             causal_summary=causal_summary,
             progress={
                 **progress,
-                "files_total": len(files),
-                "files_processed": len(files),
-                "raw_lines": sum(len(file.lines) for file in files),
+                "files_total": len(file_summaries),
+                "files_processed": len(file_summaries),
+                "raw_lines": raw_line_count,
                 "normalized_lines": len(enriched),
                 "templates": len(templates),
                 "representative_samples": len(samples),

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import asyncio
+import threading
+import time
 import zipfile
 from pathlib import Path
 
@@ -55,6 +58,33 @@ def test_archive_expansion_uses_the_configured_limit(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_synchronous_pipeline_work_does_not_block_the_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release = threading.Event()
+
+    def blocking_ingestion(*args, **kwargs):  # noqa: ANN002, ANN003
+        release.wait(timeout=1)
+        return []
+
+    monkeypatch.setattr("logan_analysis.pipeline.ingest_paths", blocking_ingestion)
+    started = time.perf_counter()
+    task = asyncio.create_task(
+        AnalyzeCasePipeline().run(
+            case_id="case-1",
+            analysis_run_id="run-1",
+            paths=["ignored.log"],
+        )
+    )
+    await asyncio.sleep(0.05)
+    elapsed = time.perf_counter() - started
+    release.set()
+    await task
+
+    assert elapsed < 0.5
+
+
+@pytest.mark.asyncio
 async def test_pipeline_without_llm_produces_deterministic_reports() -> None:
     result = await AnalyzeCasePipeline().run(
         case_id="case-1",
@@ -63,6 +93,8 @@ async def test_pipeline_without_llm_produces_deterministic_reports() -> None:
     )
 
     assert len(result.files) == 3
+    assert all(file.lines == [] for file in result.files)
+    assert result.raw_entries == []
     assert result.normalized_logs
     assert result.templates
     assert result.annotations == []

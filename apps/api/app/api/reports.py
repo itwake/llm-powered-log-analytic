@@ -15,9 +15,18 @@ router = APIRouter(prefix="/api/cases", tags=["cases"])
 
 def _require_result(store: Store, case_id: str, run_id: str):
     result = store.get_analysis_result(case_id, run_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="analysis result not found")
-    return result
+    if result:
+        return result
+    run = store.get_analysis_run(run_id)
+    if run is None or run.case_id != case_id:
+        raise HTTPException(status_code=404, detail="analysis run not found")
+    if run.status in {"queued", "processing"}:
+        raise HTTPException(status_code=409, detail="analysis result is not ready")
+    if run.status == "failed":
+        raise HTTPException(status_code=409, detail="analysis failed before producing a result")
+    if run.status == "cancelled":
+        raise HTTPException(status_code=409, detail="analysis was cancelled")
+    raise HTTPException(status_code=409, detail="analysis completed without a readable result")
 
 
 @router.get("/{case_id}/analysis-runs/{run_id}/summary")
@@ -71,7 +80,9 @@ def data_summary(
             }
         )
     items.sort(key=lambda item: (-item["severity_score"], item["first_seen"] or ""))
-    raw_count = sum(len(file.lines) for file in result.files)
+    raw_count = int(result.progress.get("raw_lines") or 0)
+    if not raw_count:
+        raw_count = sum(len(file.lines) for file in result.files)
     total = len(items)
     offending_total = sum(
         1 for annotation in annotations.values() if annotation.golden_signal in OFFENDING_SIGNALS
@@ -150,6 +161,7 @@ def logs(
     )
     result = _require_result(store, case_id, run_id)
     rows = result.normalized_logs
+    templates = {template.template_id: template.template_text for template in result.templates}
     if window_start:
         rows = [line for line in rows if line.timestamp and line.timestamp >= window_start]
     if window_end:
@@ -160,7 +172,7 @@ def logs(
             line
             for line in rows
             if lowered in line.redacted_message.lower()
-            or lowered in (line.template_text or "").lower()
+            or lowered in templates.get(line.template_id or "", "").lower()
             or any(
                 lowered in value.lower() for values in line.entities.values() for value in values
             )
@@ -195,7 +207,7 @@ def logs(
                 "line_numbers": line.line_numbers,
                 "message": line.redacted_message,
                 "template_id": line.template_id,
-                "template_text": line.template_text,
+                "template_text": templates.get(line.template_id or ""),
                 "golden_signal": line.golden_signal,
                 "fault_categories": line.fault_categories,
                 "entities": line.entities,
