@@ -45,14 +45,11 @@ requested page. Filters and free-text searches currently scan all log chunks, bu
 one at a time so memory use remains bounded. Results created by older application versions retain
 the single-envelope format and use a five-minute decoded-result compatibility cache.
 
-Each result artifact is written to a unique temporary file and atomically moved into place. If the
-artifact directory disappears between directory creation and the temporary-file open or move, the
-writer recreates the directory and retries the complete atomic write once. A second
-`FileNotFoundError` is returned normally so a persistent storage failure remains visible.
+Each result artifact is written to a unique temporary file and atomically moved into place.
 Configured result roots are resolved to absolute paths, and temporary filenames contain only a
-full 128-bit random identifier plus the `.part` suffix. Avoiding a second copy of the artifact
-name keeps temporary search-index paths below the legacy Windows path-length boundary when the
-final artifact path itself is valid.
+full 128-bit random identifier plus the `.part` suffix. Avoiding a second copy of the artifact name
+keeps temporary search-index paths below the legacy Windows path-length boundary when the final
+artifact path itself is valid.
 
 Run the repeatable report-path benchmark with a chunked two-million-row synthetic result:
 
@@ -75,8 +72,4 @@ sanitized form. A failed background task logs its run identifier, exception type
 code when available, and a bounded call chain containing function names and line numbers only.
 The run progress also retains `failed_step`, `error_type`, and `error_code` when available. Full
 filesystem paths, uploaded filenames, log content, and exception source lines are excluded from
-these diagnostics. Result-artifact `FileNotFoundError` diagnostics additionally identify the
-generated artifact name, failed operation and attempt, parent-directory state and missing depth,
-relative/absolute path mode and lengths, and current-directory state. The same bounded values are
-available in run progress as `storage_diagnostics`. Keep the process log level at `INFO` unless
-troubleshooting.
+these diagnostics. Keep the process log level at `INFO` unless troubleshooting.

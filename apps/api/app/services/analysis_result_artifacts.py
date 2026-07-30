@@ -27,7 +27,6 @@ from app.services.object_store import file_uri_to_path, path_to_file_uri, safe_f
 RESULT_MANIFEST_FORMAT = "logan.analysis-result-manifest"
 RESULT_MANIFEST_VERSION = 2
 RESULT_ARTIFACT_ENCODING = "zlib"
-RESULT_ARTIFACT_WRITE_ATTEMPTS = 2
 # Small chunks keep "decode only the chunks a page needs" cheap even when the
 # selected rows are scattered across the whole run.
 RESULT_LOG_CHUNK_SIZE = 2_000
@@ -70,87 +69,18 @@ def _result_directory(
     )
 
 
-def _path_state(path: Path) -> tuple[bool, bool]:
-    try:
-        return path.exists(), path.is_dir()
-    except OSError:
-        return False, False
-
-
-def _absolute_path_length(path: Path) -> int | None:
-    try:
-        return len(str(path.absolute()))
-    except OSError:
-        return None
-
-
-def _missing_parent_depth(path: Path, *, limit: int = 16) -> int:
-    current = path
-    for depth in range(limit + 1):
-        _, is_directory = _path_state(current)
-        if is_directory:
-            return depth
-        parent = current.parent
-        if parent == current:
-            return depth
-        current = parent
-    return limit
-
-
-def _annotate_artifact_file_not_found(
-    error: FileNotFoundError,
-    *,
-    path: Path,
-    temporary: Path,
-    operation: str,
-    attempt: int,
-) -> None:
-    parent_exists, parent_is_directory = _path_state(path.parent)
-    try:
-        _, cwd_is_directory = _path_state(Path.cwd())
-    except OSError:
-        cwd_is_directory = False
-    error._logan_safe_diagnostics = {  # type: ignore[attr-defined]
-        "artifact": path.name,
-        "operation": operation,
-        "attempt": attempt,
-        "parent_exists": parent_exists,
-        "parent_is_directory": parent_is_directory,
-        "missing_parent_depth": _missing_parent_depth(path.parent),
-        "path_is_absolute": path.is_absolute(),
-        "temporary_path_length": len(str(temporary)),
-        "absolute_temporary_path_length": _absolute_path_length(temporary),
-        "cwd_is_directory": cwd_is_directory,
-    }
-
-
 def write_artifact(path: Path, raw: bytes) -> dict[str, Any]:
     compressed = zlib.compress(raw, level=1)
-    for attempt in range(RESULT_ARTIFACT_WRITE_ATTEMPTS):
-        # Keep the full random suffix without repeating the target name. On
-        # Windows, the repeated name can push an otherwise valid result path
-        # beyond the legacy 260-character boundary during the temporary write.
-        temporary = path.with_name(f".{uuid.uuid4().hex}.part")
-        operation = "parent_mkdir"
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            operation = "temporary_open"
-            temporary.write_bytes(compressed)
-            operation = "atomic_replace"
-            temporary.replace(path)
-            break
-        except FileNotFoundError as exc:
-            _annotate_artifact_file_not_found(
-                exc,
-                path=path,
-                temporary=temporary,
-                operation=operation,
-                attempt=attempt + 1,
-            )
-            if attempt + 1 == RESULT_ARTIFACT_WRITE_ATTEMPTS:
-                raise
-        finally:
-            temporary.unlink(missing_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Keep the full random suffix without repeating the target name. On
+    # Windows, the repeated name can push an otherwise valid result path
+    # beyond the legacy 260-character boundary during the temporary write.
+    temporary = path.with_name(f".{uuid.uuid4().hex}.part")
+    try:
+        temporary.write_bytes(compressed)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
     return {
         "object_uri": path_to_file_uri(path),
         "encoding": RESULT_ARTIFACT_ENCODING,

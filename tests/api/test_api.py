@@ -78,19 +78,11 @@ def test_error_sanitization_removes_credentials_and_absolute_paths() -> None:
 @pytest.mark.asyncio
 async def test_analysis_task_failure_log_does_not_include_exception_text(caplog) -> None:
     async def fail() -> None:
-        error = FileNotFoundError(
+        raise FileNotFoundError(
             2,
             "Authorization: Bearer raw-task-token",
             r"C:\customer-data\incident-secret.log",
         )
-        error._logan_safe_diagnostics = {  # type: ignore[attr-defined]
-            "artifact": "blob.bin.zlib",
-            "operation": "temporary_open",
-            "attempt": 2,
-            "parent_exists": False,
-            "unsafe_path": r"C:\customer-data\incident-secret.log",
-        }
-        raise error
 
     app = SimpleNamespace(state=SimpleNamespace())
     request = Request({"type": "http", "app": app})
@@ -103,15 +95,10 @@ async def test_analysis_task_failure_log_does_not_include_exception_text(caplog)
     assert "analysis failed run_id=run-1" in caplog.text
     assert "error_type=FileNotFoundError" in caplog.text
     assert "errno=2" in caplog.text
-    assert "artifact=blob.bin.zlib" in caplog.text
-    assert "operation=temporary_open" in caplog.text
-    assert "attempt=2" in caplog.text
-    assert "parent_exists=False" in caplog.text
     assert ">fail:" in caplog.text
     assert "raw-task-token" not in caplog.text
     assert "customer-data" not in caplog.text
     assert "incident-secret.log" not in caplog.text
-    assert "unsafe_path" not in caplog.text
 
 
 @pytest.mark.asyncio

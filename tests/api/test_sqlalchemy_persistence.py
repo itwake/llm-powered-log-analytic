@@ -78,68 +78,6 @@ def test_artifact_temporary_name_does_not_repeat_the_target(
     assert len(str(temporary)) == 239
 
 
-def test_artifact_write_recreates_a_transiently_missing_parent(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    target = tmp_path / "result" / "search" / "blob.bin.zlib"
-    raw = b"synthetic redacted search index"
-    original_write_bytes = Path.write_bytes
-    write_attempts = 0
-
-    def remove_parent_before_first_open(path: Path, content: bytes) -> int:
-        nonlocal write_attempts
-        write_attempts += 1
-        if write_attempts == 1:
-            path.parent.rmdir()
-        return original_write_bytes(path, content)
-
-    monkeypatch.setattr(Path, "write_bytes", remove_parent_before_first_open)
-
-    entry = write_artifact(target, raw)
-
-    assert write_attempts == 2
-    assert read_artifact(
-        entry,
-        settings=Settings(local_object_store_dir=str(tmp_path)),
-    ) == raw
-
-
-def test_artifact_write_does_not_hide_a_persistently_missing_parent(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    target = tmp_path / "result" / "search" / "blob.bin.zlib"
-    original_write_bytes = Path.write_bytes
-    write_attempts = 0
-
-    def remove_parent_before_every_open(path: Path, content: bytes) -> int:
-        nonlocal write_attempts
-        write_attempts += 1
-        path.parent.rmdir()
-        return original_write_bytes(path, content)
-
-    monkeypatch.setattr(Path, "write_bytes", remove_parent_before_every_open)
-
-    with pytest.raises(FileNotFoundError) as raised:
-        write_artifact(target, b"synthetic redacted search index")
-
-    assert write_attempts == 2
-    diagnostics = raised.value._logan_safe_diagnostics  # type: ignore[attr-defined]
-    assert diagnostics == {
-        "artifact": "blob.bin.zlib",
-        "operation": "temporary_open",
-        "attempt": 2,
-        "parent_exists": False,
-        "parent_is_directory": False,
-        "missing_parent_depth": 1,
-        "path_is_absolute": True,
-        "temporary_path_length": len(str(raised.value.filename)),
-        "absolute_temporary_path_length": len(str(raised.value.filename)),
-        "cwd_is_directory": True,
-    }
-
-
 def test_core_records_persist_across_store_instances(tmp_path) -> None:
     database_path = str(tmp_path / "logan.db")
     settings = Settings(database_path=database_path)
@@ -369,7 +307,7 @@ async def test_finalization_failure_marks_the_run_and_case_failed(
 
 
 @pytest.mark.asyncio
-async def test_file_not_found_finalization_records_safe_diagnostics(
+async def test_file_not_found_finalization_records_safe_error_details(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -377,19 +315,11 @@ async def test_file_not_found_finalization_records_safe_diagnostics(
     run = store.create_analysis_run(case_id=case.id, user_id=user.id)
 
     def fail_encoding(result, *, settings):  # noqa: ANN001
-        error = FileNotFoundError(
+        raise FileNotFoundError(
             2,
             "No such file or directory",
             r"C:\customer-data\incident-secret.log",
         )
-        error._logan_safe_diagnostics = {  # type: ignore[attr-defined]
-            "artifact": "blob.bin.zlib",
-            "operation": "temporary_open",
-            "attempt": 2,
-            "parent_exists": False,
-            "unsafe_path": r"C:\customer-data\incident-secret.log",
-        }
-        raise error
 
     monkeypatch.setattr(
         sqlalchemy_store,
@@ -409,58 +339,8 @@ async def test_file_not_found_finalization_records_safe_diagnostics(
     assert failed.progress["failed_step"] == "finalizing"
     assert failed.progress["error_type"] == "FileNotFoundError"
     assert failed.progress["error_code"] == 2
-    assert failed.progress["storage_diagnostics"] == {
-        "artifact": "blob.bin.zlib",
-        "operation": "temporary_open",
-        "attempt": 2,
-        "parent_exists": False,
-    }
     assert "customer-data" not in failed.error_message
     assert "incident-secret.log" not in failed.error_message
-
-
-@pytest.mark.asyncio
-async def test_finalization_recovers_when_search_directory_disappears(
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store, user, case, path = _analysis_fixture(tmp_path)
-    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
-    original_write_bytes = Path.write_bytes
-    removed_search_directory = False
-
-    def remove_search_parent_before_first_open(
-        artifact_path: Path,
-        content: bytes,
-    ) -> int:
-        nonlocal removed_search_directory
-        if (
-            not removed_search_directory
-            and artifact_path.parent.name == "search"
-            and artifact_path.name.endswith(".part")
-        ):
-            artifact_path.parent.rmdir()
-            removed_search_directory = True
-        return original_write_bytes(artifact_path, content)
-
-    monkeypatch.setattr(
-        Path,
-        "write_bytes",
-        remove_search_parent_before_first_open,
-    )
-
-    completed = await store.run_analysis(
-        run_id=run.id,
-        user_id=user.id,
-        file_paths=[path],
-    )
-
-    assert removed_search_directory
-    assert completed.status == "completed"
-    page = store.get_analysis_logs_page(case.id, run.id, limit=200)
-    assert page is not None
-    assert page.total == 1
-    assert len(page.rows) == 1
 
 
 @pytest.mark.asyncio
