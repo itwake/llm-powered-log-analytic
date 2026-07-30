@@ -38,6 +38,19 @@ _SENSITIVE_ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 _WINDOWS_PATH_RE = re.compile(r"(?i)(?:\b[A-Z]:[\\/]|\\\\)[^,\s;]+")
 _POSIX_PATH_RE = re.compile(r"(?<![A-Za-z0-9:/])/(?:[^,\s;]+)")
+_SAFE_ERROR_DIAGNOSTIC_KEYS = (
+    "artifact",
+    "operation",
+    "attempt",
+    "parent_exists",
+    "parent_is_directory",
+    "missing_parent_depth",
+    "path_is_absolute",
+    "temporary_path_length",
+    "absolute_temporary_path_length",
+    "cwd_is_directory",
+)
+_SAFE_ERROR_DIAGNOSTIC_VALUE_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 class AnalysisRunCancelled(RuntimeError):
@@ -129,3 +142,23 @@ def sanitize_error_message(error: BaseException | str, *, max_length: int = 1000
     message = _WINDOWS_PATH_RE.sub("<path>", message)
     message = _POSIX_PATH_RE.sub("<path>", message)
     return message[:max_length]
+
+
+def safe_error_diagnostics(error: BaseException) -> dict[str, str | int | bool]:
+    values = getattr(error, "_logan_safe_diagnostics", None)
+    if not isinstance(values, dict):
+        return {}
+    diagnostics: dict[str, str | int | bool] = {}
+    for key in _SAFE_ERROR_DIAGNOSTIC_KEYS:
+        value = values.get(key)
+        if isinstance(value, bool):
+            diagnostics[key] = value
+        elif isinstance(value, int):
+            diagnostics[key] = value
+        elif (
+            isinstance(value, str)
+            and len(value) <= 80
+            and _SAFE_ERROR_DIAGNOSTIC_VALUE_RE.fullmatch(value)
+        ):
+            diagnostics[key] = value
+    return diagnostics

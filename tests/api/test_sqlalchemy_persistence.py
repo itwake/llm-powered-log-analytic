@@ -71,10 +71,23 @@ def test_artifact_write_does_not_hide_a_persistently_missing_parent(
 
     monkeypatch.setattr(Path, "write_bytes", remove_parent_before_every_open)
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError) as raised:
         write_artifact(target, b"synthetic redacted search index")
 
     assert write_attempts == 2
+    diagnostics = raised.value._logan_safe_diagnostics  # type: ignore[attr-defined]
+    assert diagnostics == {
+        "artifact": "blob.bin.zlib",
+        "operation": "temporary_open",
+        "attempt": 2,
+        "parent_exists": False,
+        "parent_is_directory": False,
+        "missing_parent_depth": 1,
+        "path_is_absolute": True,
+        "temporary_path_length": len(str(raised.value.filename)),
+        "absolute_temporary_path_length": len(str(raised.value.filename)),
+        "cwd_is_directory": True,
+    }
 
 
 def test_core_records_persist_across_store_instances(tmp_path) -> None:
@@ -314,11 +327,19 @@ async def test_file_not_found_finalization_records_safe_diagnostics(
     run = store.create_analysis_run(case_id=case.id, user_id=user.id)
 
     def fail_encoding(result, *, settings):  # noqa: ANN001
-        raise FileNotFoundError(
+        error = FileNotFoundError(
             2,
             "No such file or directory",
             r"C:\customer-data\incident-secret.log",
         )
+        error._logan_safe_diagnostics = {  # type: ignore[attr-defined]
+            "artifact": "blob.bin.zlib",
+            "operation": "temporary_open",
+            "attempt": 2,
+            "parent_exists": False,
+            "unsafe_path": r"C:\customer-data\incident-secret.log",
+        }
+        raise error
 
     monkeypatch.setattr(
         sqlalchemy_store,
@@ -338,6 +359,12 @@ async def test_file_not_found_finalization_records_safe_diagnostics(
     assert failed.progress["failed_step"] == "finalizing"
     assert failed.progress["error_type"] == "FileNotFoundError"
     assert failed.progress["error_code"] == 2
+    assert failed.progress["storage_diagnostics"] == {
+        "artifact": "blob.bin.zlib",
+        "operation": "temporary_open",
+        "attempt": 2,
+        "parent_exists": False,
+    }
     assert "customer-data" not in failed.error_message
     assert "incident-secret.log" not in failed.error_message
 

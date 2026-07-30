@@ -71,4 +71,8 @@ sanitized form. A failed background task logs its run identifier, exception type
 code when available, and a bounded call chain containing function names and line numbers only.
 The run progress also retains `failed_step`, `error_type`, and `error_code` when available. Full
 filesystem paths, uploaded filenames, log content, and exception source lines are excluded from
-these diagnostics. Keep the process log level at `INFO` unless troubleshooting.
+these diagnostics. Result-artifact `FileNotFoundError` diagnostics additionally identify the
+generated artifact name, failed operation and attempt, parent-directory state and missing depth,
+relative/absolute path mode and lengths, and current-directory state. The same bounded values are
+available in run progress as `storage_diagnostics`. Keep the process log level at `INFO` unless
+troubleshooting.

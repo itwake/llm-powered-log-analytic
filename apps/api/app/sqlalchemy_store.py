@@ -58,6 +58,7 @@ from app.records import (
     SessionRecord,
     UploadRecord,
     UserRecord,
+    safe_error_diagnostics,
     sanitize_error_message,
 )
 
@@ -679,6 +680,9 @@ class SQLAlchemyStore:
                 error_number = getattr(error, "errno", None)
                 if isinstance(error_number, int):
                     progress["error_code"] = error_number
+                storage_diagnostics = safe_error_diagnostics(error)
+                if storage_diagnostics:
+                    progress["storage_diagnostics"] = storage_diagnostics
             progress["current_step"] = "failed"
             progress["failed_at"] = failed_at.isoformat()
             progress["error_message"] = error_message

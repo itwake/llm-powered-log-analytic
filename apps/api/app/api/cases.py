@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.dependencies import current_user, get_model_gateway, get_store, require_case_owner
+from app.records import safe_error_diagnostics
 from app.schemas.case import (
     AnalysisRunListResponse,
     AnalysisRunRequest,
@@ -102,6 +103,9 @@ def _safe_exception_diagnostics(error: BaseException) -> str:
     windows_error = getattr(error, "winerror", None)
     if isinstance(windows_error, int):
         diagnostics.append(f"winerror={windows_error}")
+    diagnostics.extend(
+        f"{key}={value}" for key, value in safe_error_diagnostics(error).items()
+    )
     frames = traceback.extract_tb(error.__traceback__, limit=12)
     if frames:
         diagnostics.append(
