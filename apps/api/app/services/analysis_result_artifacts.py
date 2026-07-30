@@ -27,6 +27,7 @@ from app.services.object_store import file_uri_to_path, path_to_file_uri, safe_f
 RESULT_MANIFEST_FORMAT = "logan.analysis-result-manifest"
 RESULT_MANIFEST_VERSION = 2
 RESULT_ARTIFACT_ENCODING = "zlib"
+RESULT_ARTIFACT_WRITE_ATTEMPTS = 2
 # Small chunks keep "decode only the chunks a page needs" cheap even when the
 # selected rows are scattered across the whole run.
 RESULT_LOG_CHUNK_SIZE = 2_000
@@ -71,13 +72,18 @@ def _result_directory(
 
 def write_artifact(path: Path, raw: bytes) -> dict[str, Any]:
     compressed = zlib.compress(raw, level=1)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.part")
-    try:
-        temporary.write_bytes(compressed)
-        temporary.replace(path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    for attempt in range(RESULT_ARTIFACT_WRITE_ATTEMPTS):
+        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.part")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_bytes(compressed)
+            temporary.replace(path)
+            break
+        except FileNotFoundError:
+            if attempt + 1 == RESULT_ARTIFACT_WRITE_ATTEMPTS:
+                raise
+        finally:
+            temporary.unlink(missing_ok=True)
     return {
         "object_uri": path_to_file_uri(path),
         "encoding": RESULT_ARTIFACT_ENCODING,

@@ -45,6 +45,11 @@ requested page. Filters and free-text searches currently scan all log chunks, bu
 one at a time so memory use remains bounded. Results created by older application versions retain
 the single-envelope format and use a five-minute decoded-result compatibility cache.
 
+Each result artifact is written to a unique temporary file and atomically moved into place. If the
+artifact directory disappears between directory creation and the temporary-file open or move, the
+writer recreates the directory and retries the complete atomic write once. A second
+`FileNotFoundError` is returned normally so a persistent storage failure remains visible.
+
 Run the repeatable report-path benchmark with a chunked two-million-row synthetic result:
 
 ```bash
