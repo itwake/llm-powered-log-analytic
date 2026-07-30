@@ -49,6 +49,10 @@ Each result artifact is written to a unique temporary file and atomically moved 
 artifact directory disappears between directory creation and the temporary-file open or move, the
 writer recreates the directory and retries the complete atomic write once. A second
 `FileNotFoundError` is returned normally so a persistent storage failure remains visible.
+Configured result roots are resolved to absolute paths, and temporary filenames contain only a
+full 128-bit random identifier plus the `.part` suffix. Avoiding a second copy of the artifact
+name keeps temporary search-index paths below the legacy Windows path-length boundary when the
+final artifact path itself is valid.
 
 Run the repeatable report-path benchmark with a chunked two-million-row synthetic result:
 

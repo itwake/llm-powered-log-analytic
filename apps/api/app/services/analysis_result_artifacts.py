@@ -61,7 +61,7 @@ def _result_directory(
     settings: Settings,
 ) -> Path:
     return (
-        Path(settings.local_object_store_dir)
+        Path(settings.local_object_store_dir).expanduser().resolve()
         / "cases"
         / safe_filename(case_id)
         / "analysis-runs"
@@ -127,7 +127,10 @@ def _annotate_artifact_file_not_found(
 def write_artifact(path: Path, raw: bytes) -> dict[str, Any]:
     compressed = zlib.compress(raw, level=1)
     for attempt in range(RESULT_ARTIFACT_WRITE_ATTEMPTS):
-        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.part")
+        # Keep the full random suffix without repeating the target name. On
+        # Windows, the repeated name can push an otherwise valid result path
+        # beyond the legacy 260-character boundary during the temporary write.
+        temporary = path.with_name(f".{uuid.uuid4().hex}.part")
         operation = "parent_mkdir"
         try:
             path.parent.mkdir(parents=True, exist_ok=True)

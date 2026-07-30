@@ -28,6 +28,56 @@ def test_database_contains_only_core_tables() -> None:
     }
 
 
+def test_result_directory_resolves_a_relative_object_store(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(local_object_store_dir="objects")
+
+    result_directory = analysis_result_artifacts._result_directory(
+        case_id="case-id",
+        analysis_run_id="run-id",
+        settings=settings,
+    )
+
+    assert result_directory.is_absolute()
+    assert result_directory == (
+        tmp_path / "objects" / "cases" / "case-id" / "analysis-runs" / "run-id" / "result"
+    )
+
+
+def test_artifact_temporary_name_does_not_repeat_the_target(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target_parent_length = 200
+    padding_length = target_parent_length - len(str(tmp_path)) - 1
+    assert padding_length > 0
+    target = tmp_path / ("p" * padding_length) / "service_codes.bin.zlib"
+    original_write_bytes = Path.write_bytes
+    temporary_paths: list[Path] = []
+
+    def capture_temporary_path(path: Path, content: bytes) -> int:
+        temporary_paths.append(path)
+        return original_write_bytes(path, content)
+
+    monkeypatch.setattr(Path, "write_bytes", capture_temporary_path)
+
+    write_artifact(target, b"synthetic redacted service codes")
+
+    assert len(temporary_paths) == 1
+    temporary = temporary_paths[0]
+    assert temporary.parent == target.parent
+    assert temporary.name.startswith(".")
+    assert temporary.name.endswith(".part")
+    assert len(temporary.name) == 38
+    assert target.name not in temporary.name
+    legacy_temporary = target.with_name(f".{target.name}.{'0' * 32}.part")
+    assert len(str(legacy_temporary)) == 262
+    assert len(str(temporary)) == 239
+
+
 def test_artifact_write_recreates_a_transiently_missing_parent(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
