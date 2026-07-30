@@ -249,8 +249,48 @@ async def test_finalization_failure_marks_the_run_and_case_failed(
     assert failed is not None
     assert failed.status == "failed"
     assert failed.progress["current_step"] == "failed"
+    assert failed.progress["failed_step"] == "finalizing"
+    assert failed.progress["error_type"] == "RuntimeError"
+    assert "error_code" not in failed.progress
     assert failed.error_message == "result persistence failed"
     assert store.get_case(case.id).status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_file_not_found_finalization_records_safe_diagnostics(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, user, case, path = _analysis_fixture(tmp_path)
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+
+    def fail_encoding(result, *, settings):  # noqa: ANN001
+        raise FileNotFoundError(
+            2,
+            "No such file or directory",
+            r"C:\customer-data\incident-secret.log",
+        )
+
+    monkeypatch.setattr(
+        sqlalchemy_store,
+        "write_analysis_result_manifest",
+        fail_encoding,
+    )
+    with pytest.raises(FileNotFoundError):
+        await store.run_analysis(
+            run_id=run.id,
+            user_id=user.id,
+            file_paths=[path],
+        )
+
+    failed = store.get_analysis_run(run.id)
+    assert failed is not None
+    assert failed.progress["current_step"] == "failed"
+    assert failed.progress["failed_step"] == "finalizing"
+    assert failed.progress["error_type"] == "FileNotFoundError"
+    assert failed.progress["error_code"] == 2
+    assert "customer-data" not in failed.error_message
+    assert "incident-secret.log" not in failed.error_message
 
 
 @pytest.mark.asyncio

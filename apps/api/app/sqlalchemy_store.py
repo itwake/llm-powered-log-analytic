@@ -673,6 +673,12 @@ class SQLAlchemyStore:
             failed_at = _now()
             error_message = sanitize_error_message(error)
             progress = dict(row.progress_json or {})
+            progress["failed_step"] = str(progress.get("current_step") or "unknown")
+            if isinstance(error, BaseException):
+                progress["error_type"] = type(error).__name__
+                error_number = getattr(error, "errno", None)
+                if isinstance(error_number, int):
+                    progress["error_code"] = error_number
             progress["current_step"] = "failed"
             progress["failed_at"] = failed_at.isoformat()
             progress["error_message"] = error_message

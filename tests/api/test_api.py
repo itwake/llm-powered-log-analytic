@@ -78,7 +78,11 @@ def test_error_sanitization_removes_credentials_and_absolute_paths() -> None:
 @pytest.mark.asyncio
 async def test_analysis_task_failure_log_does_not_include_exception_text(caplog) -> None:
     async def fail() -> None:
-        raise RuntimeError("Authorization: Bearer raw-task-token")
+        raise FileNotFoundError(
+            2,
+            "Authorization: Bearer raw-task-token",
+            r"C:\customer-data\incident-secret.log",
+        )
 
     app = SimpleNamespace(state=SimpleNamespace())
     request = Request({"type": "http", "app": app})
@@ -88,8 +92,13 @@ async def test_analysis_task_failure_log_does_not_include_exception_text(caplog)
     await asyncio.sleep(0)
     await asyncio.sleep(0)
 
-    assert "analysis failed" in caplog.text
+    assert "analysis failed run_id=run-1" in caplog.text
+    assert "error_type=FileNotFoundError" in caplog.text
+    assert "errno=2" in caplog.text
+    assert ">fail:" in caplog.text
     assert "raw-task-token" not in caplog.text
+    assert "customer-data" not in caplog.text
+    assert "incident-secret.log" not in caplog.text
 
 
 @pytest.mark.asyncio

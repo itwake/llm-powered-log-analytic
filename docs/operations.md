@@ -52,10 +52,18 @@ python scripts/benchmark_report_api.py --records 2000000
 ```
 
 The benchmark creates its database and object-store artifacts in a temporary directory, calls the
-actual FastAPI report routes, prints per-route latency and process working-set measurements, then
-disposes the database connection and removes the temporary data.
+actual analysis-run and report routes, and validates the response bodies rather than treating an
+HTTP 200 response as sufficient. The checks cover run progress, summary reduction counts,
+timeline totals, first and last log pages, redacted log messages, graph references, and RCA
+evidence. It prints per-route latency, process working-set measurements, body metrics, and every
+body check; any failed body check makes the command exit non-zero. It then disposes the database
+connection and removes the temporary data.
 
 ## Logs
 
 Application logs use standard output. Analysis failures are recorded on the run and returned in a
-sanitized form. Keep the process log level at `INFO` unless troubleshooting.
+sanitized form. A failed background task logs its run identifier, exception type, numeric OS error
+code when available, and a bounded call chain containing function names and line numbers only.
+The run progress also retains `failed_step`, `error_type`, and `error_code` when available. Full
+filesystem paths, uploaded filenames, log content, and exception source lines are excluded from
+these diagnostics. Keep the process log level at `INFO` unless troubleshooting.

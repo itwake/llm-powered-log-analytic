@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import traceback
 import uuid
 from typing import Any
 
@@ -93,6 +94,22 @@ def _tasks(request: Request) -> dict[str, asyncio.Task[Any]]:
     return tasks
 
 
+def _safe_exception_diagnostics(error: BaseException) -> str:
+    diagnostics = [f"error_type={type(error).__name__}"]
+    error_number = getattr(error, "errno", None)
+    if isinstance(error_number, int):
+        diagnostics.append(f"errno={error_number}")
+    windows_error = getattr(error, "winerror", None)
+    if isinstance(windows_error, int):
+        diagnostics.append(f"winerror={windows_error}")
+    frames = traceback.extract_tb(error.__traceback__, limit=12)
+    if frames:
+        diagnostics.append(
+            "trace=" + ">".join(f"{frame.name}:{frame.lineno}" for frame in frames)
+        )
+    return " ".join(diagnostics)
+
+
 def _track_task(request: Request, run_id: str, task: asyncio.Task[Any]) -> None:
     tasks = _tasks(request)
     tasks[run_id] = task
@@ -103,8 +120,13 @@ def _track_task(request: Request, run_id: str, task: asyncio.Task[Any]) -> None:
             return
         try:
             completed.result()
-        except Exception:
-            logger.error("analysis failed", extra={"analysis_run_id": run_id})
+        except Exception as exc:
+            logger.error(
+                "analysis failed run_id=%s %s",
+                run_id,
+                _safe_exception_diagnostics(exc),
+                extra={"analysis_run_id": run_id},
+            )
 
     task.add_done_callback(done)
 
