@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from logan_analysis.activities.ingestion import MAX_INPUT_BYTES
 
 from app.dependencies import current_user, get_model_gateway, get_store, require_case_owner
 from app.schemas.case import (
@@ -19,11 +20,18 @@ from app.schemas.case import (
     UploadRequest,
     UploadStartResponse,
 )
-from app.services.object_store import digest_bytes, file_uri_to_path, write_bytes
+from app.services.object_store import file_uri_to_path
 from app.store import Store, UserRecord
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 logger = logging.getLogger("logan.analysis")
+
+
+def _format_byte_limit(max_bytes: int) -> str:
+    mib = 1024 * 1024
+    if max_bytes % mib == 0:
+        return f"{max_bytes // mib} MiB"
+    return f"{max_bytes} bytes"
 
 
 def _case_response(record: Any) -> CaseResponse:
@@ -200,6 +208,14 @@ def request_upload(
         user=user,
         case_id=case_id,
     )
+    if payload.size_bytes > store.settings.max_upload_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "upload exceeds the configured "
+                f"{_format_byte_limit(store.settings.max_upload_bytes)} limit"
+            ),
+        )
     upload = store.create_upload(
         case_id=case_id,
         filename=payload.filename,
@@ -230,26 +246,50 @@ async def upload_content(
         case_id=case_id,
     )
     upload = _upload_for_case(store, case_id, file_id)
-    chunks: list[bytes] = []
+    max_upload_bytes = store.settings.max_upload_bytes
+    target_path = file_uri_to_path(upload.object_uri)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = target_path.with_name(
+        f".{target_path.name}.{uuid.uuid4().hex}.part"
+    )
+    digest = hashlib.sha256()
     received_bytes = 0
-    async for chunk in request.stream():
-        received_bytes += len(chunk)
-        if received_bytes > MAX_INPUT_BYTES:
-            raise HTTPException(status_code=413, detail="upload exceeds the 100 MiB limit")
-        chunks.append(chunk)
-    content = b"".join(chunks)
-    sha256, size_bytes = digest_bytes(content)
-    if upload.size_bytes != size_bytes:
-        raise HTTPException(status_code=400, detail="upload size does not match request")
-    if upload.completed and upload.sha256 != sha256:
-        raise HTTPException(status_code=409, detail="upload content does not match")
-    stored = write_bytes(upload.object_uri, content)
-    completed = store.complete_upload(upload_id=file_id, sha256=stored.sha256)
+    try:
+        with temporary_path.open("wb") as handle:
+            async for chunk in request.stream():
+                received_bytes += len(chunk)
+                if received_bytes > max_upload_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            "upload exceeds the configured "
+                            f"{_format_byte_limit(max_upload_bytes)} limit"
+                        ),
+                    )
+                handle.write(chunk)
+                digest.update(chunk)
+        if upload.size_bytes != received_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="upload size does not match request",
+            )
+        sha256 = digest.hexdigest()
+        if upload.completed and upload.sha256 != sha256:
+            raise HTTPException(
+                status_code=409,
+                detail="upload content does not match",
+            )
+        temporary_path.replace(target_path)
+    except (Exception, asyncio.CancelledError):
+        temporary_path.unlink(missing_ok=True)
+        raise
+
+    completed = store.complete_upload(upload_id=file_id, sha256=sha256)
     return UploadContentResponse(
         file_id=completed.id,
         status="completed",
-        sha256=stored.sha256,
-        size_bytes=stored.size_bytes,
+        sha256=sha256,
+        size_bytes=received_bytes,
     )
 
 

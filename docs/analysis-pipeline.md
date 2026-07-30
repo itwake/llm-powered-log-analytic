@@ -38,8 +38,9 @@ Supported file types are:
 - `.tar`
 - `.tgz` and `.tar.gz`
 
-Each uploaded file and its expanded archive content are limited to 100 MiB. Archive members are
-read as log inputs; files are not extracted into user-controlled filesystem paths.
+Each uploaded file and its expanded archive content are limited to 300 MiB by default.
+`LOGAN_MAX_UPLOAD_BYTES` configures both limits in bytes. Archive members are read as log inputs;
+files are not extracted into user-controlled filesystem paths.
 
 ## Processing steps
 

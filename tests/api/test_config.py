@@ -5,6 +5,15 @@ import pytest
 from app.config import Settings
 
 
+def test_default_upload_limit_is_300_mib() -> None:
+    assert Settings().max_upload_bytes == 300 * 1024 * 1024
+
+
+def test_upload_limit_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="LOGAN_MAX_UPLOAD_BYTES"):
+        Settings(max_upload_bytes=0).validate_for_runtime()
+
+
 def test_development_cors_supports_both_loopback_hostnames() -> None:
     settings = Settings(
         env="development",

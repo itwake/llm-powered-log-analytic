@@ -473,7 +473,7 @@ export default function CaseWorkspacePage() {
                 <SectionHeader eyebrow="Run" title="Analyze evidence" />
                 <FileUploadDropzone
                   accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
-                  description="Select logs or archives up to 100 MiB each. Expanded archives must also fit within 100 MiB."
+                  description="Select logs or archives. The server limit is 300 MiB by default and also applies to expanded archives."
                   files={selectedFiles}
                   onFilesSelected={handleFileSelection}
                 />

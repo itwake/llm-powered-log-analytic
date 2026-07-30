@@ -11,8 +11,6 @@ import {
 
 export {API_BASE_URL, ApiError} from "./api/http";
 
-export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
-
 export type UploadProgressPhase =
   | "queued"
   | "preparing"
@@ -373,9 +371,6 @@ export const casesApi = {
     for (const file of files) {
       if (file.size <= 0) {
         throw new Error(`${file.name || "Selected file"} is empty`);
-      }
-      if (file.size > MAX_UPLOAD_BYTES) {
-        throw new Error(`${file.name || "Selected file"} exceeds the 100 MiB limit`);
       }
     }
     const uploaded: UploadContentResponse[] = [];

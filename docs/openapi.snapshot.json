@@ -501,8 +501,8 @@
             "type": "string"
           },
           "size_bytes": {
+            "description": "Must not exceed the server LOGAN_MAX_UPLOAD_BYTES setting.",
             "exclusiveMinimum": 0.0,
-            "maximum": 104857600.0,
             "title": "Size Bytes",
             "type": "integer"
           }

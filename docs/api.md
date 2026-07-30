@@ -22,8 +22,9 @@ In development, the login endpoint creates a session for the local default user 
 - `POST /api/cases/{case_id}/uploads`
 - `PUT /api/cases/{case_id}/uploads/{file_id}/content`
 
-Each upload must be between 1 byte and 100 MiB. The expanded contents of an archive must also fit
-within 100 MiB.
+Each upload must contain at least one byte. The default maximum is 300 MiB, configured in bytes
+with `LOGAN_MAX_UPLOAD_BYTES`. The same configured limit applies to the combined expanded contents
+of an archive.
 
 ## Analysis runs
 

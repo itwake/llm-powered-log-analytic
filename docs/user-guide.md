@@ -42,8 +42,8 @@ There are two submission paths:
 - **Create, upload, and analyze files** creates the case, uploads the selected files, and starts
   the first run.
 
-Accepted inputs are log, text, JSON, JSONL, zip, gzip, tar, and tgz files. Each file and its expanded
-archive content must fit within 100 MiB.
+Accepted inputs are log, text, JSON, JSONL, zip, gzip, tar, and tgz files. Each file and its
+expanded archive content must fit within the server upload limit, which defaults to 300 MiB.
 
 ## Use the case workspace
 

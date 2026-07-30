@@ -119,8 +119,9 @@ not create or alter tables automatically.
 
 Uploads are written below `LOGAN_LOCAL_OBJECT_STORE_DIR` using generated case and file ids plus a
 sanitized filename. The API verifies the declared size and records a SHA-256 checksum. A file and
-its expanded archive content are each limited to 100 MiB. Analysis resolves only completed upload
-ids; clients cannot submit arbitrary server paths.
+its expanded archive content are each limited to 300 MiB by default. `LOGAN_MAX_UPLOAD_BYTES`
+changes both limits. Analysis resolves only completed upload ids; clients cannot submit arbitrary
+server paths.
 
 ### Analysis execution
 
@@ -187,7 +188,7 @@ The main setting groups are:
 | Group | Important settings |
 | --- | --- |
 | Runtime | `LOGAN_ENV`, `LOGAN_SECRET_KEY`, `LOGAN_LOG_LEVEL` |
-| Persistence | `LOGAN_DATABASE_PATH`, `LOGAN_LOCAL_OBJECT_STORE_DIR` |
+| Persistence | `LOGAN_DATABASE_PATH`, `LOGAN_LOCAL_OBJECT_STORE_DIR`, `LOGAN_MAX_UPLOAD_BYTES` |
 | Browser access | `LOGAN_WEB_BASE_URL`, `LOGAN_CORS_ALLOWED_ORIGINS` |
 | Authentication | `LOGAN_SSO_AUTHORIZE_URL`, `LOGAN_SSO_TOKEN_URL`, `LOGAN_SSO_CLIENT_ID` |
 | Analysis | `LOGAN_LLM_PROVIDER` |

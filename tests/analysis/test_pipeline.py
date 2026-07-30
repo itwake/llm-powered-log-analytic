@@ -39,14 +39,18 @@ def test_plain_lines_remain_separate_while_stack_lines_are_merged() -> None:
     assert [entry.line_numbers for entry in entries] == [[1], [2, 3], [4]]
 
 
-def test_archive_expansion_is_limited(tmp_path, monkeypatch) -> None:
+def test_archive_expansion_uses_the_configured_limit(tmp_path) -> None:
     archive_path = tmp_path / "logs.zip"
-    with zipfile.ZipFile(archive_path, "w") as archive:
-        archive.writestr("service.log", b"more than ten bytes")
-    monkeypatch.setattr(ingestion, "MAX_INPUT_BYTES", 10)
+    with zipfile.ZipFile(
+        archive_path,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as archive:
+        archive.writestr("service.log", b"x" * 1024)
+    assert archive_path.stat().st_size < 200
 
     with pytest.raises(ValueError, match="archive content exceeds"):
-        ingestion.ingest_paths([archive_path])
+        ingestion.ingest_paths([archive_path], max_input_bytes=200)
 
 
 @pytest.mark.asyncio

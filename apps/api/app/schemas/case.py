@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from logan_analysis.activities.ingestion import MAX_INPUT_BYTES
 from pydantic import BaseModel, Field
 
 
@@ -46,7 +45,10 @@ class CaseResponse(BaseModel):
 class UploadRequest(BaseModel):
     filename: str = Field(min_length=1)
     content_type: str | None = None
-    size_bytes: int = Field(gt=0, le=MAX_INPUT_BYTES)
+    size_bytes: int = Field(
+        gt=0,
+        description="Must not exceed the server LOGAN_MAX_UPLOAD_BYTES setting.",
+    )
 
 
 class UploadStartResponse(BaseModel):

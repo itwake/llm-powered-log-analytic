@@ -196,7 +196,7 @@ export default function NewCasePage() {
 
               <FileUploadDropzone
                 accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
-                description="Attach logs or archives up to 100 MiB each. Expanded archives must also fit within 100 MiB."
+                description="Attach logs or archives. The server limit is 300 MiB by default and also applies to expanded archives."
                 files={selectedFiles}
                 hint={
                   selectedFiles.length

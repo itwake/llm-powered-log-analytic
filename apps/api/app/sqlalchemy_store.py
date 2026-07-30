@@ -462,6 +462,7 @@ class SQLAlchemyStore:
                 },
                 gateway=gateway,
                 progress_callback=record_progress,
+                max_input_bytes=self.settings.max_upload_bytes,
             )
         except (AnalysisRunCancelled, asyncio.CancelledError):
             return self.cancel_analysis_run(run_id=run_id, user_id=user_id)

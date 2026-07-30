@@ -157,8 +157,9 @@ Uploads use two requests:
 1. create upload metadata and receive a generated content URL;
 2. PUT the exact file bytes while reporting browser progress.
 
-The client validates non-empty files and the 100 MiB limit before starting. Files are uploaded in
-sequence. Analysis starts with the completed file ids.
+The client rejects empty files before starting. The API enforces its configured upload and
+expanded-archive limit. Files are uploaded in sequence and analysis starts with the completed file
+ids.
 
 The case workspace polls run state until it reaches `completed`, `failed`, or `cancelled`.
 `AnalysisProgressPanel.tsx` mirrors the API pipeline step names and must change with the backend

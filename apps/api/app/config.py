@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from logan_analysis.activities.ingestion import DEFAULT_MAX_INPUT_BYTES
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
@@ -35,6 +37,9 @@ class Settings:
     local_object_store_dir: str = os.getenv(
         "LOGAN_LOCAL_OBJECT_STORE_DIR",
         str(Path.cwd() / ".logan" / "object-store"),
+    )
+    max_upload_bytes: int = int(
+        os.getenv("LOGAN_MAX_UPLOAD_BYTES", str(DEFAULT_MAX_INPUT_BYTES))
     )
     web_base_url: str | None = _env_first("LOGAN_WEB_BASE_URL")
     cors_allowed_origins: str = os.getenv(
@@ -132,6 +137,8 @@ class Settings:
 
     def validate_for_runtime(self) -> None:
         errors: list[str] = []
+        if self.max_upload_bytes <= 0:
+            errors.append("LOGAN_MAX_UPLOAD_BYTES must be greater than zero")
         if self.sso_enabled and not self.sso_configured:
             errors.append(
                 "LOGAN_SSO_TOKEN_URL and LOGAN_SSO_CLIENT_ID are required "

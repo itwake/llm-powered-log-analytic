@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
 from app.config import Settings
 from app.main import create_app
+from app.services.object_store import file_uri_to_path
 from app.store import create_ephemeral_store, sanitize_error_message
 from httpx import ASGITransport, AsyncClient
 from tests.model_gateway_stub import StubModelGateway
@@ -160,6 +162,69 @@ async def test_case_upload_analysis_and_reports() -> None:
         assert logs.status_code == 200
         assert logs.json()["total"] == 1
         assert run.json()["progress"]["steps"]
+
+
+@pytest.mark.asyncio
+async def test_upload_limit_uses_runtime_configuration(tmp_path: Path) -> None:
+    store = create_ephemeral_store(
+        Settings(
+            local_object_store_dir=str(tmp_path),
+            max_upload_bytes=8,
+        )
+    )
+    user = store.register_user(
+        email="owner@example.com",
+        username="owner",
+        full_name=None,
+    )
+    token, _ = store.create_session(user.id)
+    case = store.create_case(user_id=user.id, data={"title": "Upload limit"})
+    app = create_app(store=store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"logan_session": token},
+    ) as client:
+        rejected = await client.post(
+            f"/api/cases/{case.id}/uploads",
+            json={
+                "filename": "too-large.log",
+                "size_bytes": 9,
+            },
+        )
+        assert rejected.status_code == 413
+        assert rejected.json()["detail"] == (
+            "upload exceeds the configured 8 bytes limit"
+        )
+
+        upload = await client.post(
+            f"/api/cases/{case.id}/uploads",
+            json={
+                "filename": "configured.log",
+                "size_bytes": 8,
+            },
+        )
+        assert upload.status_code == 200
+        upload_record = store.get_upload(upload.json()["file_id"])
+        assert upload_record is not None
+        target_path = file_uri_to_path(upload_record.object_uri)
+
+        oversized_content = await client.put(
+            upload.json()["upload_url"],
+            content=b"123456789",
+        )
+        assert oversized_content.status_code == 413
+        assert not target_path.exists()
+        assert list(tmp_path.rglob("*.part")) == []
+
+        completed = await client.put(
+            upload.json()["upload_url"],
+            content=b"12345678",
+        )
+        assert completed.status_code == 200
+        assert completed.json()["size_bytes"] == 8
+        assert target_path.read_bytes() == b"12345678"
 
 
 @pytest.mark.asyncio

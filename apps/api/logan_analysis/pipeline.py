@@ -8,7 +8,7 @@ from typing import Any
 from logan_analysis.activities.broadcasting import broadcast_annotations
 from logan_analysis.activities.causal import infer_causal_graph
 from logan_analysis.activities.inference import annotate_templates
-from logan_analysis.activities.ingestion import ingest_paths
+from logan_analysis.activities.ingestion import DEFAULT_MAX_INPUT_BYTES, ingest_paths
 from logan_analysis.activities.preprocessing import merge_entries, preprocess_entries
 from logan_analysis.activities.sampling import select_samples
 from logan_analysis.activities.summary import render_causal_summary
@@ -59,6 +59,7 @@ class AnalyzeCasePipeline:
         case_context: dict[str, Any] | None = None,
         gateway: ModelGateway | None = None,
         progress_callback: ProgressCallback | None = None,
+        max_input_bytes: int = DEFAULT_MAX_INPUT_BYTES,
     ) -> AnalysisResult:
         case_context = {
             "case_id": case_id,
@@ -112,7 +113,7 @@ class AnalyzeCasePipeline:
 
         files = await run_step(
             "ingest_paths",
-            lambda: ingest_paths(paths),
+            lambda: ingest_paths(paths, max_input_bytes=max_input_bytes),
             lambda value: {
                 "files": len(value),
                 "raw_lines": sum(len(file.lines) for file in value),

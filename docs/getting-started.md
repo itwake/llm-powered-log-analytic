@@ -188,8 +188,9 @@ in `.env.full.example`.
 
 ### A file cannot be uploaded
 
-Each file must contain at least one byte and be no larger than 100 MiB. The combined expanded
-content of a zip, gzip, tar, or tgz input must also be no larger than 100 MiB.
+Each file must contain at least one byte and is limited to 300 MiB by default. Set
+`LOGAN_MAX_UPLOAD_BYTES` to a positive byte count to change the limit. The same configured limit
+applies to the combined expanded content of a zip, gzip, tar, or tgz input.
 
 ### The web application reports that `next` is not recognized
 

@@ -68,6 +68,8 @@ The API reads `.env` at startup through the local command above. The web app use
 SQLite data and uploaded files are stored under `.logan/` by default. Set
 `LOGAN_DATABASE_PATH` and `LOGAN_LOCAL_OBJECT_STORE_DIR` to use other local paths.
 Alembic migrations in `apps/api/migrations` manage the database schema.
+Uploads and expanded archives are limited to 300 MiB by default. Set
+`LOGAN_MAX_UPLOAD_BYTES` to another positive byte count when needed.
 
 In development, an empty `LOGAN_SSO_AUTHORIZE_URL` uses the local default user. When the authorize
 URL is set, the token URL and client id are also required and login uses SSO. Production requires

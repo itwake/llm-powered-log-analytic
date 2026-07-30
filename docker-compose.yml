@@ -13,6 +13,7 @@ services:
     environment:
       LOGAN_DATABASE_PATH: /data/logan.db
       LOGAN_LOCAL_OBJECT_STORE_DIR: /data/object-store
+      LOGAN_MAX_UPLOAD_BYTES: ${LOGAN_MAX_UPLOAD_BYTES:-314572800}
       LOGAN_WEB_BASE_URL: http://localhost:3000
       LOGAN_CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
     volumes:
