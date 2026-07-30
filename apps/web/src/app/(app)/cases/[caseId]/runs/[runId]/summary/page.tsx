@@ -14,8 +14,9 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import Link from "@/components/Link";
 import { Metric } from "@/components/Shell";
-import { Badge, Card, EmptyState } from "@/components/ui";
+import { Badge, Button, Card, EmptyState } from "@/components/ui";
 import { reportsApi } from "@/lib/api";
 import type { SummaryResponse } from "@/lib/api";
 import { apiErrorMessage, formatDateTime } from "@/lib/format";
@@ -74,6 +75,7 @@ export default function SummaryPage() {
                     <TableCell align="right">Count</TableCell>
                     <TableCell>First seen</TableCell>
                     <TableCell align="right">Confidence</TableCell>
+                    <TableCell />
                   </TableRow></TableHead>
                   <TableBody>
                     {data.items.map((item) => (
@@ -86,6 +88,16 @@ export default function SummaryPage() {
                         <TableCell align="right">{item.occurrence_count}</TableCell>
                         <TableCell>{formatDateTime(item.first_seen)}</TableCell>
                         <TableCell align="right">{Math.round(item.confidence * 100)}%</TableCell>
+                        <TableCell>
+                          <Button
+                            component={Link}
+                            href={`/cases/${caseId}/runs/${runId}/logs?template_id=${item.template_id}`}
+                            size="sm"
+                            variant="secondary"
+                          >
+                            Logs
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -449,6 +449,7 @@ export const reportsApi = {
       window_end?: string;
       q?: string;
       service?: string;
+      template_id?: string;
       limit?: number;
       offset?: number;
     },

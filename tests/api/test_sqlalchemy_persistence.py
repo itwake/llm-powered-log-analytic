@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -343,7 +344,7 @@ async def test_segmented_logs_read_only_the_page_chunks(
     assert [row.line_number for row in filtered.rows] == [5]
     assert filtered.facets == {
         "service": {"unknown": 1},
-        "golden_signal": {"unknown": 1},
+        "golden_signal": {"error": 1},
         "fault_category": {},
     }
 
@@ -359,3 +360,79 @@ def test_interrupted_runs_are_failed_on_startup_reconciliation(tmp_path) -> None
     assert failed.status == "failed"
     assert failed.error_message == "analysis was interrupted by an API restart"
     assert store.get_case(case.id).status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_filtered_logs_via_search_index_match_brute_force(tmp_path) -> None:
+    database_path = str(tmp_path / "logan.db")
+    settings = Settings(
+        database_path=database_path,
+        local_object_store_dir=str(tmp_path / "objects"),
+    )
+    store = SQLAlchemyStore(
+        app_settings=settings,
+        database_path=database_path,
+        create_schema=True,
+    )
+    user = store.register_user(email="o@example.com", username="o", full_name=None)
+    case = store.create_case(user_id=user.id, data={"title": "Incident"})
+    path = tmp_path / "mixed.log"
+    lines = [
+        "2026-01-01T00:00:00Z ERROR payment-service connection refused id=alpha",
+        "2026-01-01T00:01:00Z ERROR payment-service timeout while calling ledger",
+        "2026-01-01T00:02:00Z WARN auth-service token cache miss for alpha",
+        "2026-01-01T00:03:00Z ERROR payment-service connection refused id=beta",
+        "no timestamp on this line at all",
+    ]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+    await store.run_analysis(run_id=run.id, user_id=user.id, file_paths=[str(path)])
+
+    manifest_index = sqlalchemy_store.load_search_index(
+        store._get_analysis_result_payload(case.id, run.id),
+        settings=settings,
+    )
+    assert manifest_index is not None, "new manifests must carry a search index"
+
+    # The trailing headerless line merges into the previous entry as a
+    # continuation, so five physical lines produce four entries.
+    everything = store.get_analysis_logs_page(case.id, run.id, limit=100)
+    assert everything.total == 4
+    assert everything.rows[-1].line_numbers == [4, 5]
+
+    searched = store.get_analysis_logs_page(case.id, run.id, q="connection refused")
+    assert searched.total == 2
+    assert all("connection refused" in row.redacted_message for row in searched.rows)
+    assert searched.facets["service"] == {"payment-service": 2}
+
+    windowed = store.get_analysis_logs_page(
+        case.id,
+        run.id,
+        window_start=datetime(2026, 1, 1, 0, 1, tzinfo=UTC),
+        window_end=datetime(2026, 1, 1, 0, 2, tzinfo=UTC),
+    )
+    assert windowed.total == 2
+    assert {row.line_number for row in windowed.rows} == {2, 3}
+
+    by_service = store.get_analysis_logs_page(case.id, run.id, service="auth-service")
+    assert by_service.total == 1
+    assert by_service.rows[0].line_number == 3
+
+    template_id = searched.rows[0].template_id
+    assert template_id is not None
+    by_template = store.get_analysis_logs_page(case.id, run.id, template_id=template_id)
+    assert by_template.total == 2
+    assert {row.line_number for row in by_template.rows} == {1, 4}
+
+    combined = store.get_analysis_logs_page(
+        case.id,
+        run.id,
+        q="connection refused",
+        window_start=datetime(2026, 1, 1, 0, 2, 30, tzinfo=UTC),
+    )
+    assert combined.total == 1
+    assert combined.rows[0].line_number == 4
+
+    missing = store.get_analysis_logs_page(case.id, run.id, q="zzz-not-there")
+    assert missing.total == 0
+    assert missing.rows == []

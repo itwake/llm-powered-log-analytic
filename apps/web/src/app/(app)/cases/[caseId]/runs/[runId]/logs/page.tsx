@@ -24,19 +24,21 @@ export default function LogsPage() {
   const initialQuery = searchParams.get("q") || "";
   const windowStart = searchParams.get("window_start") || undefined;
   const windowEnd = searchParams.get("window_end") || undefined;
+  const [templateId, setTemplateId] = useState(searchParams.get("template_id") || "");
   const [query, setQuery] = useState(initialQuery);
   const [service, setService] = useState("");
   const [data, setData] = useState<LogsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
 
-  const load = useCallback(async (nextQuery: string, nextService: string) => {
+  const load = useCallback(async (nextQuery: string, nextService: string, nextTemplateId?: string) => {
     const currentRequest = ++requestId.current;
     setError(null);
     try {
       const response = await reportsApi.logs(caseId, runId, {
         q: nextQuery || undefined,
         service: nextService || undefined,
+        template_id: nextTemplateId || undefined,
         limit: 500,
         window_start: windowStart,
         window_end: windowEnd,
@@ -52,10 +54,12 @@ export default function LogsPage() {
   }, [caseId, runId, windowEnd, windowStart]);
 
   useEffect(() => {
-    void load(initialQuery, "");
+    void load(initialQuery, "", templateId);
     return () => {
       requestId.current += 1;
     };
+    // templateId is intentionally read once from the URL for the initial load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery, load]);
 
   return (
@@ -65,10 +69,21 @@ export default function LogsPage() {
         <Typography color="text.secondary">Search the redacted log lines in this run.</Typography>
       </Box>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-        <TextField fullWidth label="Search" size="small" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void load(query, service); }} />
+        <TextField fullWidth label="Search" size="small" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void load(query, service, templateId); }} />
         <TextField label="Service" size="small" value={service} onChange={(event) => setService(event.target.value)} />
-        <Button onClick={() => void load(query, service)}>Search</Button>
+        <Button onClick={() => void load(query, service, templateId)}>Search</Button>
       </Stack>
+      {templateId && (
+        <Alert
+          onClose={() => {
+            setTemplateId("");
+            void load(query, service, "");
+          }}
+          severity="info"
+        >
+          Filtered to one template ({templateId.slice(0, 8)}…). Close to see all logs.
+        </Alert>
+      )}
       {error && <Alert severity="error">{error}</Alert>}
       {!data && !error && <Card><EmptyState title="Loading logs" /></Card>}
       {data && (

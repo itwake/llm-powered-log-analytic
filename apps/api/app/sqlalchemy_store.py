@@ -5,7 +5,8 @@ import base64
 import hashlib
 import uuid
 import zlib
-from collections import Counter
+from bisect import bisect_left, bisect_right
+from collections import Counter, OrderedDict
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,15 +33,19 @@ from app.core.security import default_session_expiry, hash_token, issue_session_
 from app.db import Base
 from app.models import tables
 from app.services.analysis_result_artifacts import (
+    LogSearchIndex,
     delete_analysis_result_artifacts,
     is_analysis_result_manifest,
-    iter_log_chunks,
+    iter_matching_log_chunks,
+    load_search_index,
     read_causal_graph,
     read_causal_summary,
     read_full_analysis_result,
     read_log_chunk,
     read_report_summary,
+    read_rows_by_ordinals,
     read_temporal,
+    search_blob_matches,
     write_analysis_result_manifest,
 )
 from app.services.object_store import local_upload_object_uri, safe_filename
@@ -156,6 +161,12 @@ class SQLAlchemyStore:
         self._analysis_result_cache_generation = 0
         self._analysis_result_cache_lock = RLock()
         self._analysis_result_cache_timer: Timer | None = None
+        # Filter columns and decoded page chunks for the most recently queried
+        # run; artifacts are immutable per run so no invalidation is needed
+        # beyond evicting when a different run is queried.
+        self._search_index_cache: tuple[str, LogSearchIndex] | None = None
+        self._search_index_lock = RLock()
+        self._log_chunk_cache: tuple[str, OrderedDict[int, list[NormalizedLogLine]]] | None = None
 
     @contextmanager
     def _session(self) -> Iterator[Session]:
@@ -849,12 +860,14 @@ class SQLAlchemyStore:
         window_end: datetime | None = None,
         q: str | None = None,
         service: str | None = None,
+        template_id: str | None = None,
         limit: int = 200,
         offset: int = 0,
     ) -> AnalysisLogPageRecord | None:
         payload = self._get_analysis_result_payload(case_id, run_id)
         if payload is None:
             return None
+        filtered = any((window_start, window_end, q, service, template_id))
         if not is_analysis_result_manifest(payload):
             result = self.get_analysis_result(case_id, run_id)
             if result is None:
@@ -873,11 +886,12 @@ class SQLAlchemyStore:
                     window_end=window_end,
                     q=q,
                     service=service,
+                    template_id=template_id,
                 )
             ]
             facets = (
                 result.log_facets
-                if not any((window_start, window_end, q, service)) and result.log_facets
+                if not filtered and result.log_facets
                 else self._analysis_log_facets(rows)
             )
             return AnalysisLogPageRecord(
@@ -892,7 +906,7 @@ class SQLAlchemyStore:
             template.template_id: template.template_text for template in summary.templates
         }
         logs_manifest = payload.get("logs", {})
-        if not any((window_start, window_end, q, service)):
+        if not filtered:
             page_end = offset + limit
             page_rows: list[NormalizedLogLine] = []
             for entry in logs_manifest.get("chunks", []):
@@ -915,12 +929,51 @@ class SQLAlchemyStore:
                 template_text_by_id=templates,
             )
 
+        search_index = self._load_log_search_index(run_id, payload)
+        if search_index is not None:
+            return self._filtered_page_from_index(
+                payload,
+                search_index,
+                run_id=run_id,
+                templates=templates,
+                window_start=window_start,
+                window_end=window_end,
+                q=q,
+                service=service,
+                template_id=template_id,
+                limit=limit,
+                offset=offset,
+            )
+
+        # Legacy manifests without a search index: chunk-level prefilters need
+        # every needle that can satisfy the text query at row level — the query
+        # itself (redacted message, entities) plus the ids of templates whose
+        # text matches, because template text is joined in rather than persisted
+        # per row.
+        text_needles: list[str] | None = None
+        if q:
+            lowered_q = q.lower()
+            text_needles = [q]
+            text_needles.extend(
+                candidate_id
+                for candidate_id, text in templates.items()
+                if lowered_q in text.lower()
+            )
+        if template_id:
+            text_needles = [*(text_needles or []), template_id]
+
         page_rows = []
         total = 0
         service_counts: Counter[str] = Counter()
         signal_counts: Counter[str] = Counter()
         fault_counts: Counter[str] = Counter()
-        for _, chunk in iter_log_chunks(payload, settings=self.settings):
+        for _, chunk in iter_matching_log_chunks(
+            payload,
+            settings=self.settings,
+            window_start=window_start,
+            window_end=window_end,
+            text_needles=text_needles,
+        ):
             for line in chunk:
                 if not self._analysis_log_matches(
                     line,
@@ -929,6 +982,7 @@ class SQLAlchemyStore:
                     window_end=window_end,
                     q=q,
                     service=service,
+                    template_id=template_id,
                 ):
                     continue
                 if offset <= total < offset + limit:
@@ -948,6 +1002,129 @@ class SQLAlchemyStore:
             template_text_by_id=templates,
         )
 
+    def _load_log_search_index(
+        self,
+        run_id: str,
+        payload: dict[str, Any],
+    ) -> LogSearchIndex | None:
+        with self._search_index_lock:
+            cached = self._search_index_cache
+            if cached is not None and cached[0] == run_id:
+                return cached[1]
+        index = load_search_index(payload, settings=self.settings)
+        if index is None:
+            return None
+        with self._search_index_lock:
+            self._search_index_cache = (run_id, index)
+        return index
+
+    def _run_chunk_cache(self, run_id: str) -> OrderedDict[int, list[NormalizedLogLine]]:
+        cached = self._log_chunk_cache
+        if cached is None or cached[0] != run_id:
+            cached = (run_id, OrderedDict())
+            self._log_chunk_cache = cached
+        cache = cached[1]
+        while len(cache) > 32:
+            cache.popitem(last=False)
+        return cache
+
+    def _filtered_page_from_index(
+        self,
+        payload: dict[str, Any],
+        index: LogSearchIndex,
+        *,
+        run_id: str,
+        templates: dict[str, str],
+        window_start: datetime | None,
+        window_end: datetime | None,
+        q: str | None,
+        service: str | None,
+        template_id: str | None,
+        limit: int,
+        offset: int,
+    ) -> AnalysisLogPageRecord:
+        # Rows are time-sorted with timestampless rows last, so a time window is
+        # a bisect over the epoch prefix; a window therefore excludes rows
+        # without timestamps, matching _analysis_log_matches.
+        if window_start is not None or window_end is not None:
+            low = (
+                bisect_left(index.epochs, window_start.timestamp())
+                if window_start is not None
+                else 0
+            )
+            high = (
+                bisect_right(index.epochs, window_end.timestamp())
+                if window_end is not None
+                else len(index.epochs)
+            )
+        else:
+            low, high = 0, index.row_count
+
+        def value_code(values: list[str | None], wanted: str | None) -> int | None:
+            if wanted is None:
+                return None
+            try:
+                return values.index(wanted)
+            except ValueError:
+                return -1
+
+        service_code = value_code(index.service_values, service)
+        template_code = value_code(index.template_values, template_id)
+
+        q_rows: set[int] = set()
+        q_template_codes: set[int] = set()
+        if q:
+            lowered_q = q.lower()
+            q_rows = search_blob_matches(index, q, settings=self.settings)
+            q_template_codes = {
+                code
+                for code, candidate_id in enumerate(index.template_values)
+                if candidate_id
+                and lowered_q in templates.get(candidate_id, "").lower()
+            }
+
+        service_codes = index.service_codes
+        template_codes = index.template_codes
+        matched: list[int] = []
+        for ordinal in range(low, high):
+            if service_code is not None and service_codes[ordinal] != service_code:
+                continue
+            if template_code is not None and template_codes[ordinal] != template_code:
+                continue
+            if q and ordinal not in q_rows and template_codes[ordinal] not in q_template_codes:
+                continue
+            matched.append(ordinal)
+
+        service_counts: Counter[str] = Counter()
+        signal_counts: Counter[str] = Counter()
+        fault_counts: Counter[str] = Counter()
+        signal_codes = index.signal_codes
+        fault_codes = index.fault_codes
+        fault_lists = [
+            value.split("\x1f") if value else [] for value in index.fault_values
+        ]
+        for ordinal in matched:
+            service_counts[index.service_values[service_codes[ordinal]] or "unknown"] += 1
+            signal_counts[index.signal_values[signal_codes[ordinal]] or "unknown"] += 1
+            fault_counts.update(fault_lists[fault_codes[ordinal]])
+
+        rows = read_rows_by_ordinals(
+            payload,
+            matched[offset : offset + limit],
+            settings=self.settings,
+            chunk_cache=self._run_chunk_cache(run_id),
+        )
+        return AnalysisLogPageRecord(
+            rows=rows,
+            total=len(matched),
+            facets={
+                "service": dict(service_counts),
+                "golden_signal": dict(signal_counts),
+                "fault_category": dict(fault_counts),
+            },
+            template_text_by_id=templates,
+        )
+
     @staticmethod
     def _analysis_log_matches(
         line: NormalizedLogLine,
@@ -957,12 +1134,15 @@ class SQLAlchemyStore:
         window_end: datetime | None,
         q: str | None,
         service: str | None,
+        template_id: str | None = None,
     ) -> bool:
         if window_start and (line.timestamp is None or line.timestamp < window_start):
             return False
         if window_end and (line.timestamp is None or line.timestamp > window_end):
             return False
         if service and line.service != service:
+            return False
+        if template_id and line.template_id != template_id:
             return False
         if q:
             lowered = q.lower()

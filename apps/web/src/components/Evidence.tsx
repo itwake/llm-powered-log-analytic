@@ -26,11 +26,14 @@ export function evidenceLogsHref(caseId: string, runId: string, refItem: Evidenc
         window_start: new Date(timestamp.getTime() - 60_000).toISOString(),
         window_end: new Date(timestamp.getTime() + 60_000).toISOString(),
       });
+      if (refItem.template_id) {
+        params.set("template_id", refItem.template_id);
+      }
       return `${basePath}?${params.toString()}`;
     }
   }
   if (refItem.template_id) {
-    const params = new URLSearchParams({ q: refItem.template_id });
+    const params = new URLSearchParams({ template_id: refItem.template_id });
     return `${basePath}?${params.toString()}`;
   }
   return basePath;
