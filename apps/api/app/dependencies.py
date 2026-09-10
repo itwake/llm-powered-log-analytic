@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, Request, status
+from logan_analysis.ports import ModelGateway
 
-from app.store import MetadataStore, UserRecord
+from app.store import Store, UserRecord
 
 
-def get_store(request: Request) -> MetadataStore:
+def get_store(request: Request) -> Store:
     return request.app.state.store
 
 
-def get_model_gateway(request: Request) -> object:
+def get_model_gateway(request: Request) -> ModelGateway | None:
     return request.app.state.model_gateway
 
 
@@ -18,30 +19,16 @@ def current_user(request: Request) -> UserRecord:
     user = store.get_user_by_session(request.cookies.get("logan_session"))
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="user is inactive")
     return user
 
 
-def require_admin(user: UserRecord) -> UserRecord:
-    if user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin role required")
-    return user
-
-
-def require_case_permission(
+def require_case_owner(
     *,
-    store: MetadataStore,
+    store: Store,
     user: UserRecord,
     case_id: str,
-    permission: str,
-    hide_forbidden: bool,
 ):
     case = store.get_case(case_id)
-    if not case:
+    if not case or case.created_by != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="case not found")
-    if not store.user_can_access_case(user.id, case_id, permission):
-        if hide_forbidden:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="case not found")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="case permission denied")
     return case

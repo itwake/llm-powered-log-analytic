@@ -8,7 +8,6 @@ import type {
   AnalysisRunResponse,
   CaseResponse,
   EvidenceRef,
-  JobEventResponse,
 } from "@/lib/api";
 import { formatDateTime, valueLabel } from "@/lib/format";
 import { AnalysisProgressPanel } from "@/components/AnalysisProgressPanel";
@@ -19,7 +18,6 @@ interface CaseRunInspectorProps {
   caseId: string;
   caseRecord: CaseResponse | null;
   run: AnalysisRunResponse | null;
-  events: JobEventResponse[];
   selectedEvidence: EvidenceRef | null;
   cancelling?: boolean;
   onCancel?: (run: AnalysisRunResponse) => void;
@@ -47,7 +45,6 @@ export function CaseRunInspector({
   cancelling = false,
   caseId,
   caseRecord,
-  events,
   onCancel,
   run,
   selectedEvidence,
@@ -57,7 +54,6 @@ export function CaseRunInspector({
       <AnalysisProgressPanel
         cancelling={cancelling}
         caseId={caseId}
-        events={events}
         run={run}
         onCancel={onCancel}
       />
@@ -112,7 +108,11 @@ export function CaseRunInspector({
               <dt>Completed</dt>
               <dd>{formatDateTime(run.completed_at)}</dd>
               <dt>Model</dt>
-              <dd>{run.model_provider} / {run.model_name}</dd>
+              <dd>
+                {run.model_provider === "none"
+                  ? "None"
+                  : `${run.model_provider} / ${run.model_name}`}
+              </dd>
               {run.error_message && (
                 <>
                   <dt>Error</dt>

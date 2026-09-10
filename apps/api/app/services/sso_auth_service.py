@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import json
-import secrets
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
@@ -10,7 +9,7 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.config import Settings
-from app.store import MetadataStore, UserRecord
+from app.store import Store, UserRecord
 
 
 @dataclass(frozen=True)
@@ -71,15 +70,15 @@ class SsoAuthService:
         self.settings = app_settings
         self.http_client = http_client
 
-    def ensure_enabled(self) -> None:
-        if not self.settings.sso_enabled:
+    def ensure_configured(self) -> None:
+        if not self.settings.sso_configured:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="SSO login is not enabled",
+                detail="SSO is not configured",
             )
 
     def build_authorize_url(self, *, redirect_uri: str, state: str) -> str:
-        self.ensure_enabled()
+        self.ensure_configured()
         params = {
             'response_type': 'code',
             'client_id': self.settings.sso_client_id,
@@ -90,7 +89,7 @@ class SsoAuthService:
         return f"{self.settings.sso_authorize_url}?{urlencode(params)}"
 
     async def exchange_code(self, *, redirect_uri: str, code: str) -> SsoUserProfile:
-        self.ensure_enabled()
+        self.ensure_configured()
         authorization_code = code.strip()
         if not authorization_code:
             raise HTTPException(
@@ -153,8 +152,7 @@ class SsoAuthService:
             ) from exc
         return self._profile_from_claims(claims)
 
-    def provision_user(self, store: MetadataStore, profile: SsoUserProfile) -> UserRecord:
-        self.ensure_enabled()
+    def provision_user(self, store: Store, profile: SsoUserProfile) -> UserRecord:
         external_match = (
             store.get_user_by_external_id(profile.external_id) if profile.external_id else None
         )
@@ -191,7 +189,6 @@ class SsoAuthService:
                     email=profile.email,
                     username=profile.username,
                     full_name=profile.full_name,
-                    password=secrets.token_urlsafe(32),
                     external_id=profile.external_id,
                 )
             except ValueError as exc:
@@ -199,12 +196,6 @@ class SsoAuthService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail=str(exc),
                 ) from exc
-
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="user is inactive",
-            )
 
         updates: dict[str, str] = {}
         if profile.external_id and not user.external_id:
@@ -249,4 +240,3 @@ class SsoAuthService:
             full_name=full_name,
             external_id=_claim_text(claims, "sub", "oid", "user_id"),
         )
-

@@ -11,14 +11,12 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "@/components/Link";
-import { BACKGROUND_ANALYSIS_CONFIG } from "@/lib/analysisConfig";
 import {
   AnalysisRunResponse,
   CaseResponse,
   EvidenceRef,
-  JobEventResponse,
   UploadProgressEvent,
   casesApi,
   runsApi,
@@ -39,8 +37,6 @@ interface UploadItem {
   status: UploadItemStatus;
   bytesSent: number;
   fileId?: string;
-  partNumber?: number;
-  partCount?: number;
   message?: string;
 }
 
@@ -114,13 +110,12 @@ export default function CaseWorkspacePage() {
   const router = useRouter();
   const [caseRecord, setCaseRecord] = useState<CaseResponse | null>(null);
   const [runs, setRuns] = useState<AnalysisRunResponse[]>([]);
-  const [runEvents, setRunEvents] = useState<Record<string, JobEventResponse[]>>({});
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
   const [selectedEvidence, setSelectedEvidence] = useState<EvidenceRef | null>(null);
   const [loading, setLoading] = useState(true);
-  const [starting, setStarting] = useState<"files" | "sample" | null>(null);
+  const [starting, setStarting] = useState<"files" | null>(null);
   const [editingCase, setEditingCase] = useState(false);
   const [savingCase, setSavingCase] = useState(false);
   const [deletingCase, setDeletingCase] = useState(false);
@@ -133,8 +128,10 @@ export default function CaseWorkspacePage() {
   const [caseEnvironment, setCaseEnvironment] = useState("");
   const [caseIncidentStart, setCaseIncidentStart] = useState("");
   const [caseIncidentEnd, setCaseIncidentEnd] = useState("");
+  const loadRequestId = useRef(0);
 
-  async function load() {
+  const load = useCallback(async () => {
+    const currentRequest = ++loadRequestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -142,19 +139,26 @@ export default function CaseWorkspacePage() {
         casesApi.get(caseId),
         runsApi.list(caseId),
       ]);
+      if (loadRequestId.current !== currentRequest) {
+        return;
+      }
       setCaseRecord(caseResponse);
       setRuns(runResponse.items);
       if (runResponse.items[0]) {
         setActiveRunId((current) => current || runResponse.items[0].analysis_run_id);
       }
     } catch (caught) {
-      setError(apiErrorMessage(caught));
+      if (loadRequestId.current === currentRequest) {
+        setError(apiErrorMessage(caught));
+      }
     } finally {
-      setLoading(false);
+      if (loadRequestId.current === currentRequest) {
+        setLoading(false);
+      }
     }
-  }
+  }, [caseId]);
 
-  function upsertRun(run: AnalysisRunResponse) {
+  const upsertRun = useCallback((run: AnalysisRunResponse) => {
     setRuns((current) => {
       const existing = current.findIndex((item) => item.analysis_run_id === run.analysis_run_id);
       const next = existing >= 0 ? [...current] : [run, ...current];
@@ -163,17 +167,13 @@ export default function CaseWorkspacePage() {
       }
       return next.sort((left, right) => right.run_number - left.run_number);
     });
-  }
+  }, []);
 
-  async function refreshRunProgress(runId: string) {
-    const [run, events] = await Promise.all([
-      runsApi.get(caseId, runId),
-      runsApi.events(caseId, runId),
-    ]);
+  const refreshRunProgress = useCallback(async (runId: string) => {
+    const run = await runsApi.get(caseId, runId);
     upsertRun(run);
-    setRunEvents((current) => ({ ...current, [runId]: events.items }));
     return run;
-  }
+  }, [caseId, upsertRun]);
 
   function handleUploadProgress(event: UploadProgressEvent) {
     setUploadItems((current) => {
@@ -186,8 +186,6 @@ export default function CaseWorkspacePage() {
         status: event.phase,
         bytesSent: Math.min(event.bytesSent, event.totalBytes),
         fileId: event.fileId,
-        partNumber: event.partNumber,
-        partCount: event.partCount,
         message: event.message,
       };
       if (existing < 0) {
@@ -200,8 +198,17 @@ export default function CaseWorkspacePage() {
   }
 
   useEffect(() => {
+    setCaseRecord(null);
+    setRuns([]);
+    setActiveRunId(null);
+    setSelectedEvidence(null);
+    setSelectedFiles([]);
+    setUploadItems([]);
     void load();
-  }, [caseId]);
+    return () => {
+      loadRequestId.current += 1;
+    };
+  }, [load]);
 
   useEffect(() => {
     if (!caseRecord) {
@@ -218,36 +225,27 @@ export default function CaseWorkspacePage() {
 
   const latestRun = runs[0] || null;
   const trackedRun = runs.find((run) => run.analysis_run_id === activeRunId) || latestRun;
+  const trackedRunId = trackedRun?.analysis_run_id;
+  const trackedRunStatus = trackedRun?.status;
 
   useEffect(() => {
-    if (!trackedRun) {
+    if (!trackedRunId || !trackedRunStatus) {
       return;
     }
-    let cancelled = false;
-    const runId = trackedRun.analysis_run_id;
-    async function refresh() {
-      try {
-        await refreshRunProgress(runId);
-      } catch {
-        if (!cancelled) {
-          setRunEvents((current) => ({ ...current, [runId]: current[runId] || [] }));
-        }
-      }
+    function refresh() {
+      void refreshRunProgress(trackedRunId).catch(() => undefined);
     }
-    void refresh();
-    if (terminalRunStatus(trackedRun.status)) {
-      return () => {
-        cancelled = true;
-      };
+    refresh();
+    if (terminalRunStatus(trackedRunStatus)) {
+      return;
     }
     const timer = window.setInterval(() => {
-      void refresh();
+      refresh();
     }, 2000);
     return () => {
-      cancelled = true;
       window.clearInterval(timer);
     };
-  }, [caseId, trackedRun?.analysis_run_id, trackedRun?.status]);
+  }, [refreshRunProgress, trackedRunId, trackedRunStatus]);
 
   function handleFileSelection(files: File[]) {
     setSelectedFiles(files);
@@ -268,8 +266,7 @@ export default function CaseWorkspacePage() {
       });
       const run = await runsApi.start(caseId, {
         input_file_ids: uploaded.map((file) => file.file_id),
-        config: BACKGROUND_ANALYSIS_CONFIG,
-      }, { background: true });
+      });
       setActiveRunId(run.analysis_run_id);
       await refreshRunProgress(run.analysis_run_id);
     } catch (caught) {
@@ -278,23 +275,6 @@ export default function CaseWorkspacePage() {
           item.status === "completed" ? item : { ...item, status: "failed", message: apiErrorMessage(caught) },
         ),
       );
-      setError(apiErrorMessage(caught));
-    } finally {
-      setStarting(null);
-    }
-  }
-
-  async function startSampleAnalysis() {
-    setStarting("sample");
-    setError(null);
-    try {
-      const run = await runsApi.start(caseId, {
-        input_paths: [],
-        config: BACKGROUND_ANALYSIS_CONFIG,
-      }, { background: true });
-      setActiveRunId(run.analysis_run_id);
-      await refreshRunProgress(run.analysis_run_id);
-    } catch (caught) {
       setError(apiErrorMessage(caught));
     } finally {
       setStarting(null);
@@ -354,8 +334,6 @@ export default function CaseWorkspacePage() {
       setCancellingRunId(null);
     }
   }
-
-  const trackedEvents = trackedRun ? runEvents[trackedRun.analysis_run_id] || [] : [];
 
   return (
     <Stack spacing={2.5}>
@@ -482,18 +460,20 @@ export default function CaseWorkspacePage() {
               </Card>
             )}
 
-            <ChatWorkspace
-              caseId={caseId}
-              run={latestRun}
-              onEvidenceSelect={setSelectedEvidence}
-            />
+            {latestRun?.model_provider === "ai_platform" && (
+              <ChatWorkspace
+                caseId={caseId}
+                run={latestRun}
+                onEvidenceSelect={setSelectedEvidence}
+              />
+            )}
 
             <Card sx={{ background: "linear-gradient(180deg, #ffffff, rgba(217,236,255,0.32))" }}>
               <Stack spacing={2}>
                 <SectionHeader eyebrow="Run" title="Analyze evidence" />
                 <FileUploadDropzone
                   accept=".log,.txt,.json,.jsonl,.zip,.gz,.tar,.tgz"
-                  description="Select logs or archives to upload into this incident run."
+                  description="Select logs or archives. The server limit is 300 MiB by default and also applies to expanded archives."
                   files={selectedFiles}
                   onFilesSelected={handleFileSelection}
                 />
@@ -518,9 +498,6 @@ export default function CaseWorkspacePage() {
                           <Stack direction="row" sx={{ color: "text.secondary", flexWrap: "wrap", gap: 1.5 }}>
                             <Typography variant="caption">{percent}%</Typography>
                             <Typography variant="caption">{formatBytes(item.bytesSent)} / {formatBytes(item.size)}</Typography>
-                            {item.partNumber && item.partCount && (
-                              <Typography variant="caption">part {item.partNumber}/{item.partCount}</Typography>
-                            )}
                             {item.message && <Typography variant="caption">{item.message}</Typography>}
                           </Stack>
                         </Box>
@@ -532,13 +509,9 @@ export default function CaseWorkspacePage() {
                   <Button disabled={starting !== null || selectedFiles.length === 0} onClick={startUploadedAnalysis}>
                     {starting === "files" ? "Uploading" : "Upload and analyze files"}
                   </Button>
-                  <Button disabled={starting !== null} variant="secondary" onClick={startSampleAnalysis}>
-                    {starting === "sample" ? "Starting" : "Start sample/local analysis"}
-                  </Button>
                 </Stack>
                 <Typography color="text.secondary">
-                  Uploaded files run through the local object store. The sample/local action uses the
-                  deterministic fixture set.
+                  Files stay in the configured local data directory and are analyzed in one background run.
                 </Typography>
               </Stack>
             </Card>
@@ -550,7 +523,6 @@ export default function CaseWorkspacePage() {
                 cancelling={trackedRun?.analysis_run_id === cancellingRunId}
                 caseId={caseId}
                 caseRecord={caseRecord}
-                events={trackedEvents}
                 run={trackedRun}
                 selectedEvidence={selectedEvidence}
                 onCancel={(run) => void cancelRun(run)}

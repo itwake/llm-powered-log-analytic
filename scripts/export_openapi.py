@@ -6,14 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from app.main import create_app
-from app.store import InMemoryStore
-from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
+from app.store import create_ephemeral_store
 
 
 def current_openapi_schema() -> dict[str, Any]:
     app = create_app(
-        store=InMemoryStore(),
-        model_gateway=MockAIPlatformAnnotationGateway(),
+        store=create_ephemeral_store(),
     )
     return app.openapi()
 

@@ -1,1 +1,0 @@
-"""LogAn worker pipeline package."""

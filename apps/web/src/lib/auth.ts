@@ -1,8 +1,8 @@
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
+import { API_BASE_URL } from "@/lib/api/http";
 
-export function buildSsoLoginUrl(nextPath = "/cases"): string {
+export function buildLoginUrl(nextPath = "/cases"): string {
   const safeNextPath = nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/cases";
   const query = new URLSearchParams({next: safeNextPath}).toString();
-  return API_BASE_URL ? `${API_BASE_URL}/api/auth/sso/login?${query}` : `/api/auth/sso/login?${query}`;
+  return `${API_BASE_URL}/api/auth/login?${query}`;
 }
 

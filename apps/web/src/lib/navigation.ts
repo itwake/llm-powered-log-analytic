@@ -7,8 +7,5 @@ export function safeNextPath(search: string, fallback = "/cases"): string {
   if (next === "/login" || next.startsWith("/login?")) {
     return fallback;
   }
-  if (next === "/register" || next.startsWith("/register?")) {
-    return fallback;
-  }
   return next;
 }

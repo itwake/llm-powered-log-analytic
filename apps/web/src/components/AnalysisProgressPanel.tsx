@@ -4,9 +4,8 @@ import Box from "@mui/material/Box";
 import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useEffect, useRef } from "react";
 import Link from "@/components/Link";
-import { AnalysisRunResponse, JobEventResponse } from "@/lib/api";
+import { AnalysisRunResponse } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { Badge, Button, Card, EmptyState, statusTone } from "@/components/ui";
 
@@ -14,14 +13,14 @@ const PIPELINE_STEPS = [
   ["ingest_paths", "Ingest"],
   ["merge_entries", "Merge"],
   ["preprocess_redact", "Redact"],
-  ["drain_templating", "Template"],
+  ["template_extraction", "Template"],
   ["representative_sampling", "Sample"],
+  ["heuristic_annotation", "Classify"],
   ["ai_platform_annotation", "Annotate"],
   ["broadcast_annotations", "Broadcast"],
   ["temporal_aggregation", "Temporal"],
   ["causal_graph", "Graph"],
   ["causal_summary", "Summary"],
-  ["export_artifacts", "Export"],
 ] as const;
 
 const PROGRESS_METRICS = [
@@ -31,40 +30,33 @@ const PROGRESS_METRICS = [
   ["windows", "Windows"],
 ] as const;
 
-type StepStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
+type StepStatus = "pending" | "processing" | "completed" | "failed" | "cancelled" | "skipped";
 
-function latestEventsByStep(events: JobEventResponse[]): Map<string, JobEventResponse> {
-  const byStep = new Map<string, JobEventResponse>();
-  for (const event of events) {
-    byStep.set(event.step_name, event);
-  }
-  return byStep;
+interface StepProgress {
+  status: StepStatus;
+  error_message?: string;
 }
 
-function stepStatus(
-  run: AnalysisRunResponse,
-  stepName: string,
-  latestEvent: JobEventResponse | undefined,
-): StepStatus {
-  if (latestEvent?.status === "failed" || latestEvent?.event_type === "failed") {
-    return "failed";
-  }
-  if (latestEvent?.status === "completed" || latestEvent?.event_type === "completed") {
-    return "completed";
-  }
-  if (latestEvent?.status === "cancelled" || latestEvent?.event_type === "cancelled") {
-    return "cancelled";
+function stepProgress(run: AnalysisRunResponse, stepName: string): StepProgress {
+  const steps = run.progress.steps;
+  if (steps && typeof steps === "object") {
+    const value = (steps as Record<string, unknown>)[stepName];
+    if (value && typeof value === "object") {
+      const step = value as Record<string, unknown>;
+      const status = step.status;
+      return {
+        status: typeof status === "string" ? status as StepStatus : "pending",
+        error_message: typeof step.error_message === "string" ? step.error_message : undefined,
+      };
+    }
   }
   if (run.status === "cancelled") {
-    return "pending";
-  }
-  if (latestEvent?.status === "processing" || latestEvent?.event_type === "started") {
-    return "processing";
+    return {status: "pending"};
   }
   if (run.current_step === stepName && run.status !== "completed") {
-    return "processing";
+    return {status: "processing"};
   }
-  return "pending";
+  return {status: "pending"};
 }
 
 function progressNumber(run: AnalysisRunResponse, key: string): number | null {
@@ -76,17 +68,9 @@ function formatCount(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-function metadataPreview(metadata: Record<string, unknown>): string {
-  const entries = Object.entries(metadata).filter(([, value]) =>
-    typeof value === "number" || typeof value === "string" || typeof value === "boolean",
-  );
-  return entries.slice(0, 3).map(([key, value]) => `${key}: ${String(value)}`).join(" - ");
-}
-
 interface AnalysisProgressPanelProps {
   caseId: string;
   run: AnalysisRunResponse | null;
-  events: JobEventResponse[];
   cancelling?: boolean;
   onCancel?: (run: AnalysisRunResponse) => void;
 }
@@ -108,24 +92,18 @@ function stepColor(status: StepStatus): string {
   if (status === "cancelled") {
     return "info.main";
   }
+  if (status === "skipped") {
+    return "text.disabled";
+  }
   return "divider";
 }
 
 export function AnalysisProgressPanel({
   caseId,
   run,
-  events,
   cancelling = false,
   onCancel,
 }: AnalysisProgressPanelProps) {
-  const eventLogRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (eventLogRef.current) {
-      eventLogRef.current.scrollTop = eventLogRef.current.scrollHeight;
-    }
-  }, [events.length, run?.analysis_run_id]);
-
   if (!run) {
     return (
       <Card>
@@ -139,22 +117,20 @@ export function AnalysisProgressPanel({
     );
   }
 
-  const byStep = latestEventsByStep(events);
   const stepRows = PIPELINE_STEPS.map(([name, label]) => {
-    const event = byStep.get(name);
-    return { name, label, event, status: stepStatus(run, name, event) };
+    const progress = stepProgress(run, name);
+    return { name, label, ...progress };
   });
   const completedSteps = stepRows.filter((step) => step.status === "completed").length;
   const failed = run.status === "failed" || stepRows.some((step) => step.status === "failed");
   const cancelled = run.status === "cancelled";
+  const finalizing = run.status === "processing" && run.current_step === "finalizing";
   const completionPercent = failed
     ? Math.max(8, Math.round((completedSteps / PIPELINE_STEPS.length) * 100))
     : run.status === "completed"
       ? 100
-      : Math.max(8, Math.round((completedSteps / PIPELINE_STEPS.length) * 100));
+      : Math.min(98, Math.max(8, Math.round((completedSteps / PIPELINE_STEPS.length) * 100)));
   const canCancel = !terminalRunStatus(run.status) && Boolean(onCancel);
-  const visibleEvents = events.slice(-16);
-
   return (
     <Card>
       <Stack spacing={2}>
@@ -164,7 +140,7 @@ export function AnalysisProgressPanel({
               Analysis Progress
             </Typography>
             <Typography color="text.secondary">
-              Run #{run.run_number} - {run.current_step}
+              Run #{run.run_number} - {finalizing ? "preparing reports" : run.current_step}
             </Typography>
           </Box>
           <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
@@ -215,14 +191,9 @@ export function AnalysisProgressPanel({
                 <Typography color="text.secondary" variant="caption">
                   {step.status}
                 </Typography>
-                {step.event?.metadata && Object.keys(step.event.metadata).length > 0 && (
-                  <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }} variant="caption">
-                    {metadataPreview(step.event.metadata)}
-                  </Typography>
-                )}
-                {step.event?.error_message && (
+                {step.error_message && (
                   <Typography color="error" sx={{ overflowWrap: "anywhere" }} variant="caption">
-                    {step.event.error_message}
+                    {step.error_message}
                   </Typography>
                 )}
               </Box>
@@ -247,50 +218,6 @@ export function AnalysisProgressPanel({
             </Button>
           )}
         </Stack>
-
-        {events.length > 0 && (
-          <Box>
-            <Typography component="h3" gutterBottom sx={{ fontWeight: 800 }} variant="subtitle1">
-              Event Log
-            </Typography>
-            <Stack
-              ref={eventLogRef}
-              spacing={1}
-              sx={{
-                border: 1,
-                borderColor: "divider",
-                borderRadius: "10px",
-                maxHeight: 320,
-                overflowY: "auto",
-                p: 1,
-              }}
-            >
-              {visibleEvents.map((event) => (
-                <Stack direction="row" key={event.id} spacing={1} sx={{ alignItems: "flex-start", minWidth: 0 }}>
-                  <Badge tone={statusTone(event.status)}>{event.event_type}</Badge>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontWeight: 750, overflowWrap: "anywhere" }} variant="body2">
-                      {event.step_name}
-                    </Typography>
-                    {event.metadata && Object.keys(event.metadata).length > 0 && (
-                      <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }} variant="caption">
-                        {metadataPreview(event.metadata)}
-                      </Typography>
-                    )}
-                    {event.error_message && (
-                      <Typography color="error" sx={{ overflowWrap: "anywhere" }} variant="caption">
-                        {event.error_message}
-                      </Typography>
-                    )}
-                  </Box>
-                  <Typography color="text.secondary" sx={{ flex: "0 0 auto" }} variant="caption">
-                    {formatDateTime(event.created_at)}
-                  </Typography>
-                </Stack>
-              ))}
-            </Stack>
-          </Box>
-        )}
       </Stack>
     </Card>
   );

@@ -2,21 +2,11 @@
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import FormControl from "@mui/material/FormControl";
-import InputLabel from "@mui/material/InputLabel";
-import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useTheme } from "@mui/material/styles";
-import { useParams } from "next/navigation";
-import {
-  FormEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 import { BarChart } from "echarts/charts";
 import {
   DataZoomComponent,
@@ -27,11 +17,15 @@ import {
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption, EChartsType } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import Link from "@/components/Link";
-import { reportsApi, TemporalResponse, TemporalSeries } from "@/lib/api";
-import { apiErrorMessage, formatShortTime } from "@/lib/format";
-import { SIGNAL_COLORS } from "@/lib/signals";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { LogTable } from "@/components/LogTable";
 import { Button, Card, EmptyState } from "@/components/ui";
+import { reportsApi } from "@/lib/api";
+import type { LogsResponse, TemporalResponse, TemporalSeries } from "@/lib/api";
+import { apiErrorMessage, formatDateTime, formatShortTime } from "@/lib/format";
+import { SIGNAL_COLORS } from "@/lib/signals";
 
 echarts.use([
   BarChart,
@@ -42,8 +36,10 @@ echarts.use([
   CanvasRenderer,
 ]);
 
+type TemporalGroup = "golden_signal" | "service" | "fault_category" | "template";
+
 function countFor(series: TemporalSeries, windowStart: string): number {
-  return series.points.find((point) => point.window_start === windowStart)?.count || 0;
+  return series.points.find((point) => point.window_start === windowStart)?.count ?? 0;
 }
 
 function windowEnd(windowStart: string, windowSizeSeconds: number): string {
@@ -54,66 +50,42 @@ function windowEnd(windowStart: string, windowSizeSeconds: number): string {
   return new Date(start.getTime() + windowSizeSeconds * 1000).toISOString();
 }
 
-function windowSizeLabel(seconds: number): string {
-  if (seconds === 60) {
-    return "1 minute";
-  }
-  if (seconds === 300) {
-    return "5 minutes";
-  }
-  if (seconds === 900) {
-    return "15 minutes";
-  }
-  return `${seconds}s`;
-}
-
-interface SelectedWindow {
-  start: string;
-  end: string;
-  total: number;
-}
-
 export default function TemporalPage() {
   const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
   const theme = useTheme();
   const chartElement = useRef<HTMLDivElement | null>(null);
   const chart = useRef<EChartsType | null>(null);
+  const [groupBy, setGroupBy] = useState<TemporalGroup>("golden_signal");
   const [data, setData] = useState<TemporalResponse | null>(null);
-  const [groupBy, setGroupBy] = useState("golden_signal");
-  const [windowSizeSeconds, setWindowSizeSeconds] = useState(60);
-  const [selectedWindow, setSelectedWindow] = useState<SelectedWindow | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [selectedWindow, setSelectedWindow] = useState<string | null>(null);
+  const [windowLogs, setWindowLogs] = useState<LogsResponse | null>(null);
+  const [windowLogsError, setWindowLogsError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(nextGroupBy = groupBy, nextWindowSize = windowSizeSeconds) {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await reportsApi.temporal(caseId, runId, {
-        group_by: nextGroupBy,
-        window_size_seconds: nextWindowSize,
-      });
-      setData(response);
-      setSelectedWindow(null);
-    } catch (caught) {
-      setError(apiErrorMessage(caught));
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    void load("golden_signal", 60);
-  }, [caseId, runId]);
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void load();
-  }
+    let active = true;
+    setData(null);
+    setSelectedWindow(null);
+    setError(null);
+    reportsApi.temporal(caseId, runId, { group_by: groupBy })
+      .then((response) => {
+        if (active) {
+          setData(response);
+        }
+      })
+      .catch((caught) => {
+        if (active) {
+          setError(apiErrorMessage(caught));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [caseId, runId, groupBy]);
 
   const windows = useMemo(() => {
     const values = new Set<string>();
-    for (const series of data?.series || []) {
+    for (const series of data?.series ?? []) {
       for (const point of series.points) {
         values.add(point.window_start);
       }
@@ -121,32 +93,54 @@ export default function TemporalPage() {
     return Array.from(values).sort();
   }, [data]);
 
-  const totals = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const windowStart of windows) {
-      map.set(
-        windowStart,
-        (data?.series || []).reduce((total, series) => total + countFor(series, windowStart), 0),
-      );
+  const selectedTotal = useMemo(() => {
+    if (!selectedWindow) {
+      return 0;
     }
-    return map;
-  }, [data, windows]);
+    return (data?.series ?? []).reduce(
+      (total, series) => total + countFor(series, selectedWindow),
+      0,
+    );
+  }, [data, selectedWindow]);
 
-  const activeWindowSize = data?.window_size_seconds || windowSizeSeconds;
+  const selectedWindowEnd = useMemo(() => (
+    selectedWindow ? windowEnd(selectedWindow, data?.window_size_seconds ?? 60) : null
+  ), [data, selectedWindow]);
 
-  const selectWindow = useCallback(
-    (windowStart: string) => {
-      setSelectedWindow({
-        start: windowStart,
-        end: windowEnd(windowStart, activeWindowSize),
-        total: totals.get(windowStart) || 0,
+  useEffect(() => {
+    if (!selectedWindow || !selectedWindowEnd) {
+      setWindowLogs(null);
+      setWindowLogsError(null);
+      return;
+    }
+
+    let active = true;
+    setWindowLogs(null);
+    setWindowLogsError(null);
+    reportsApi.logs(caseId, runId, {
+      limit: 100,
+      window_start: selectedWindow,
+      window_end: selectedWindowEnd,
+    })
+      .then((response) => {
+        if (active) {
+          setWindowLogs(response);
+        }
+      })
+      .catch((caught) => {
+        if (active) {
+          setWindowLogsError(apiErrorMessage(caught));
+        }
       });
-    },
-    [activeWindowSize, totals],
-  );
 
-  const chartPalette = useMemo(
-    () => [
+    return () => {
+      active = false;
+    };
+  }, [caseId, runId, selectedWindow, selectedWindowEnd]);
+
+  const chartOption = useMemo<EChartsCoreOption>(() => ({
+    animationDuration: 350,
+    color: [
       theme.palette.primary.main,
       theme.palette.info.main,
       theme.palette.success.main,
@@ -154,67 +148,43 @@ export default function TemporalPage() {
       theme.palette.error.main,
       theme.palette.secondary.main,
     ],
-    [theme],
-  );
-
-  const peakLogs = useMemo(() => {
-    let peak = 0;
-    totals.forEach((value) => {
-      peak = Math.max(peak, value);
-    });
-    return peak;
-  }, [totals]);
-  const groupLabel = {
-    golden_signal: "Golden signal",
-    service: "Service",
-    fault_category: "Fault category",
-    template: "Template",
-  }[groupBy] || groupBy;
-  const temporalKpis = [
-    { label: "Total windows", value: String(windows.length), tone: "primary" },
-    { label: "Peak logs", value: String(peakLogs), tone: "info" },
-    { label: "Group", value: groupLabel, tone: "success" },
-    { label: "Window size", value: windowSizeLabel(windowSizeSeconds), tone: "warning" },
-  ];
-
-  const chartOption = useMemo<EChartsCoreOption>(() => ({
-    color: chartPalette,
     dataZoom: [
       {
         type: "inside",
-        xAxisIndex: 0,
         filterMode: "none",
+        xAxisIndex: 0,
       },
       {
         type: "slider",
-        xAxisIndex: 0,
-        bottom: 16,
-        height: 28,
+        bottom: 8,
         filterMode: "none",
+        height: 24,
+        xAxisIndex: 0,
       },
     ],
     grid: {
-      bottom: 74,
+      bottom: 64,
       containLabel: true,
-      left: 18,
-      right: 18,
-      top: 54,
+      left: 16,
+      right: 16,
+      top: 56,
     },
     legend: {
       top: 0,
       type: "scroll",
     },
-    series: (data?.series || []).map((series) => ({
+    series: (data?.series ?? []).map((series) => ({
       name: series.name,
       type: "bar",
       stack: "logs",
-      barMaxWidth: 48,
-      // Golden signals keep one semantic color everywhere (error is always red).
-      ...(SIGNAL_COLORS[series.name] ? { itemStyle: { color: SIGNAL_COLORS[series.name] } } : {}),
+      barMaxWidth: 46,
+      data: windows.map((windowStart) => countFor(series, windowStart)),
       emphasis: {
         focus: "series",
       },
-      data: windows.map((windowStart) => countFor(series, windowStart)),
+      ...(SIGNAL_COLORS[series.name]
+        ? { itemStyle: { color: SIGNAL_COLORS[series.name] } }
+        : {}),
     })),
     tooltip: {
       axisPointer: {
@@ -235,226 +205,167 @@ export default function TemporalPage() {
       name: "Logs",
       type: "value",
     },
-  }), [chartPalette, data, windows]);
+  }), [data, theme, windows]);
 
   useEffect(() => {
-    if (loading || !data || data.series.length === 0) {
+    if (!data || data.series.length === 0 || !chartElement.current) {
       chart.current?.dispose();
       chart.current = null;
       return;
     }
 
-    if (!chartElement.current) {
-      return;
-    }
-
-    const instance = chart.current || echarts.init(chartElement.current);
+    const instance = echarts.init(chartElement.current);
     chart.current = instance;
-    instance.setOption(chartOption, true);
+    instance.setOption(chartOption);
 
-    const onChartClick = (params: { dataIndex?: number }) => {
+    const selectBar = (params: { dataIndex?: number }) => {
       if (typeof params.dataIndex !== "number") {
         return;
       }
-      const windowStart = windows[params.dataIndex];
-      if (windowStart) {
-        selectWindow(windowStart);
-      }
+      setSelectedWindow(windows[params.dataIndex] ?? null);
     };
-
-    const onCanvasClick = (event: { offsetX: number; offsetY: number; target?: unknown }) => {
-      if (event.target) {
-        return;
-      }
-      const point: [number, number] = [event.offsetX, event.offsetY];
-      if (!instance.containPixel({ gridIndex: 0 }, point)) {
-        return;
-      }
-      const converted = instance.convertFromPixel({ gridIndex: 0 }, point);
-      const xValue = Array.isArray(converted) ? converted[0] : converted;
-      const index = typeof xValue === "string" ? windows.indexOf(xValue) : Math.round(Number(xValue));
-      const windowStart = windows[index];
-      if (windowStart) {
-        selectWindow(windowStart);
-      }
-    };
+    instance.on("click", selectBar);
 
     const resizeObserver = new ResizeObserver(() => instance.resize());
     resizeObserver.observe(chartElement.current);
-    instance.on("click", onChartClick);
-    instance.getZr().on("click", onCanvasClick);
 
     return () => {
       resizeObserver.disconnect();
-      instance.off("click", onChartClick);
-      instance.getZr().off("click", onCanvasClick);
+      instance.off("click", selectBar);
+      instance.dispose();
+      if (chart.current === instance) {
+        chart.current = null;
+      }
     };
-  }, [chartOption, data, loading, selectWindow, windows]);
-
-  useEffect(() => () => {
-    chart.current?.dispose();
-    chart.current = null;
-  }, []);
+  }, [chartOption, data, windows]);
 
   const selectedLogsHref = selectedWindow
     ? `/cases/${caseId}/runs/${runId}/logs?${new URLSearchParams({
-        window_start: selectedWindow.start,
-        window_end: selectedWindow.end,
+        window_start: selectedWindow,
+        window_end: selectedWindowEnd
+          ?? windowEnd(selectedWindow, data?.window_size_seconds ?? 60),
       }).toString()}`
     : `/cases/${caseId}/runs/${runId}/logs`;
 
   return (
     <Stack spacing={2.5}>
       <Stack
-        component="form"
-        direction={{ xs: "column", lg: "row" }}
+        direction={{ xs: "column", sm: "row" }}
         spacing={2}
-        sx={{ alignItems: { xs: "flex-start", lg: "center" }, justifyContent: "space-between" }}
-        onSubmit={submit}
+        sx={{ justifyContent: "space-between" }}
       >
-        <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
-          Temporal View
-        </Typography>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ width: { xs: "100%", lg: "auto" } }}>
-          <FormControl sx={{ minWidth: 160 }}>
-            <InputLabel id="temporal-window-label">Window</InputLabel>
-            <Select
-              inputProps={{ "aria-label": "Window" }}
-              label="Window"
-              labelId="temporal-window-label"
-              native
-              value={String(windowSizeSeconds)}
-              onChange={(event) => setWindowSizeSeconds(Number(event.target.value))}
-            >
-              <option value="60">1 minute</option>
-              <option value="300">5 minutes</option>
-              <option value="900">15 minutes</option>
-            </Select>
-          </FormControl>
-          <FormControl sx={{ minWidth: 190 }}>
-            <InputLabel id="temporal-group-label">Group</InputLabel>
-            <Select
-              inputProps={{ "aria-label": "Group" }}
-              label="Group"
-              labelId="temporal-group-label"
-              native
-              value={groupBy}
-              onChange={(event) => setGroupBy(event.target.value)}
-            >
-              <option value="golden_signal">Golden signal</option>
-              <option value="service">Service</option>
-              <option value="fault_category">Fault category</option>
-              <option value="template">Template</option>
-            </Select>
-          </FormControl>
-          <Button disabled={loading} type="submit" variant="secondary">
-            Apply
-          </Button>
-        </Stack>
+        <Box>
+          <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
+            Temporal Activity
+          </Typography>
+          <Typography color="text.secondary">
+            Compare log volume across aligned analysis windows.
+          </Typography>
+        </Box>
+        <TextField
+          select
+          label="Group by"
+          size="small"
+          value={groupBy}
+          onChange={(event) => setGroupBy(event.target.value as TemporalGroup)}
+        >
+          <MenuItem value="golden_signal">Signal</MenuItem>
+          <MenuItem value="service">Service</MenuItem>
+          <MenuItem value="fault_category">Fault category</MenuItem>
+          <MenuItem value="template">Template</MenuItem>
+        </TextField>
       </Stack>
 
       {error && <Alert severity="error">{error}</Alert>}
-      <Box
-        component="section"
-        sx={{
-          display: "grid",
-          gap: 2,
-          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" },
-        }}
-      >
-        {temporalKpis.map((item) => (
-          <Card key={item.label}>
-            <Stack spacing={0.75}>
-              <Box
-                sx={{
-                  bgcolor:
-                    item.tone === "primary"
-                      ? "rgba(91,92,246,0.12)"
-                      : item.tone === "info"
-                        ? "rgba(6,182,212,0.14)"
-                        : item.tone === "success"
-                          ? "rgba(16,185,129,0.14)"
-                          : "rgba(249,115,22,0.13)",
-                  borderRadius: "50%",
-                  height: 12,
-                  width: 12,
-                }}
-              />
-              <Typography color="text.secondary" variant="body2">
-                {item.label}
-              </Typography>
-              <Typography sx={{ fontWeight: 900, overflowWrap: "anywhere" }} variant="h5">
-                {item.value}
-              </Typography>
-            </Stack>
-          </Card>
-        ))}
-      </Box>
-      <Card>
-        {loading && <EmptyState title="Loading temporal data" />}
-        {!loading && data && data.series.length === 0 && <EmptyState title="No temporal data" />}
-        {!loading && data && data.series.length > 0 && (
+      {!data && !error && <Card><EmptyState title="Loading temporal activity" /></Card>}
+      {data && data.series.length === 0 && (
+        <Card><EmptyState title="No temporal activity" /></Card>
+      )}
+      {data && data.series.length > 0 && (
+        <Card>
           <Stack spacing={2}>
-            <Box>
-              <Typography component="h2" sx={{ fontWeight: 850 }} variant="h6">
-                Temporal aggregation
-              </Typography>
-              <Typography color="text.secondary">
-                Click a bar to isolate the incident window and jump into the matching log slice.
-              </Typography>
-            </Box>
             <Box
-              aria-label="Temporal stacked bar chart"
-              className="temporal-chart"
-              data-testid="temporal-echarts"
+              aria-label="Stacked log activity over time"
               ref={chartElement}
+              role="img"
+              sx={{ height: { xs: 360, md: 460 }, width: "100%" }}
             />
             <Stack
-              data-testid="temporal-selection-summary"
               direction={{ xs: "column", sm: "row" }}
               spacing={1.5}
               sx={{
                 alignItems: { xs: "flex-start", sm: "center" },
-                background: selectedWindow
-                  ? "linear-gradient(135deg, rgba(91,92,246,0.12), rgba(6,182,212,0.12))"
-                  : "rgba(91,92,246,0.05)",
-                border: 1,
-                borderColor: "rgba(91,92,246,0.16)",
-                borderRadius: "14px",
+                bgcolor: "rgba(91,92,246,0.055)",
+                borderRadius: 2,
                 justifyContent: "space-between",
-                p: 2.5,
+                p: 2,
               }}
             >
               {selectedWindow ? (
-                <>
-                  <Box>
-                    <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
-                      Selected Window
-                    </Typography>
-                    <Typography>
-                      <strong>{formatShortTime(selectedWindow.start)}</strong>
-                      {" to "}
-                      <strong>{formatShortTime(selectedWindow.end)}</strong>
-                      {" | "}
-                      {selectedWindow.total} logs
-                    </Typography>
-                  </Box>
-                  <Button component={Link} href={selectedLogsHref} variant="secondary">
-                    Open in Tabular Logs
-                  </Button>
-                </>
-              ) : (
                 <Box>
-                  <Typography component="h2" sx={{ fontWeight: 800 }} variant="h6">
-                    Selected Window
+                  <Typography sx={{ fontWeight: 800 }}>Selected window</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    {formatDateTime(selectedWindow)} · {selectedTotal} logs
                   </Typography>
-                  <Typography color="text.secondary">Select a bar to inspect that time window.</Typography>
                 </Box>
+              ) : (
+                <Typography color="text.secondary" variant="body2">
+                  Select a bar to inspect its matching logs.
+                </Typography>
               )}
+              <Button
+                component={Link}
+                disabled={!selectedWindow}
+                href={selectedLogsHref}
+                variant="secondary"
+              >
+                Open logs
+              </Button>
             </Stack>
           </Stack>
-        )}
-      </Card>
+        </Card>
+      )}
+      {data && selectedWindow && (
+        <Card>
+          <Stack spacing={2}>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1.5}
+              sx={{
+                alignItems: { xs: "flex-start", sm: "center" },
+                justifyContent: "space-between",
+              }}
+            >
+              <Box>
+                <Typography component="h2" sx={{ fontWeight: 850 }} variant="h6">
+                  Logs for selected window
+                </Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {formatDateTime(selectedWindow)} to {formatDateTime(selectedWindowEnd)} ·{" "}
+                  {selectedTotal} matching logs
+                </Typography>
+                {windowLogs && windowLogs.total > windowLogs.items.length && (
+                  <Typography color="text.secondary" variant="caption">
+                    Showing first {windowLogs.items.length} of {windowLogs.total} matching logs.
+                  </Typography>
+                )}
+              </Box>
+              <Button component={Link} href={selectedLogsHref} variant="secondary">
+                Open full logs view
+              </Button>
+            </Stack>
+
+            {windowLogsError && <Alert severity="error">{windowLogsError}</Alert>}
+            {!windowLogs && !windowLogsError && <EmptyState title="Loading selected logs" />}
+            {windowLogs && windowLogs.items.length === 0 && (
+              <EmptyState title="No logs in this window" />
+            )}
+            {windowLogs && windowLogs.items.length > 0 && (
+              <LogTable emptyTitle="No logs in this window" items={windowLogs.items} />
+            )}
+          </Stack>
+        </Card>
+      )}
     </Stack>
   );
 }

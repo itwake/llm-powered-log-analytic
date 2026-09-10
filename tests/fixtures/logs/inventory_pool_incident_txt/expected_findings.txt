@@ -1,0 +1,28 @@
+Synthetic incident: checkout failures across multiple microservices.
+
+Expected diagnosis:
+- User-facing symptom: edge-gateway returns 504/502 for POST /api/checkout between 10:14:58Z and 10:15:18Z.
+- Direct failing dependency: checkout-service cannot reserve inventory and then opens a circuit breaker for inventory-service.
+- Primary technical fault: inventory-service database connection pool exhaustion. Key log: event=db_pool_exhausted at 10:15:05Z with active=40 idle=0 pending=128 max=40.
+- Likely trigger: catalog-service version 5.4.0 / stock-reconcile-v2 publishes duplicate stock reconcile events without a dedupe key, creating inventory reconcile backlog and DB pool pressure.
+- Downstream effects: payment-service voids successful authorizations; order-service marks pending orders failed; notification-service skips confirmations.
+- Non-root-cause service: auth-service is healthy and token validation succeeds for failed checkout traces.
+
+Important correlation IDs to follow:
+- trc-checkout-9001 / req-78010 / ord-9001
+- trc-checkout-9002 / req-78011 / ord-9002
+- trc-checkout-9003 / req-78012 / ord-9003
+- trc-checkout-9004 / req-78014 / ord-9004
+
+Suggested relevant files:
+- inventory-service.txt
+- checkout-service.txt
+- catalog-service.txt
+- gateway.txt
+- payment-service.txt
+- order-service.txt
+- notification-service.txt
+
+Suggested less relevant / control file:
+- auth-service.txt
+

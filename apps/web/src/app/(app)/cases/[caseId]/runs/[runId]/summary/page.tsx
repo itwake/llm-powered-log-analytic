@@ -2,267 +2,154 @@
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import FormControl from "@mui/material/FormControl";
-import InputLabel from "@mui/material/InputLabel";
-import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
 import { useParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { ConfidenceExplainer, confidenceLabel, confidenceReason, formatConfidence } from "@/components/ConfidenceExplainer";
 import Link from "@/components/Link";
-import { reportsApi, SummaryResponse } from "@/lib/api";
-import type { SummaryItem } from "@/lib/api";
-import { apiErrorMessage, formatDateTime, formatPercent, valueLabel } from "@/lib/format";
-import { signalColor, stripLeadingTimestamp } from "@/lib/signals";
 import { Metric } from "@/components/Shell";
-import { Button, Card, ColorBadge, EmptyState } from "@/components/ui";
+import { SignalBadge } from "@/components/SignalBadge";
+import { Button, Card, EmptyState } from "@/components/ui";
+import { ApiError, reportsApi } from "@/lib/api";
+import type { SummaryResponse } from "@/lib/api";
+import { apiErrorMessage, formatDateTime } from "@/lib/format";
 
-type SummaryScope = "attention" | "all";
-
-function summaryLogsHref(caseId: string, runId: string, item: SummaryItem): string {
-  const basePath = `/cases/${caseId}/runs/${runId}/logs`;
-  const firstSeen = item.first_seen ? new Date(item.first_seen) : null;
-  const lastSeen = item.last_seen ? new Date(item.last_seen) : null;
-  if (firstSeen && lastSeen && !Number.isNaN(firstSeen.getTime()) && !Number.isNaN(lastSeen.getTime())) {
-    const params = new URLSearchParams({
-      window_start: new Date(firstSeen.getTime() - 60_000).toISOString(),
-      window_end: new Date(lastSeen.getTime() + 60_000).toISOString(),
-    });
-    return `${basePath}?${params.toString()}`;
-  }
-  if (item.template_id) {
-    const params = new URLSearchParams({ q: item.template_id });
-    return `${basePath}?${params.toString()}`;
-  }
-  return basePath;
+interface ReportErrorState {
+  message: string;
+  status?: number;
 }
 
 export default function SummaryPage() {
   const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
+  const [scope, setScope] = useState<"attention" | "all">("attention");
   const [data, setData] = useState<SummaryResponse | null>(null);
-  const [goldenSignal, setGoldenSignal] = useState("");
-  const [summaryScope, setSummaryScope] = useState<SummaryScope>("attention");
-  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  async function load(signal = goldenSignal, scope = summaryScope, allowFallback = true) {
-    setLoading(true);
-    setError(null);
-    setFallbackNotice(null);
-    try {
-      const response = await reportsApi.summary(caseId, runId, {
-        golden_signal: signal || undefined,
-        scope,
-        limit: 100,
-      });
-      if (
-        allowFallback &&
-        scope === "attention" &&
-        !signal &&
-        response.total === 0 &&
-        (response.reduction.annotated_templates || 0) > 0
-      ) {
-        const fallbackResponse = await reportsApi.summary(caseId, runId, {
-          scope: "all",
-          limit: 100,
-        });
-        setSummaryScope("all");
-        setFallbackNotice(
-          "No attention templates were detected for this run, so all templates are shown.",
-        );
-        setData(fallbackResponse);
-        return;
-      }
-      setData(response);
-    } catch (caught) {
-      setError(apiErrorMessage(caught));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [error, setError] = useState<ReportErrorState | null>(null);
 
   useEffect(() => {
-    setGoldenSignal("");
-    setSummaryScope("attention");
-    void load("", "attention");
-  }, [caseId, runId]);
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void load(goldenSignal, summaryScope);
-  }
-
-  const columns = useMemo<GridColDef<SummaryItem>[]>(
-    () => [
-      {
-        field: "golden_signal",
-        headerName: "Signal",
-        minWidth: 130,
-        renderCell: (params) => (
-          <ColorBadge color={signalColor(params.row.golden_signal)}>
-            {params.row.golden_signal}
-          </ColorBadge>
-        ),
-      },
-      {
-        field: "representative_message",
-        headerName: "Representative log",
-        flex: 1.6,
-        minWidth: 320,
-        renderCell: (params) => (
-          <Box sx={{ py: 1, whiteSpace: "normal", overflowWrap: "anywhere" }}>
-            <Typography variant="body2">
-              {stripLeadingTimestamp(params.row.representative_message)}
-            </Typography>
-            <Typography color="text.secondary" variant="caption">
-              {params.row.fault_categories.join(", ") || "uncategorized"}
-            </Typography>
-          </Box>
-        ),
-      },
-      { field: "occurrence_count", headerName: "Count", minWidth: 100, type: "number" },
-      {
-        field: "services",
-        headerName: "Service",
-        flex: 0.8,
-        minWidth: 160,
-        renderCell: (params) => (
-          <Typography sx={{ whiteSpace: "normal", overflowWrap: "anywhere" }} variant="body2">
-            {params.row.services.map(valueLabel).join(", ")}
-          </Typography>
-        ),
-      },
-      {
-        field: "first_seen",
-        headerName: "First seen",
-        minWidth: 170,
-        renderCell: (params) => formatDateTime(params.row.first_seen),
-      },
-      {
-        field: "confidence",
-        headerName: "Confidence",
-        minWidth: 120,
-        renderCell: (params) => formatPercent(params.row.confidence),
-      },
-      {
-        field: "evidence",
-        headerName: "Evidence",
-        minWidth: 130,
-        sortable: false,
-        renderCell: (params) => (
-          <Button component={Link} href={summaryLogsHref(caseId, runId, params.row)} size="sm" variant="secondary">
-            Open logs
-          </Button>
-        ),
-      },
-    ],
-    [caseId, runId],
-  );
+    let active = true;
+    setData(null);
+    setError(null);
+    reportsApi.summary(caseId, runId, { scope, limit: 200 })
+      .then((response) => {
+        if (active) setData(response);
+      })
+      .catch((caught) => {
+        if (active) {
+          setError({
+            message: apiErrorMessage(caught),
+            status: caught instanceof ApiError ? caught.status : undefined,
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [caseId, runId, scope]);
 
   return (
     <Stack spacing={2.5}>
-      <Stack
-        component="form"
-        direction={{ xs: "column", md: "row" }}
-        spacing={2}
-        sx={{ alignItems: { xs: "flex-start", md: "center" }, justifyContent: "space-between" }}
-        onSubmit={submit}
-      >
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
         <Box>
-          <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">
-            Data Summary
-          </Typography>
-          <Typography color="text.secondary" variant="body2">
-            Each row is one message pattern standing in for many log entries - start here to see
-            what happened without reading everything.
-          </Typography>
+          <Typography component="h1" sx={{ fontWeight: 850 }} variant="h4">Signal Summary</Typography>
+          <Typography color="text.secondary">Templates ranked for incident review.</Typography>
         </Box>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ width: { xs: "100%", md: "auto" } }}>
-          <FormControl sx={{ minWidth: 220 }}>
-            <InputLabel id="summary-scope-label" shrink>View</InputLabel>
-            <Select
-              inputProps={{ "aria-label": "View" }}
-              label="View"
-              labelId="summary-scope-label"
-              native
-              value={summaryScope}
-              onChange={(event) => setSummaryScope(event.target.value as SummaryScope)}
-            >
-              <option value="attention">Attention templates</option>
-              <option value="all">All templates</option>
-            </Select>
-          </FormControl>
-          <FormControl sx={{ minWidth: 220 }}>
-            <InputLabel id="summary-signal-label" shrink>Signal</InputLabel>
-            <Select
-              inputProps={{ "aria-label": "Signal" }}
-              label="Signal"
-              labelId="summary-signal-label"
-              native
-              value={goldenSignal}
-              onChange={(event) => setGoldenSignal(event.target.value)}
-            >
-              <option value="">All signals</option>
-              <option value="error">Error</option>
-              <option value="availability">Availability</option>
-              <option value="latency">Latency</option>
-              <option value="saturation">Saturation</option>
-              <option value="traffic">Traffic</option>
-              <option value="information">Information</option>
-              <option value="unknown">Unknown</option>
-            </Select>
-          </FormControl>
-          <Button disabled={loading} type="submit" variant="secondary">
-            Apply
-          </Button>
-        </Stack>
+        <TextField select label="Scope" size="small" value={scope} onChange={(event) => setScope(event.target.value as "attention" | "all")}>
+          <MenuItem value="attention">Attention signals</MenuItem>
+          <MenuItem value="all">All templates</MenuItem>
+        </TextField>
       </Stack>
 
-      {error && <Alert severity="error">{error}</Alert>}
-      {fallbackNotice && <Alert severity="info">{fallbackNotice}</Alert>}
-      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" } }}>
-        <Metric label="Raw lines" value={data ? String(data.reduction.raw_log_lines) : "n/a"} />
-        <Metric label="Offending templates" value={data ? String(data.reduction.offending_templates) : "n/a"} />
-        <Metric
-          label="Visible templates"
-          value={data ? String(data.reduction.visible_templates ?? data.total) : "n/a"}
-        />
-        <Metric
-          label="Review reduction"
-          value={data ? formatPercent(data.reduction.estimated_review_reduction) : "n/a"}
-        />
-      </Box>
-
-      <Card>
-        {!loading && data && data.items.length === 0 ? (
-          <EmptyState title={summaryScope === "attention" && !goldenSignal ? "No attention templates found" : "No Data Found"}>
-            <Typography color="text.secondary" variant="body2">
-              {summaryScope === "attention" && !goldenSignal
-                ? "This run did not produce error, availability, latency, saturation, or traffic templates. Switch to All templates to inspect informational and unknown patterns."
-                : "No templates match the current view and signal filters."}
-            </Typography>
-          </EmptyState>
-        ) : (
-          <Box sx={{ minHeight: 520 }}>
-            <DataGrid
-              columns={columns}
-              density="compact"
-              disableRowSelectionOnClick
-              getRowHeight={() => "auto"}
-              getRowId={(row) => row.template_id}
-              initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-              loading={loading}
-              pageSizeOptions={[25, 50, 100]}
-              rows={data?.items || []}
-              sx={{
-                "& .MuiDataGrid-cell": { alignItems: "flex-start", py: 1 },
-              }}
-            />
+      {error && (
+        <Alert severity="error">
+          <Stack spacing={1}>
+            <Typography sx={{ fontWeight: 750 }}>{error.message}</Typography>
+            {error.status === 404 && (
+              <>
+                <Typography variant="body2">
+                  This report URL was found by the web app, but the API could not find the case/run
+                  for your current session. The run may belong to another user, have been deleted,
+                  or this browser may not be signed in to the same API data store.
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                  <Button component={Link} href={`/cases/${caseId}`} size="sm" variant="secondary">
+                    Back to case
+                  </Button>
+                  <Button component={Link} href="/cases" size="sm" variant="secondary">
+                    Browse cases
+                  </Button>
+                </Stack>
+              </>
+            )}
+          </Stack>
+        </Alert>
+      )}
+      {!data && !error && <Card><EmptyState title="Loading summary" /></Card>}
+      {data && (
+        <>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" } }}>
+            <Metric label="Visible templates" value={String(data.total)} />
+            <Metric label="Raw lines" value={String(data.reduction.raw_log_lines)} />
+            <Metric label="Review reduction" value={`${Math.round(data.reduction.estimated_review_reduction * 100)}%`} />
           </Box>
-        )}
-      </Card>
+          <ConfidenceExplainer variant="summary" />
+          <Card>
+            {data.items.length === 0 ? <EmptyState title="No matching templates" /> : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead><TableRow>
+                    <TableCell>Signal</TableCell>
+                    <TableCell>Template</TableCell>
+                    <TableCell align="right">Count</TableCell>
+                    <TableCell>First seen</TableCell>
+                    <TableCell align="right">Confidence</TableCell>
+                    <TableCell />
+                  </TableRow></TableHead>
+                  <TableBody>
+                    {data.items.map((item) => (
+                      <TableRow key={item.template_id} hover>
+                        <TableCell><SignalBadge signal={item.golden_signal} /></TableCell>
+                        <TableCell>
+                          <Typography sx={{ fontWeight: 700 }} variant="body2">{item.template_text}</Typography>
+                          <Typography color="text.secondary" variant="caption">{item.services.join(", ") || "unknown service"}</Typography>
+                        </TableCell>
+                        <TableCell align="right">{item.occurrence_count}</TableCell>
+                        <TableCell>{formatDateTime(item.first_seen)}</TableCell>
+                        <TableCell align="right">
+                          <Typography sx={{ fontWeight: 800 }} variant="body2">
+                            {formatConfidence(item.confidence)}
+                          </Typography>
+                          <Typography color="text.secondary" variant="caption">
+                            {confidenceLabel(item.confidence)} · {confidenceReason(item.confidence)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            component={Link}
+                            href={`/cases/${caseId}/runs/${runId}/logs?template_id=${item.template_id}`}
+                            size="sm"
+                            variant="secondary"
+                          >
+                            Logs
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Card>
+        </>
+      )}
     </Stack>
   );
 }

@@ -4,17 +4,16 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.dependencies import current_user, get_model_gateway, get_store, require_case_permission
-from app.schemas.chat import ChatRequest, TaskExecuteRequest
+from app.dependencies import current_user, get_model_gateway, get_store, require_case_owner
+from app.schemas.chat import ChatRequest
 from app.services.model_gateway import ModelGatewayError
-from app.store import MetadataStore, UserRecord, sanitize_error_message
+from app.store import Store, UserRecord, sanitize_error_message
 
 
 router = APIRouter(prefix="/api", tags=["runtime"])
-CHAT_FALLBACK_MESSAGE = "No case analysis context was found for this chat request."
 CHAT_INSTRUCTIONS = (
     "You are assisting with an incident analysis workspace. Answer cautiously and stay "
     "evidence-bound. Treat causal chains as candidates that need validation. Use only the "
@@ -22,57 +21,28 @@ CHAT_INSTRUCTIONS = (
 )
 
 
-@router.post("/chat")
-def chat(
-    payload: ChatRequest,
-    user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
-) -> dict[str, object]:
-    if payload.case_id and payload.analysis_run_id:
-        require_case_permission(
-            store=store,
-            user=user,
-            case_id=payload.case_id,
-            permission="view",
-            hide_forbidden=True,
-        )
-        result = store.get_analysis_result(payload.case_id, payload.analysis_run_id)
-        if result:
-            refs = [ref.model_dump(mode="json") for ref in result.causal_summary.evidence_refs[:3]]
-            return {
-                "message": "The current analysis treats the leading chain as candidate evidence, not a definitive root cause. The ranking is based on temporal precedence, service/entity evidence, lift, and PageRank-style scoring, and it needs validation.",
-                "evidence_refs": refs,
-            }
-    return {
-        "message": CHAT_FALLBACK_MESSAGE,
-        "evidence_refs": [],
-    }
-
-
 @router.post("/chat/stream")
 async def chat_stream(
     payload: ChatRequest,
     user: UserRecord = Depends(current_user),
-    store: MetadataStore = Depends(get_store),
+    store: Store = Depends(get_store),
     gateway: Any = Depends(get_model_gateway),
 ) -> StreamingResponse:
-    if payload.case_id and payload.analysis_run_id:
-        require_case_permission(
-            store=store,
-            user=user,
-            case_id=payload.case_id,
-            permission="view",
-            hide_forbidden=True,
-        )
+    require_case_owner(
+        store=store,
+        user=user,
+        case_id=payload.case_id,
+    )
+    if gateway is None:
+        raise HTTPException(status_code=409, detail="LLM is disabled")
+    run = store.get_analysis_run(payload.analysis_run_id)
+    if run is None or run.case_id != payload.case_id:
+        raise HTTPException(status_code=404, detail="analysis run not found")
+    if run.model_provider != "ai_platform":
+        raise HTTPException(status_code=409, detail="LLM was not enabled for this analysis run")
+    context = _analysis_chat_context(store, payload)
 
     async def events() -> AsyncIterator[str]:
-        context = _analysis_chat_context(store, payload)
-        if context is None:
-            yield _sse_frame("delta", {"delta": CHAT_FALLBACK_MESSAGE})
-            yield _sse_frame("evidence", {"evidence_refs": []})
-            yield _sse_frame("done", {"message": CHAT_FALLBACK_MESSAGE})
-            return
-
         evidence_refs = context["evidence_refs"]
         message_parts: list[str] = []
         try:
@@ -125,47 +95,36 @@ async def chat_stream(
     return StreamingResponse(events(), media_type="text/event-stream")
 
 
-@router.post("/tasks/execute")
-def execute_task(
-    payload: TaskExecuteRequest,
-    user: UserRecord = Depends(current_user),
-) -> dict[str, object]:
-    return {
-        "task_id": f"task-{payload.task_name}",
-        "status": "accepted",
-        "runtime_type": "ai_platform",
-        "created_by": user.id,
-        "arguments": payload.arguments,
-    }
-
-
 def _sse_frame(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
 
 
 def _analysis_chat_context(
-    store: MetadataStore,
+    store: Store,
     payload: ChatRequest,
-) -> dict[str, Any] | None:
-    if not payload.case_id or not payload.analysis_run_id:
-        return None
-    result = store.get_analysis_result(payload.case_id, payload.analysis_run_id)
-    if result is None:
-        return None
+) -> dict[str, Any]:
+    summary = store.get_analysis_report_summary(
+        payload.case_id,
+        payload.analysis_run_id,
+    )
+    causal_summary = store.get_analysis_causal_summary(
+        payload.case_id,
+        payload.analysis_run_id,
+    )
+    if summary is None or causal_summary is None:
+        raise HTTPException(status_code=409, detail="analysis result is not ready")
 
-    evidence_refs = [
-        ref.model_dump(mode="json") for ref in result.causal_summary.evidence_refs[:5]
-    ]
+    evidence_refs = [ref.model_dump(mode="json") for ref in causal_summary.evidence_refs[:5]]
     return {
         "user_message": _compact_context_text(payload.message, max_length=1000),
         "case_id": payload.case_id,
         "analysis_run_id": payload.analysis_run_id,
         "causal_summary": _compact_context_text(
-            result.causal_summary.summary_markdown,
+            causal_summary.summary_markdown,
             max_length=2500,
         ),
         "evidence_refs": evidence_refs,
-        "summary_rows": _summary_rows(result),
+        "summary_rows": _summary_rows(summary),
     }
 
 

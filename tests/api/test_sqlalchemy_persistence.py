@@ -1,1392 +1,528 @@
 from __future__ import annotations
 
-import hashlib
+import asyncio
 import json
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, func, select
 
-from logan_workers.activities.inference import MockAIPlatformAnnotationGateway
-
+from app import sqlalchemy_store
 from app.config import Settings
-from app.core.security import decrypt_token
-from app.main import create_app
-from app.models import tables
-from app.sqlalchemy_store import (
-    SQLAlchemyStore,
-    _postgres_incremental_migration_paths,
-    _postgres_migration_checksum,
-    _postgres_migration_version,
-)
-from app.store import RAW_LOG_RETAINED_MARKER, create_store
+from app.db import Base
+from app.models import tables  # noqa: F401
+from app.services import analysis_result_artifacts
+from app.services.analysis_result_artifacts import read_artifact, write_artifact
+from app.sqlalchemy_store import SQLAlchemyStore
+from sqlalchemy.exc import IntegrityError
 
 
-FIXTURE_DIR = Path("tests/fixtures/logs/checkout_incident")
-PIPELINE_STEPS = [
-    "ingest_paths",
-    "merge_entries",
-    "preprocess_redact",
-    "drain_templating",
-    "representative_sampling",
-    "ai_platform_annotation",
-    "broadcast_annotations",
-    "temporal_aggregation",
-    "causal_graph",
-    "causal_summary",
-    "export_artifacts",
-]
-
-
-class FakeS3Client:
-    def __init__(self) -> None:
-        self.objects: dict[tuple[str, str], bytes] = {}
-        self.download_calls: list[dict[str, str]] = []
-
-    def download_file(self, *, Bucket: str, Key: str, Filename: str) -> None:
-        self.download_calls.append({"Bucket": Bucket, "Key": Key, "Filename": Filename})
-        Path(Filename).write_bytes(self.objects[(Bucket, Key)])
-
-
-
-def test_postgres_migration_metadata_helpers_are_stable() -> None:
-    migration_path = Path("apps/api/migrations/0003_enterprise_policy_scim.sql")
-    sql = migration_path.read_text(encoding="utf-8")
-
-    assert _postgres_migration_version(migration_path) == "0003_enterprise_policy_scim"
-    assert _postgres_migration_checksum(sql) == _postgres_migration_checksum(sql)
-    changed_checksum = _postgres_migration_checksum(sql + "\n-- changed")
-    assert _postgres_migration_checksum(sql) != changed_checksum
-
-
-def test_postgres_incremental_migration_paths_skip_initial_schema() -> None:
-    names = [
-        path.name
-        for path in _postgres_incremental_migration_paths(Path("apps/api/migrations"))
-    ]
-
-    assert "0001_initial.sql" not in names
-    assert "0002_analysis_step_artifacts.sql" in names
-    assert "0003_enterprise_policy_scim.sql" in names
-
-
-async def _client(store: SQLAlchemyStore) -> AsyncClient:
-    app = create_app(
-        store=store,
-        model_gateway=MockAIPlatformAnnotationGateway(),
-    )
-    return AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
-
-
-def _authenticate_client(
-    client: AsyncClient,
-    store: SQLAlchemyStore,
-    *,
-    email: str,
-    username: str,
-    full_name: str | None,
-    password: str = "password123",
-) -> str:
-    user = store.register_user(
-        email=email,
-        username=username,
-        full_name=full_name,
-        password=password,
-    )
-    token, _ = store.create_session(user.id)
-    client.cookies.set("logan_session", token)
-    return user.id
-
-
-def _analytics_counts(store: SQLAlchemyStore, run_id: str) -> dict[str, int]:
-    with store.session_factory() as session:
-        return {
-            "raw_files": session.scalar(
-                select(func.count())
-                .select_from(tables.RawFile)
-                .where(tables.RawFile.analysis_run_id == run_id)
-            )
-            or 0,
-            "raw_log_lines": session.scalar(
-                select(func.count())
-                .select_from(tables.RawLogLine)
-                .where(tables.RawLogLine.analysis_run_id == run_id)
-            )
-            or 0,
-            "normalized_log_lines": session.scalar(
-                select(func.count())
-                .select_from(tables.NormalizedLogLine)
-                .where(tables.NormalizedLogLine.analysis_run_id == run_id)
-            )
-            or 0,
-            "log_templates": session.scalar(
-                select(func.count())
-                .select_from(tables.LogTemplate)
-                .where(tables.LogTemplate.analysis_run_id == run_id)
-            )
-            or 0,
-            "representative_samples": session.scalar(
-                select(func.count())
-                .select_from(tables.RepresentativeSample)
-                .join(
-                    tables.LogTemplate,
-                    tables.RepresentativeSample.template_id == tables.LogTemplate.id,
-                )
-                .where(tables.LogTemplate.analysis_run_id == run_id)
-            )
-            or 0,
-            "template_annotations": session.scalar(
-                select(func.count())
-                .select_from(tables.TemplateAnnotation)
-                .where(tables.TemplateAnnotation.analysis_run_id == run_id)
-            )
-            or 0,
-            "time_window_signals": session.scalar(
-                select(func.count())
-                .select_from(tables.TimeWindowSignal)
-                .where(tables.TimeWindowSignal.analysis_run_id == run_id)
-            )
-            or 0,
-            "causal_nodes": session.scalar(
-                select(func.count())
-                .select_from(tables.CausalNode)
-                .where(tables.CausalNode.analysis_run_id == run_id)
-            )
-            or 0,
-            "causal_edges": session.scalar(
-                select(func.count())
-                .select_from(tables.CausalEdge)
-                .where(tables.CausalEdge.analysis_run_id == run_id)
-            )
-            or 0,
-            "causal_summaries": session.scalar(
-                select(func.count())
-                .select_from(tables.CausalSummary)
-                .where(tables.CausalSummary.analysis_run_id == run_id)
-            )
-            or 0,
-        }
-
-
-def _run_raw_file_ids(store: SQLAlchemyStore, run_id: str) -> set[str]:
-    with store.session_factory() as session:
-        return set(
-            session.scalars(
-                select(tables.RawFile.id).where(tables.RawFile.analysis_run_id == run_id)
-            ).all()
-        )
-
-
-def _annotation_raw_responses(store: SQLAlchemyStore, run_id: str) -> list[dict[str, object]]:
-    with store.session_factory() as session:
-        return list(
-            session.scalars(
-                select(tables.TemplateAnnotation.raw_model_response).where(
-                    tables.TemplateAnnotation.analysis_run_id == run_id
-                )
-            ).all()
-        )
-
-
-def _redacted_raw_log_line_count(store: SQLAlchemyStore, run_id: str) -> int:
-    with store.session_factory() as session:
-        return (
-            session.scalar(
-                select(func.count(tables.RawLogLine.raw_text_redacted)).where(
-                    tables.RawLogLine.analysis_run_id == run_id
-                )
-            )
-            or 0
-        )
-
-
-def _raw_file_analysis_run_id(store: SQLAlchemyStore, file_id: str) -> str | None:
-    with store.session_factory() as session:
-        return session.scalar(
-            select(tables.RawFile.analysis_run_id).where(tables.RawFile.id == file_id)
-        )
-
-
-def _clear_result_json(store: SQLAlchemyStore, run_id: str) -> None:
-    with store.session_factory() as session:
-        run = session.get(tables.AnalysisRun, run_id)
-        assert run is not None
-        run.result_json = None
-        session.commit()
-
-
-def test_sqlalchemy_credentials_persist_expiration_and_revocation(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    user = store.register_user(
-        email="credential-persistence@example.com",
-        username="credential-persistence",
-        full_name=None,
-        password="password123",
-    )
-    future_expires_at = datetime(2035, 1, 1, tzinfo=UTC)
-
-    saved_token = store.save_credential(
-        user_id=user.id,
-        credential_type="ai_platform_token",
-        token="persisted-ai-platform-token",
-        github_base_url="https://github.com",
-        expires_at=future_expires_at,
-    )
-
-    assert saved_token.expires_at == future_expires_at
-
-    active_token = store.get_credential(
-        user_id=user.id, credential_type="ai_platform_token"
-    )
-    assert active_token is not None
-    assert active_token.expires_at == future_expires_at
-    assert decrypt_token(
-        active_token.encrypted_token, store.settings.credential_encryption_key
-    ) == "persisted-ai-platform-token"
-    assert active_token.key_id == store.settings.credential_encryption_key_id
-    assert store.has_credential(user.id) is True
-
-    store.save_credential(
-        user_id=user.id,
-        credential_type="ai_platform_token",
-        token="expired-ai-platform-token",
-        github_base_url="https://github.com",
-        expires_at=datetime(2020, 1, 1, tzinfo=UTC),
-    )
-    assert store.get_credential(user_id=user.id, credential_type="ai_platform_token") is None
-    assert store.has_credential(user.id) is False
-
-    store.save_credential(
-        user_id=user.id,
-        credential_type="github_source_oauth",
-        token="gho_persisted_source_token",
-        github_base_url="https://github.com",
-    )
-    assert store.has_credential(user.id) is True
-
-    assert store.revoke_credentials(user.id) == 2
-    assert store.get_credential(user_id=user.id, credential_type="github_source_oauth") is None
-    assert store.get_credential(user_id=user.id, credential_type="ai_platform_token") is None
-    assert store.has_credential(user.id) is False
-
-
-@pytest.mark.asyncio
-async def test_sqlalchemy_scim_bearer_uses_configured_organization(
-    tmp_path: Path,
-) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(
-        database_url=database_url,
-        store_backend="sqlalchemy",
-        scim_bearer_token="sql-scim-secret",
-        scim_organization_id="sql-scim-org",
-    )
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    client = await _client(store)
-
-    created = await client.post(
-        "/api/scim/v2/Users",
-        headers={"authorization": "Bearer sql-scim-secret"},
-        json={"userName": "sql.scim@example.com"},
-    )
-
-    assert created.status_code == 201, created.text
-    created_user = store.get_user(created.json()["id"])
-    assert created_user is not None
-    assert created_user.organization_id == "sql-scim-org"
-    organization = store.get_organization("sql-scim-org")
-    assert organization is not None
-    assert organization.slug == "sql-scim-org"
-
-    await client.aclose()
-
-
-def test_sqlalchemy_store_records_s3_upload_object_uri(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(
-        database_url=database_url,
-        store_backend="sqlalchemy",
-        object_store_backend="s3",
-        s3_bucket="logan",
-        s3_access_key="access",
-        s3_secret_key="secret",
-    )
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    user = store.register_user(
-        email="s3-persistence@example.com",
-        username="s3-persistence",
-        full_name=None,
-        password="password123",
-    )
-    case = store.create_case(
-        user_id=user.id,
-        data={
-            "title": "S3 upload persistence",
-            "issue_description": None,
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "incident_start": None,
-            "incident_end": None,
-            "timezone": "UTC",
-        },
-    )
-
-    upload = store.create_upload(
-        case_id=case.id,
-        filename="../incident.log",
-        content_type="text/plain",
-        size_bytes=10,
-    )
-
-    assert upload.object_uri == f"s3://logan/cases/{case.id}/uploads/{upload.id}/incident.log"
-
-
-def test_sqlalchemy_store_persists_upload_metadata(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(
-        database_url=database_url,
-        store_backend="sqlalchemy",
-        object_store_backend="s3",
-        s3_bucket="logan",
-        s3_access_key="access",
-        s3_secret_key="secret",
-    )
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    user = store.register_user(
-        email="multipart-persistence@example.com",
-        username="multipart-persistence",
-        full_name=None,
-        password="password123",
-    )
-    case = store.create_case(
-        user_id=user.id,
-        data={
-            "title": "Multipart upload persistence",
-            "issue_description": None,
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "incident_start": None,
-            "incident_end": None,
-            "timezone": "UTC",
-        },
-    )
-    upload = store.create_upload(
-        case_id=case.id,
-        filename="incident.log",
-        content_type="text/plain",
-        size_bytes=12,
-    )
-
-    store.update_upload_metadata(
-        upload_id=upload.id,
-        metadata={
-            "upload_mode": "multipart",
-            "multipart_upload_id": "multipart-1",
-            "part_size_bytes": 5,
-            "part_count": 3,
-        },
-    )
-    recreated = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    persisted = recreated.get_upload(upload.id)
-
-    assert persisted is not None
-    assert persisted.upload_metadata == {
-        "upload_mode": "multipart",
-        "multipart_upload_id": "multipart-1",
-        "part_size_bytes": 5,
-        "part_count": 3,
+def test_database_contains_only_core_tables() -> None:
+    assert set(Base.metadata.tables) == {
+        "analysis_runs",
+        "cases",
+        "raw_files",
+        "sessions",
+        "users",
     }
 
 
-def test_sqlalchemy_case_collaborators_persist_and_filter_access(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+def test_result_directory_resolves_a_relative_object_store(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(local_object_store_dir="objects")
+
+    result_directory = analysis_result_artifacts._result_directory(
+        case_id="case-id",
+        analysis_run_id="run-id",
+        settings=settings,
+    )
+
+    assert result_directory.is_absolute()
+    assert result_directory == (
+        tmp_path / "objects" / "cases" / "case-id" / "analysis-runs" / "run-id" / "result"
+    )
+
+
+def test_artifact_temporary_name_does_not_repeat_the_target(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target_parent_length = 200
+    padding_length = target_parent_length - len(str(tmp_path)) - 1
+    assert padding_length > 0
+    target = tmp_path / ("p" * padding_length) / "service_codes.bin.zlib"
+    original_write_bytes = Path.write_bytes
+    temporary_paths: list[Path] = []
+
+    def capture_temporary_path(path: Path, content: bytes) -> int:
+        temporary_paths.append(path)
+        return original_write_bytes(path, content)
+
+    monkeypatch.setattr(Path, "write_bytes", capture_temporary_path)
+
+    write_artifact(target, b"synthetic redacted service codes")
+
+    assert len(temporary_paths) == 1
+    temporary = temporary_paths[0]
+    assert temporary.parent == target.parent
+    assert temporary.name.startswith(".")
+    assert temporary.name.endswith(".part")
+    assert len(temporary.name) == 38
+    assert target.name not in temporary.name
+    legacy_temporary = target.with_name(f".{target.name}.{'0' * 32}.part")
+    assert len(str(legacy_temporary)) == 262
+    assert len(str(temporary)) == 239
+
+
+def test_core_records_persist_across_store_instances(tmp_path) -> None:
+    database_path = str(tmp_path / "logan.db")
+    settings = Settings(database_path=database_path)
+    store = SQLAlchemyStore(
+        app_settings=settings,
+        database_path=database_path,
+        create_schema=True,
+    )
+    user = store.register_user(
+        email="owner@example.com",
+        username="owner",
+        full_name="Owner",
+        external_id="subject-1",
+    )
+    case = store.create_case(user_id=user.id, data={"title": "Incident"})
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+
+    recreated = SQLAlchemyStore(app_settings=settings, database_path=database_path)
+    assert recreated.get_user_by_external_id("subject-1") == user
+    persisted_case = recreated.get_case(case.id)
+    assert persisted_case is not None
+    assert persisted_case.title == case.title
+    assert persisted_case.status == "analyzing"
+    assert recreated.get_analysis_run(run.id) is not None
+    assert len(recreated.list_analysis_runs(case.id)) == 1
+
+
+def test_sqlite_enforces_foreign_keys() -> None:
+    store = SQLAlchemyStore(
+        app_settings=Settings(),
+        database_path=":memory:",
+        create_schema=True,
+    )
+
+    with pytest.raises(IntegrityError):
+        store.create_case(user_id="missing-user", data={"title": "Incident"})
+
+
+def test_only_the_run_owner_can_cancel() -> None:
+    store = SQLAlchemyStore(
+        app_settings=Settings(),
+        database_path=":memory:",
+        create_schema=True,
+    )
     owner = store.register_user(
-        email="sql-owner@example.com",
-        username="sql-owner",
-        full_name="SQL Owner",
-        password="password123",
-    )
-    collaborator = store.register_user(
-        email="sql-collab@example.com",
-        username="sql-collab",
-        full_name="SQL Collaborator",
-        password="password123",
-    )
-    outsider = store.register_user(
-        email="sql-outsider@example.com",
-        username="sql-outsider",
+        email="owner@example.com",
+        username="owner",
         full_name=None,
-        password="password123",
     )
-    store.ensure_organization(
-        organization_id="sql-org-two",
-        name="SQL Org Two",
-        slug="sql-org-two",
-    )
-    org_two_user = store.register_user(
-        email="sql-org-two@example.com",
-        username="sql-org-two",
+    other = store.register_user(
+        email="other@example.com",
+        username="other",
         full_name=None,
-        password="password123",
-        organization_id="sql-org-two",
     )
-    case = store.create_case(
-        user_id=owner.id,
-        data={
-            "title": "SQL RBAC case",
-            "issue_description": None,
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "incident_start": None,
-            "incident_end": None,
-            "timezone": "UTC",
-        },
-    )
+    case = store.create_case(user_id=owner.id, data={"title": "Incident"})
+    run = store.create_analysis_run(case_id=case.id, user_id=owner.id)
 
-    owner_collaborators = store.list_case_collaborators(case.id)
-    assert [(item.user_id, item.role) for item in owner_collaborators] == [(owner.id, "owner")]
-    assert store.user_can_access_case(owner.id, case.id, "owner") is True
-    assert store.user_can_access_case(collaborator.id, case.id, "view") is False
-    assert store.list_cases_for_user(collaborator)[1] == 0
-    assert store.user_can_access_case(org_two_user.id, case.id, "view") is False
-    with pytest.raises(ValueError):
-        store.upsert_case_collaborator(
-            case_id=case.id,
-            user_id=org_two_user.id,
-            role="viewer",
-            added_by=owner.id,
-        )
-
-    added = store.upsert_case_collaborator(
-        case_id=case.id,
-        user_id=collaborator.id,
-        role="editor",
-        added_by=owner.id,
-    )
-    assert added.role == "editor"
-    recreated = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    assert recreated.user_can_access_case(collaborator.id, case.id, "view") is True
-    assert recreated.user_can_access_case(collaborator.id, case.id, "edit") is True
-    assert recreated.user_can_access_case(collaborator.id, case.id, "owner") is False
-    items, total = recreated.list_cases_for_user(collaborator)
-    assert total == 1
-    assert items[0].id == case.id
-    assert recreated.list_cases_for_user(outsider)[1] == 0
-
-    assert recreated.remove_case_collaborator(
-        case_id=case.id,
-        user_id=collaborator.id,
-        removed_by=owner.id,
-    ) is True
-    assert recreated.user_can_access_case(collaborator.id, case.id, "view") is False
-
-    group = recreated.create_policy_group(
-        organization_id=owner.organization_id,
-        name="SQL SRE",
-        created_by=owner.id,
-    )
-    recreated.upsert_policy_group_member(
-        group_id=group.id,
-        user_id=collaborator.id,
-        role="viewer",
-        added_by=owner.id,
-    )
-    recreated.upsert_case_group_access(
-        case_id=case.id,
-        group_id=group.id,
-        role="viewer",
-        granted_by=owner.id,
-    )
-    persisted_groups = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    assert persisted_groups.user_can_access_case(collaborator.id, case.id, "view") is True
-    assert persisted_groups.user_can_access_case(collaborator.id, case.id, "edit") is False
-    persisted_groups.upsert_case_group_access(
-        case_id=case.id,
-        group_id=group.id,
-        role="editor",
-        granted_by=owner.id,
-    )
-    assert persisted_groups.user_can_access_case(collaborator.id, case.id, "edit") is True
-    assert persisted_groups.user_can_access_case(outsider.id, case.id, "view") is False
-    other_group = persisted_groups.create_policy_group(
-        organization_id="sql-org-two",
-        name="Other Org Group",
-        created_by=org_two_user.id,
-    )
-    with pytest.raises(ValueError):
-        persisted_groups.upsert_case_group_access(
-            case_id=case.id,
-            group_id=other_group.id,
-            role="viewer",
-            granted_by=owner.id,
-        )
-    actions = {record.action for record in recreated.list_audit_logs(case_id=case.id)}
-    actions |= {record.action for record in persisted_groups.list_audit_logs(case_id=case.id)}
-    assert {
-        "case.collaborator.add",
-        "case.collaborator.remove",
-        "case.policy_group.grant",
-    }.issubset(actions)
+    with pytest.raises(KeyError):
+        store.cancel_analysis_run(run_id=run.id, user_id=other.id)
 
 
-def test_sqlalchemy_case_update_cancel_and_delete(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
+def test_terminal_run_progress_cannot_be_overwritten() -> None:
+    store = SQLAlchemyStore(
+        app_settings=Settings(),
+        database_path=":memory:",
+        create_schema=True,
+    )
     owner = store.register_user(
-        email="sql-edit-owner@example.com",
-        username="sql-edit-owner",
-        full_name="SQL Edit Owner",
-        password="password123",
+        email="owner@example.com",
+        username="owner",
+        full_name=None,
     )
-    case = store.create_case(
-        user_id=owner.id,
-        data={
-            "title": "Original SQL case",
-            "issue_description": "Before update",
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "incident_start": None,
-            "incident_end": None,
-            "timezone": "UTC",
-        },
+    case = store.create_case(user_id=owner.id, data={"title": "Incident"})
+    run = store.create_analysis_run(case_id=case.id, user_id=owner.id)
+    store.cancel_analysis_run(run_id=run.id, user_id=owner.id)
+
+    store.update_analysis_progress(
+        run_id=run.id,
+        progress={"current_step": "causal_summary", "steps": {}},
     )
 
-    updated = store.update_case(
-        case_id=case.id,
-        user_id=owner.id,
-        data={
-            "title": "Updated SQL case",
-            "issue_description": "After update",
-            "service": "payments",
-            "environment": None,
-        },
-    )
-    assert updated.title == "Updated SQL case"
-    assert updated.issue_description == "After update"
-    assert updated.service == "payments"
-    assert updated.environment is None
-
-    run = store.create_analysis_run(
-        case_id=case.id,
-        user_id=owner.id,
-        config={"default_window_size_seconds": 60},
-    )
-    cancelled = store.cancel_analysis_run(run_id=run.id, user_id=owner.id)
+    cancelled = store.get_analysis_run(run.id)
+    assert cancelled is not None
     assert cancelled.status == "cancelled"
     assert cancelled.progress["current_step"] == "cancelled"
-    assert [event.event_type for event in store.list_job_events(analysis_run_id=run.id)] == [
-        "cancelled"
-    ]
 
-    active_run = store.create_analysis_run(
-        case_id=case.id,
-        user_id=owner.id,
-        config={"default_window_size_seconds": 60},
+
+def _analysis_fixture(
+    tmp_path,
+) -> tuple[SQLAlchemyStore, object, object, str]:
+    database_path = str(tmp_path / "logan.db")
+    settings = Settings(database_path=database_path)
+    store = SQLAlchemyStore(
+        app_settings=settings,
+        database_path=database_path,
+        create_schema=True,
     )
-    assert store.delete_case(case_id=case.id, user_id=owner.id) is True
-    assert store.get_case(case.id) is None
-    assert store.list_cases()[1] == 0
-    assert store.list_cases_for_user(owner)[1] == 0
-    assert store.user_can_access_case(owner.id, case.id, "view") is False
-    active_run_after_delete = store.get_analysis_run(active_run.id)
-    assert active_run_after_delete is not None
-    assert active_run_after_delete.status == "cancelled"
-    with store.session_factory() as session:
-        row = session.get(tables.Case, case.id)
-        assert row is not None
-        assert row.deleted_at is not None
-        assert row.status == "deleted"
-
-    audit_actions = {record.action for record in store.list_audit_logs(case_id=case.id)}
-    assert {"case.update", "analysis.cancel", "case.delete"}.issubset(audit_actions)
-
-
-@pytest.mark.asyncio
-async def test_sqlalchemy_store_persists_api_state_after_recreation(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(
-        database_url=database_url,
-        store_backend="sqlalchemy",
-        object_store_backend="local",
-        local_object_store_dir=str(tmp_path / "object-store"),
-        step_artifacts_enabled=True,
-        step_artifact_failure_mode="fail",
-    )
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    client = await _client(store)
-
-    _authenticate_client(
-        client,
-        store,
-        email="persistent.engineer@example.com",
-        username="persistent-engineer",
-        full_name="Persistent Engineer",
-    )
-    case = await client.post(
-        "/api/cases",
-        json={
-            "title": "Checkout API intermittent 500 errors",
-            "issue_description": "Customers report intermittent 500 during checkout.",
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "production",
-            "incident_start": "2026-06-06T10:00:00Z",
-            "incident_end": "2026-06-06T11:00:00Z",
-            "timezone": "UTC",
-        },
-    )
-    assert case.status_code == 200, case.text
-    case_id = case.json()["case_id"]
-
-    content = b"2026-06-06T10:00:00Z ERROR gateway request failed status=500 path=/checkout\n"
-    upload = await client.post(
-        f"/api/cases/{case_id}/uploads",
-        json={"filename": "gateway.log", "content_type": "text/plain", "size_bytes": len(content)},
-    )
-    assert upload.status_code == 200, upload.text
-    file_id = upload.json()["file_id"]
-    expected_sha = hashlib.sha256(content).hexdigest()
-    upload_before_sha = store.get_upload(file_id)
-    assert upload_before_sha is not None
-    assert upload_before_sha.sha256 is None
-    assert upload_before_sha.completed is False
-
-    uploaded = await client.put(
-        upload.json()["upload_url"],
-        content=content,
-        headers={"content-type": "text/plain"},
-    )
-    assert uploaded.status_code == 200, uploaded.text
-    assert uploaded.json()["sha256"] == expected_sha
-
-    complete = await client.post(
-        f"/api/cases/{case_id}/uploads/{file_id}/complete",
-        json={"sha256": expected_sha},
-    )
-    assert complete.status_code == 200, complete.text
-
-    run = await client.post(
-        f"/api/cases/{case_id}/analysis-runs",
-        json={
-            "input_paths": [str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
-            "config": {"default_window_size_seconds": 60},
-        },
-    )
-    assert run.status_code == 200, run.text
-    run_id = run.json()["analysis_run_id"]
-
-    logs = await client.get(
-        f"/api/cases/{case_id}/analysis-runs/{run_id}/logs",
-        params={"q": "timeout", "service": "payment-service"},
-    )
-    assert logs.status_code == 200, logs.text
-    assert logs.json()["items"]
-
-    export = await client.post(
-        f"/api/cases/{case_id}/analysis-runs/{run_id}/exports",
-        json={"export_type": "markdown", "include_sections": ["causal_summary"]},
-    )
-    assert export.status_code == 200, export.text
-    export_id = export.json()["export_id"]
-
-    graph = await client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/causal-graph")
-    assert graph.status_code == 200, graph.text
-    feedback = await client.post(
-        f"/api/cases/{case_id}/feedback",
-        json={
-            "analysis_run_id": run_id,
-            "target_type": "causal_edge",
-            "target_id": graph.json()["edges"][0]["id"],
-            "feedback_type": "wrong_causal_edge",
-            "rating": 1,
-            "comment": "Needs validation",
-        },
-    )
-    assert feedback.status_code == 200, feedback.text
-    feedback_id = feedback.json()["feedback_id"]
-    cookies = dict(client.cookies)
-    await client.aclose()
-
-    recreated_store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    recreated_client = await _client(recreated_store)
-    recreated_client.cookies.update(cookies)
-
-    me = await recreated_client.get("/api/auth/me")
-    assert me.status_code == 200, me.text
-
-    listed = await recreated_client.get("/api/cases")
-    assert listed.status_code == 200, listed.text
-    assert listed.json()["total"] == 1
-    assert listed.json()["items"][0]["case_id"] == case_id
-
-    fetched_case = await recreated_client.get(f"/api/cases/{case_id}")
-    assert fetched_case.status_code == 200, fetched_case.text
-    assert fetched_case.json()["status"] == "ready"
-
-    persisted_upload = recreated_store.get_upload(file_id)
-    assert persisted_upload is not None
-    assert persisted_upload.sha256 == expected_sha
-    assert persisted_upload.completed is True
-
-    status = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}")
-    assert status.status_code == 200, status.text
-    assert status.json()["status"] == "completed"
-    progress = status.json()["progress"]
-    assert progress["templates"] > 0
-    events = recreated_store.list_job_events(case_id=case_id, analysis_run_id=run_id)
-    assert [event.created_at for event in events] == sorted(event.created_at for event in events)
-    assert [event.step_name for event in events if event.event_type == "completed"] == [
-        "materialize_inputs",
-        *PIPELINE_STEPS,
-    ]
-    assert all(event.case_id == case_id for event in events)
-    assert all(event.analysis_run_id == run_id for event in events)
-    serialized_event_metadata = json.dumps(
-        [event.metadata for event in events],
-        sort_keys=True,
-    )
-    assert "model_inputs" not in serialized_event_metadata
-    assert "representative_lines" not in serialized_event_metadata
-    artifacts = recreated_store.list_analysis_step_artifacts(
-        case_id=case_id,
-        analysis_run_id=run_id,
-    )
-    assert [artifact.step_name for artifact in artifacts] == [
-        "materialize_inputs",
-        *PIPELINE_STEPS,
-    ]
-    assert {artifact.artifact_type for artifact in artifacts} == {"step_manifest"}
-    assert all(artifact.object_uri.startswith("file://") for artifact in artifacts)
-    assert all(len(artifact.sha256) == 64 for artifact in artifacts)
-    serialized_artifact_metadata = json.dumps(
-        [artifact.metadata for artifact in artifacts],
-        sort_keys=True,
-    ).lower()
-    for forbidden in (
-        "raw_text",
-        "raw_text_redacted",
-        "model_inputs",
-        "prompt",
-        "token",
-        "secret",
-        "cookie",
-        "representative_lines",
-    ):
-        assert forbidden not in serialized_artifact_metadata
-    duplicate = recreated_store.record_job_event(
-        case_id=case_id,
-        analysis_run_id=run_id,
-        step_name="manual_idempotency",
-        event_type="completed",
-        status="completed",
-        idempotency_key="manual-idempotency-key",
-        metadata={"files": 1},
-    )
-    duplicate_again = recreated_store.record_job_event(
-        case_id=case_id,
-        analysis_run_id=run_id,
-        step_name="manual_idempotency",
-        event_type="completed",
-        status="completed",
-        idempotency_key="manual-idempotency-key",
-        metadata={"files": 2},
-    )
-    assert duplicate_again.id == duplicate.id
-    assert (
-        len(
-            recreated_store.list_analysis_step_artifacts(
-                case_id=case_id,
-                analysis_run_id=run_id,
-                step_name="manual_idempotency",
-            )
-        )
-        == 1
-    )
-    with recreated_store.session_factory() as session:
-        duplicate_count = session.scalar(
-            select(func.count())
-            .select_from(tables.JobEvent)
-            .where(
-                tables.JobEvent.analysis_run_id == run_id,
-                tables.JobEvent.idempotency_key == "manual-idempotency-key",
-                tables.JobEvent.event_type == "completed",
-            )
-        )
-        artifact_duplicate_count = session.scalar(
-            select(func.count())
-            .select_from(tables.AnalysisStepArtifact)
-            .where(
-                tables.AnalysisStepArtifact.analysis_run_id == run_id,
-                tables.AnalysisStepArtifact.step_name == "manual_idempotency",
-                tables.AnalysisStepArtifact.artifact_type == "step_manifest",
-            )
-        )
-    assert duplicate_count == 1
-    assert artifact_duplicate_count == 1
-    assert _raw_file_analysis_run_id(recreated_store, file_id) is None
-    persisted_result = recreated_store.get_analysis_result(case_id, run_id)
-    assert persisted_result is not None
-    assert persisted_result.model_inputs == []
-
-    analytics_counts = _analytics_counts(recreated_store, run_id)
-    assert analytics_counts["raw_files"] > 0
-    assert analytics_counts["raw_log_lines"] == progress["normalized_lines"]
-    assert _redacted_raw_log_line_count(recreated_store, run_id) > 0
-    assert analytics_counts["normalized_log_lines"] == progress["normalized_lines"]
-    assert analytics_counts["log_templates"] == progress["templates"]
-    assert analytics_counts["representative_samples"] == progress["representative_samples"]
-    assert analytics_counts["template_annotations"] == progress["annotated_templates"]
-    assert analytics_counts["time_window_signals"] > 0
-    assert analytics_counts["causal_nodes"] > 0
-    assert analytics_counts["causal_edges"] > 0
-    assert analytics_counts["causal_summaries"] == 1
-
-    annotation_responses = _annotation_raw_responses(recreated_store, run_id)
-    assert annotation_responses
-    assert all(annotation_responses)
-    serialized_responses = json.dumps(annotation_responses, sort_keys=True)
-    assert "case_context" not in serialized_responses
-    assert "representative_lines" not in serialized_responses
-    assert "template_context" not in serialized_responses
-    assert "model_inputs" not in serialized_responses
-
-    case_record = recreated_store.get_case(case_id)
-    assert case_record is not None
-    recreated_store._complete_analysis_run(
-        run_id=run_id,
-        result=persisted_result,
-        user_id=case_record.created_by,
-    )
-    assert _analytics_counts(recreated_store, run_id) == analytics_counts
-    model_invocations = recreated_store.list_audit_logs(
-        case_id=case_id,
-        action="model.invocation",
-    )
-    assert len(model_invocations) == 1
-    model_invocation_metadata = model_invocations[0].metadata
-    assert model_invocation_metadata == {
-        "analysis_run_id": run_id,
-        "model_provider": "ai_platform",
-        "model_name": "gpt-5.4",
-        "model_reasoning_effort": app_settings.ai_platform_reasoning_effort,
-        "prompt_version": "annotation_v1",
-        "representative_sample_count": progress["representative_samples"],
-        "model_input_count": progress["templates"],
-        "annotation_count": progress["annotated_templates"],
-        "template_count": progress["templates"],
-        "redacted": True,
-    }
-    serialized_model_invocation = json.dumps(model_invocation_metadata, sort_keys=True)
-    for forbidden in (
-        "raw_text",
-        "raw_message",
-        "model_inputs",
-        '"prompt"',
-        "representative_lines",
-        "tests/fixtures",
-        "auth.log",
-        "payment.log",
-        "gateway.log",
-        "secret",
-        "token",
-    ):
-        assert forbidden not in serialized_model_invocation
-
-    run_list = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs")
-    assert run_list.status_code == 200, run_list.text
-    assert run_list.json()["total"] == 1
-    assert run_list.json()["items"][0]["analysis_run_id"] == run_id
-    assert run_list.json()["items"][0]["model_provider"] == "ai_platform"
-
-    summary = await recreated_client.get(f"/api/cases/{case_id}/analysis-runs/{run_id}/summary")
-    assert summary.status_code == 200, summary.text
-    assert summary.json()["items"]
-
-    causal_summary = await recreated_client.get(
-        f"/api/cases/{case_id}/analysis-runs/{run_id}/causal-summary"
-    )
-    assert causal_summary.status_code == 200, causal_summary.text
-    assert "candidate" in causal_summary.json()["summary_markdown"].lower()
-
-    recreated_export = recreated_store.get_export(export_id)
-    assert recreated_export is not None
-    assert recreated_export.object_uri.startswith("memory://")
-
-    recreated_feedback = recreated_store.get_feedback(feedback_id)
-    assert recreated_feedback is not None
-    assert recreated_feedback.comment == "Needs validation"
-
-    audit_actions = {record.action for record in recreated_store.list_audit_logs(case_id=case_id)}
-    assert {
-        "case.create",
-        "analysis.start",
-        "analysis.complete",
-        "model.invocation",
-        "export.create",
-        "feedback.submit",
-        "raw_log.search",
-    }.issubset(audit_actions)
-    await recreated_client.aclose()
-
-
-@pytest.mark.asyncio
-async def test_sqlalchemy_fanout_scopes_raw_file_ids_per_run(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
     user = store.register_user(
-        email="repeat.engineer@example.com",
-        username="repeat-engineer",
+        email="owner@example.com",
+        username="owner",
         full_name=None,
-        password="password123",
     )
-    case = store.create_case(
-        user_id=user.id,
-        data={
-            "title": "Repeated checkout fixture analysis",
-            "issue_description": "Run the same input paths twice.",
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "timezone": "UTC",
-        },
-    )
-    input_paths = [str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))]
-
-    first = await store.start_analysis(
-        case_id=case.id,
-        user_id=user.id,
-        input_paths=input_paths,
-        config={"default_window_size_seconds": 60},
-        gateway=MockAIPlatformAnnotationGateway(),
-    )
-    second = await store.start_analysis(
-        case_id=case.id,
-        user_id=user.id,
-        input_paths=input_paths,
-        config={"default_window_size_seconds": 60},
-        gateway=MockAIPlatformAnnotationGateway(),
-    )
-
-    assert first.status == "completed"
-    assert second.status == "completed"
-    first_counts = _analytics_counts(store, first.id)
-    second_counts = _analytics_counts(store, second.id)
-    assert first_counts["raw_files"] > 0
-    assert second_counts["raw_files"] > 0
-    assert first_counts["normalized_log_lines"] > 0
-    assert second_counts["normalized_log_lines"] > 0
-    assert _run_raw_file_ids(store, first.id).isdisjoint(_run_raw_file_ids(store, second.id))
-
-
-@pytest.mark.asyncio
-async def test_sqlalchemy_local_analysis_materializes_s3_input_uri(
-    tmp_path: Path,
-) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(
-        database_url=database_url,
-        store_backend="sqlalchemy",
-        object_store_backend="s3",
-        analysis_input_tmp_dir=str(tmp_path / "analysis-inputs"),
-        s3_bucket="logan",
-        s3_access_key="access",
-        s3_secret_key="secret",
-    )
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    user = store.register_user(
-        email="s3-local@example.com",
-        username="s3-local",
-        full_name=None,
-        password="password123",
-    )
-    case = store.create_case(
-        user_id=user.id,
-        data={
-            "title": "S3 input analysis",
-            "issue_description": "Local store should materialize S3 inputs.",
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "timezone": "UTC",
-        },
-    )
-    fake_s3 = FakeS3Client()
-    key = "cases/case-1/uploads/file-1/gateway.log"
-    fake_s3.objects[("logan", key)] = (
-        b"2026-06-06T10:00:00Z ERROR gateway-service failed checkout request\n"
-    )
-
-    run = await store.start_analysis(
-        case_id=case.id,
-        user_id=user.id,
-        input_paths=[f"s3://logan/{key}"],
-        config={"default_window_size_seconds": 60},
-        gateway=MockAIPlatformAnnotationGateway(),
-        s3_client_factory=lambda _: fake_s3,
-    )
-
-    assert run.status == "completed"
-    assert run.progress["files_processed"] == 1
-    assert _analytics_counts(store, run.id)["raw_files"] == 1
-    assert fake_s3.download_calls
-    assert not Path(fake_s3.download_calls[0]["Filename"]).exists()
-    materialize_events = store.list_job_events(
-        analysis_run_id=run.id,
-        step_name="materialize_inputs",
-    )
-    assert [event.metadata for event in materialize_events] == [
-        {
-            "source_count": 1,
-            "materialized_count": 1,
-            "storage_backend_counts": {"s3": 1},
-        }
-    ]
-    assert key not in json.dumps(materialize_events[0].metadata, sort_keys=True)
-
-
-@pytest.mark.asyncio
-async def test_sqlalchemy_report_endpoints_read_fanout_without_result_json(
-    tmp_path: Path,
-) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(database_url=database_url, store_backend="sqlalchemy")
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    user = store.register_user(
-        email="fanout-reports@example.com",
-        username="fanout-reports",
-        full_name=None,
-        password="password123",
-    )
-    token, _session = store.create_session(user.id)
-    case = store.create_case(
-        user_id=user.id,
-        data={
-            "title": "Checkout reports from fanout",
-            "issue_description": "Report endpoints should not need result_json.",
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "timezone": "UTC",
-        },
-    )
-    secret_log = tmp_path / "secret-payment.log"
-    secret_log.write_text(
-        (
-            "2026-06-06T10:12:30Z ERROR payment-service timeout calling auth-service "
-            "after 30000ms Authorization=Bearer raw-secret-token password=hunter2 "
-            "request_id=req-secret\n"
-        ),
+    case = store.create_case(user_id=user.id, data={"title": "Incident"})
+    path = tmp_path / "incident.log"
+    path.write_text(
+        "2026-01-01T00:00:00Z ERROR api password=raw-secret failed\n",
         encoding="utf-8",
     )
-    input_paths = [str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))]
-    input_paths.append(str(secret_log))
-    run = await store.start_analysis(
-        case_id=case.id,
-        user_id=user.id,
-        input_paths=input_paths,
-        config={"default_window_size_seconds": 60},
-        gateway=MockAIPlatformAnnotationGateway(),
-    )
-    assert run.status == "completed"
-    assert store.get_analysis_result(case.id, run.id) is not None
-
-    client = await _client(store)
-    client.cookies.set("logan_session", token)
-    original_causal_summary = await client.get(
-        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary"
-    )
-    assert original_causal_summary.status_code == 200, original_causal_summary.text
-    original_causal_summary_body = original_causal_summary.json()
-    result_json_summary = "## Edited candidate summary from result_json"
-    result_json_customer_update = "Customer update from result_json edit."
-    result_json_patch = await client.patch(
-        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary",
-        json={
-            "summary_markdown": result_json_summary,
-            "customer_update_markdown": result_json_customer_update,
-        },
-    )
-    assert result_json_patch.status_code == 200, result_json_patch.text
-    assert result_json_patch.json()["summary_markdown"] == result_json_summary
-    assert result_json_patch.json()["edited"] is True
-    result_after_patch = store.get_analysis_result(case.id, run.id)
-    assert result_after_patch is not None
-    assert result_after_patch.causal_summary.summary_markdown == result_json_summary
-    assert result_after_patch.causal_summary.customer_update_markdown == result_json_customer_update
-    assert result_after_patch.causal_summary.evidence_refs
-    assert result_after_patch.exports["markdown"].content == result_json_summary
-    with store.session_factory() as session:
-        row = session.scalar(
-            select(tables.CausalSummary).where(tables.CausalSummary.analysis_run_id == run.id)
-        )
-        assert row is not None
-        assert row.summary_markdown == result_json_summary
-        assert row.customer_update_markdown == result_json_customer_update
-        assert row.edited_by == user.id
-        assert row.edited_at is not None
-        assert row.evidence_refs_json == original_causal_summary_body["evidence_refs"]
-        assert row.next_actions_json == original_causal_summary_body["next_actions"]
-        run_row = session.get(tables.AnalysisRun, run.id)
-        assert run_row is not None and run_row.result_json is not None
-        assert run_row.result_json["causal_summary"]["summary_markdown"] == result_json_summary
-        assert run_row.result_json["causal_summary"]["edited"] is True
-        assert run_row.result_json["exports"]["markdown"]["content"] == result_json_summary
-
-    _clear_result_json(store, run.id)
-    assert store.get_analysis_result(case.id, run.id) is None
-
-    summary = await client.get(f"/api/cases/{case.id}/analysis-runs/{run.id}/summary")
-    assert summary.status_code == 200, summary.text
-    assert summary.json()["items"]
-    assert summary.json()["reduction"]["raw_log_lines"] > 0
-
-    temporal = await client.get(f"/api/cases/{case.id}/analysis-runs/{run.id}/temporal")
-    assert temporal.status_code == 200, temporal.text
-    assert temporal.json()["series"]
-
-    logs = await client.get(
-        f"/api/cases/{case.id}/analysis-runs/{run.id}/logs",
-        params={"q": "auth-service", "service": "payment-service"},
-    )
-    assert logs.status_code == 200, logs.text
-    logs_body = logs.json()
-    assert logs_body["items"]
-    assert logs_body["facets"]["service"]
-    serialized_logs = json.dumps(logs_body, sort_keys=True)
-    assert "raw-secret-token" not in serialized_logs
-    assert "hunter2" not in serialized_logs
-    assert "raw_text" not in serialized_logs
-    assert "raw_message" not in serialized_logs
-    assert any("<TOKEN>" in item["message"] for item in logs_body["items"])
-    assert any("<SECRET>" in item["message"] for item in logs_body["items"])
-
-    graph = await client.get(f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-graph")
-    assert graph.status_code == 200, graph.text
-    graph_body = graph.json()
-    assert graph_body["nodes"]
-    assert graph_body["edges"]
-    node_ids = {node["id"] for node in graph_body["nodes"]}
-    assert all(edge["source"] in node_ids and edge["target"] in node_ids for edge in graph_body["edges"])
-    assert all(edge["needs_validation"] for edge in graph_body["edges"])
-    assert graph_body["root_cause_candidates"]
-
-    causal_summary = await client.get(
-        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary"
-    )
-    assert causal_summary.status_code == 200, causal_summary.text
-    assert causal_summary.json()["summary_markdown"] == result_json_summary
-    assert causal_summary.json()["evidence_refs"]
-    assert causal_summary.json()["edited"] is True
-    fanout_summary = "## Edited candidate summary from SQL fanout"
-    fanout_patch = await client.patch(
-        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary",
-        json={
-            "summary_markdown": fanout_summary,
-            "customer_update_markdown": None,
-        },
-    )
-    assert fanout_patch.status_code == 200, fanout_patch.text
-    fanout_body = fanout_patch.json()
-    assert fanout_body["summary_markdown"] == fanout_summary
-    assert fanout_body["customer_update_markdown"] == result_json_customer_update
-    assert fanout_body["edited"] is True
-    assert store.get_analysis_result(case.id, run.id) is None
-    fanout_fetch = await client.get(
-        f"/api/cases/{case.id}/analysis-runs/{run.id}/causal-summary"
-    )
-    assert fanout_fetch.json()["summary_markdown"] == fanout_summary
-    fanout_export = await client.post(
-        f"/api/cases/{case.id}/analysis-runs/{run.id}/exports",
-        json={"export_type": "markdown", "include_sections": ["causal_summary"]},
-    )
-    assert fanout_export.status_code == 200, fanout_export.text
-    assert fanout_export.json()["download_url"].startswith("memory://")
-    audit = store.list_audit_logs(case_id=case.id, action="causal_summary.edit")
-    assert len(audit) == 2
-    assert {
-        "analysis_run_id": run.id,
-        "summary_length": len(fanout_summary),
-        "customer_update_length": len(result_json_customer_update),
-        "evidence_refs_count": len(original_causal_summary_body["evidence_refs"]),
-        "edited": True,
-    } in [record.metadata for record in audit]
-    await client.aclose()
+    return store, user, case, str(path)
 
 
 @pytest.mark.asyncio
-async def test_sqlalchemy_retention_scrubs_raw_text_and_preserves_reports(
-    tmp_path: Path,
+async def test_completed_result_uses_segmented_redacted_artifacts(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    app_settings = Settings(
-        database_url=database_url,
-        store_backend="sqlalchemy",
-        audit_retention_days=30,
-        raw_log_retention_days=30,
-        report_retention_days=30,
-    )
-    store = SQLAlchemyStore(app_settings=app_settings, database_url=database_url)
-    user = store.register_user(
-        email="retention@example.com",
-        username="retention",
-        full_name=None,
-        password="password123",
-    )
-    case = store.create_case(
+    store, user, case, path = _analysis_fixture(tmp_path)
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+
+    completed = await store.run_analysis(
+        run_id=run.id,
         user_id=user.id,
-        data={
-            "title": "Retention case",
-            "issue_description": "Old rows should be retained safely.",
-            "product": "commerce-platform",
-            "service": "checkout",
-            "environment": "test",
-            "timezone": "UTC",
-        },
+        file_paths=[path],
     )
-    run = await store.start_analysis(
-        case_id=case.id,
-        user_id=user.id,
-        input_paths=[str(path) for path in sorted(FIXTURE_DIR.glob("*.log"))],
-        config={"default_window_size_seconds": 60},
-        gateway=MockAIPlatformAnnotationGateway(),
-    )
-    assert run.status == "completed"
+
+    assert completed.status == "completed"
+    with store.session_factory() as session:
+        payload = session.get(tables.AnalysisRun, run.id).result_json
+    assert payload["format"] == "logan.analysis-result-manifest"
+    summary_raw = read_artifact(payload["sections"]["summary"], settings=store.settings)
+    logs_raw = read_artifact(payload["logs"]["chunks"][0], settings=store.settings)
+    persisted_summary = json.loads(summary_raw)
+    persisted_logs = json.loads(logs_raw)
+    assert "raw-secret" not in summary_raw.decode("utf-8")
+    assert "raw-secret" not in logs_raw.decode("utf-8")
+    assert persisted_summary["files"][0]["lines"] == []
+    assert "message" not in persisted_logs[0]
+    assert payload["logs"]["total"] == 1
+
+    store._clear_analysis_result_cache()
     result = store.get_analysis_result(case.id, run.id)
     assert result is not None
-    export_artifact = result.exports["json"]
-    store.create_export(
-        export_id=export_artifact.export_id,
-        case_id=case.id,
-        analysis_run_id=run.id,
-        export_type="json",
-        object_uri=export_artifact.object_uri,
-        user_id=user.id,
+    assert result.normalized_logs[0].redacted_message.endswith(
+        "password=<SECRET> failed"
     )
+    assert result.raw_entries == []
+    assert result.files[0].lines == []
 
-    now = datetime(2026, 6, 6, tzinfo=UTC)
-    old = datetime(2020, 1, 1, tzinfo=UTC)
-    recent = datetime(2026, 6, 1, tzinfo=UTC)
+    store._clear_analysis_result_cache()
+
+    def unexpected_decode(payload):  # noqa: ANN001
+        raise AssertionError("run metadata must not decode the result")
+
+    monkeypatch.setattr(sqlalchemy_store, "_decode_analysis_result", unexpected_decode)
+    assert store.get_analysis_run(run.id).status == "completed"
+    assert store.list_analysis_runs(case.id)[0].status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_legacy_completed_result_is_cached_across_report_reads(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, user, case, path = _analysis_fixture(tmp_path)
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+    await store.run_analysis(
+        run_id=run.id,
+        user_id=user.id,
+        file_paths=[path],
+    )
+    completed_result = store.get_analysis_result(case.id, run.id)
+    assert completed_result is not None
+    with store._session() as session:
+        row = session.get(tables.AnalysisRun, run.id)
+        row.result_json = sqlalchemy_store._encode_analysis_result(completed_result)
+
+    original_decode = sqlalchemy_store._decode_analysis_result
+    decode_calls = 0
+
+    def counting_decode(payload):  # noqa: ANN001
+        nonlocal decode_calls
+        decode_calls += 1
+        return original_decode(payload)
+
+    monkeypatch.setattr(sqlalchemy_store, "_decode_analysis_result", counting_decode)
+
+    store._clear_analysis_result_cache()
+    first_read = store.get_analysis_result(case.id, run.id)
+    second_read = store.get_analysis_result(case.id, run.id)
+
+    assert first_read is second_read
+    assert decode_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_finalization_failure_marks_the_run_and_case_failed(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, user, case, path = _analysis_fixture(tmp_path)
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+
+    def fail_encoding(result, *, settings):  # noqa: ANN001
+        raise RuntimeError("result persistence failed")
+
+    monkeypatch.setattr(
+        sqlalchemy_store,
+        "write_analysis_result_manifest",
+        fail_encoding,
+    )
+    with pytest.raises(RuntimeError, match="result persistence failed"):
+        await store.run_analysis(
+            run_id=run.id,
+            user_id=user.id,
+            file_paths=[path],
+        )
+
+    failed = store.get_analysis_run(run.id)
+    assert failed is not None
+    assert failed.status == "failed"
+    assert failed.progress["current_step"] == "failed"
+    assert failed.progress["failed_step"] == "finalizing"
+    assert failed.progress["error_type"] == "RuntimeError"
+    assert "error_code" not in failed.progress
+    assert failed.error_message == "result persistence failed"
+    assert store.get_case(case.id).status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_file_not_found_finalization_records_safe_error_details(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, user, case, path = _analysis_fixture(tmp_path)
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+
+    def fail_encoding(result, *, settings):  # noqa: ANN001
+        raise FileNotFoundError(
+            2,
+            "No such file or directory",
+            r"C:\customer-data\incident-secret.log",
+        )
+
+    monkeypatch.setattr(
+        sqlalchemy_store,
+        "write_analysis_result_manifest",
+        fail_encoding,
+    )
+    with pytest.raises(FileNotFoundError):
+        await store.run_analysis(
+            run_id=run.id,
+            user_id=user.id,
+            file_paths=[path],
+        )
+
+    failed = store.get_analysis_run(run.id)
+    assert failed is not None
+    assert failed.progress["current_step"] == "failed"
+    assert failed.progress["failed_step"] == "finalizing"
+    assert failed.progress["error_type"] == "FileNotFoundError"
+    assert failed.progress["error_code"] == 2
+    assert "customer-data" not in failed.error_message
+    assert "incident-secret.log" not in failed.error_message
+
+
+@pytest.mark.asyncio
+async def test_finalization_is_visible_and_does_not_block_status_reads(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, user, case, path = _analysis_fixture(tmp_path)
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+    entered = threading.Event()
+    release = threading.Event()
+    original_encode = sqlalchemy_store.write_analysis_result_manifest
+
+    def blocking_encode(result, *, settings):  # noqa: ANN001
+        entered.set()
+        release.wait(timeout=2)
+        return original_encode(result, settings=settings)
+
+    monkeypatch.setattr(
+        sqlalchemy_store,
+        "write_analysis_result_manifest",
+        blocking_encode,
+    )
+    task = asyncio.create_task(
+        store.run_analysis(
+            run_id=run.id,
+            user_id=user.id,
+            file_paths=[path],
+        )
+    )
+    assert await asyncio.to_thread(entered.wait, 1)
+
+    finalizing = await asyncio.wait_for(
+        asyncio.to_thread(store.get_analysis_run, run.id),
+        timeout=0.5,
+    )
+    assert finalizing is not None
+    assert finalizing.status == "processing"
+    assert finalizing.progress["current_step"] == "finalizing"
+
+    release.set()
+    assert (await task).status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_segmented_logs_read_only_the_page_chunks(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(analysis_result_artifacts, "RESULT_LOG_CHUNK_SIZE", 2)
+    store, user, case, path = _analysis_fixture(tmp_path)
+    Path(path).write_text(
+        "\n".join(
+            f"2026-01-01T00:00:0{index}Z ERROR api request {index} failed"
+            for index in range(5)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+    await store.run_analysis(run_id=run.id, user_id=user.id, file_paths=[path])
+
     with store.session_factory() as session:
-        raw_count = session.scalar(
-            select(func.count())
-            .select_from(tables.RawLogLine)
-            .where(tables.RawLogLine.analysis_run_id == run.id)
-        )
-        normalized_count = session.scalar(
-            select(func.count())
-            .select_from(tables.NormalizedLogLine)
-            .where(tables.NormalizedLogLine.analysis_run_id == run.id)
-        )
-        artifact_count = session.scalar(
-            select(func.count())
-            .select_from(tables.AnalysisStepArtifact)
-            .where(tables.AnalysisStepArtifact.analysis_run_id == run.id)
-        )
-        assert raw_count and raw_count > 0
-        assert normalized_count and normalized_count > 0
-        assert artifact_count == len(PIPELINE_STEPS) + 1
-        session.execute(delete(tables.AuditLog))
-        session.add_all(
-            [
-                tables.AuditLog(
-                    id="00000000-0000-0000-0000-000000000001",
-                    action="old.audit",
-                    metadata_json={},
-                    created_at=old,
-                ),
-                tables.AuditLog(
-                    id="00000000-0000-0000-0000-000000000002",
-                    action="recent.audit",
-                    metadata_json={},
-                    created_at=recent,
-                ),
-            ]
-        )
-        run_row = session.get(tables.AnalysisRun, run.id)
-        assert run_row is not None
-        run_row.started_at = old
-        run_row.completed_at = old
-        export_row = session.get(tables.Export, export_artifact.export_id)
-        assert export_row is not None
-        export_row.created_at = old
-        for raw_line in session.scalars(
-            select(tables.RawLogLine).where(tables.RawLogLine.analysis_run_id == run.id)
-        ):
-            raw_line.created_at = old
-        for artifact in session.scalars(
-            select(tables.AnalysisStepArtifact).where(
-                tables.AnalysisStepArtifact.analysis_run_id == run.id
-            )
-        ):
-            artifact.created_at = old
-        session.commit()
+        manifest = session.get(tables.AnalysisRun, run.id).result_json
+    assert [chunk["record_count"] for chunk in manifest["logs"]["chunks"]] == [2, 2, 1]
 
-    retention = store.run_retention(now=now)
+    original_read = sqlalchemy_store.read_log_chunk
+    chunk_reads = 0
 
-    assert retention.audit_logs_deleted == 1
-    assert retention.raw_log_lines_scrubbed == raw_count
-    assert retention.exports_deleted == 1
-    assert retention.analysis_results_cleared == 1
-    assert retention.step_artifacts_deleted == artifact_count
-    assert store.get_export(export_artifact.export_id) is None
-    assert store.get_analysis_result(case.id, run.id) is None
-    assert store.list_analysis_step_artifacts(case_id=case.id, analysis_run_id=run.id) == []
+    def counting_read(entry, *, settings):  # noqa: ANN001
+        nonlocal chunk_reads
+        chunk_reads += 1
+        return original_read(entry, settings=settings)
 
-    with store.session_factory() as session:
-        remaining_audits = session.scalars(select(tables.AuditLog.action)).all()
-        assert remaining_audits == ["recent.audit"]
-        raw_values = session.scalars(
-            select(tables.RawLogLine.raw_text).where(tables.RawLogLine.analysis_run_id == run.id)
-        ).all()
-        raw_redacted_values = session.scalars(
-            select(tables.RawLogLine.raw_text_redacted).where(
-                tables.RawLogLine.analysis_run_id == run.id
-            )
-        ).all()
-        assert set(raw_values) == {RAW_LOG_RETAINED_MARKER}
-        assert set(raw_redacted_values) == {RAW_LOG_RETAINED_MARKER}
-        assert (
-            session.scalar(
-                select(func.count())
-                .select_from(tables.NormalizedLogLine)
-                .where(tables.NormalizedLogLine.analysis_run_id == run.id)
-            )
-            == normalized_count
-        )
+    monkeypatch.setattr(sqlalchemy_store, "read_log_chunk", counting_read)
+    page = store.get_analysis_logs_page(case.id, run.id, offset=2, limit=2)
 
-    summary = store.get_report_summary(case_id=case.id, run_id=run.id)
-    logs = store.get_report_logs(case_id=case.id, run_id=run.id, limit=5)
-    causal_summary = store.get_report_causal_summary(case_id=case.id, run_id=run.id)
-    causal_graph = store.get_report_causal_graph(case_id=case.id, run_id=run.id)
-    assert summary is not None and summary["items"]
-    assert logs is not None and logs["items"]
-    assert causal_summary is not None and causal_summary["evidence_refs"]
-    assert causal_graph is not None and causal_graph["nodes"]
+    assert page is not None
+    assert page.total == 5
+    assert [row.line_number for row in page.rows] == [3, 4]
+    assert chunk_reads == 1
+
+    filtered = store.get_analysis_logs_page(
+        case.id,
+        run.id,
+        q="request 4",
+        limit=2,
+    )
+    assert filtered is not None
+    assert filtered.total == 1
+    assert [row.line_number for row in filtered.rows] == [5]
+    assert filtered.facets == {
+        "service": {"unknown": 1},
+        "golden_signal": {"error": 1},
+        "fault_category": {},
+    }
 
 
-def test_create_store_auto_uses_sqlalchemy_when_database_url_is_set(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'logan.db'}"
-    store = create_store(Settings(database_url=database_url, store_backend="auto"))
-    assert isinstance(store, SQLAlchemyStore)
+def test_interrupted_runs_are_failed_on_startup_reconciliation(tmp_path) -> None:
+    store, user, case, _ = _analysis_fixture(tmp_path)
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+
+    assert store.fail_interrupted_analysis_runs() == 1
+
+    failed = store.get_analysis_run(run.id)
+    assert failed is not None
+    assert failed.status == "failed"
+    assert failed.error_message == "analysis was interrupted by an API restart"
+    assert store.get_case(case.id).status == "failed"
 
 
-def test_create_store_auto_defaults_to_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)
+@pytest.mark.asyncio
+async def test_filtered_logs_via_search_index_match_brute_force(tmp_path) -> None:
+    database_path = str(tmp_path / "logan.db")
+    settings = Settings(
+        database_path=database_path,
+        local_object_store_dir=str(tmp_path / "objects"),
+    )
+    store = SQLAlchemyStore(
+        app_settings=settings,
+        database_path=database_path,
+        create_schema=True,
+    )
+    user = store.register_user(email="o@example.com", username="o", full_name=None)
+    case = store.create_case(user_id=user.id, data={"title": "Incident"})
+    path = tmp_path / "mixed.log"
+    lines = [
+        "2026-01-01T00:00:00Z ERROR payment-service connection refused id=alpha",
+        "2026-01-01T00:01:00Z ERROR payment-service timeout while calling ledger",
+        "2026-01-01T00:02:00Z WARN auth-service token cache miss for alpha",
+        "2026-01-01T00:03:00Z ERROR payment-service connection refused id=beta",
+        "no timestamp on this line at all",
+    ]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    run = store.create_analysis_run(case_id=case.id, user_id=user.id)
+    await store.run_analysis(run_id=run.id, user_id=user.id, file_paths=[str(path)])
 
-    store = create_store(Settings(store_backend="auto"))
+    manifest_index = sqlalchemy_store.load_search_index(
+        store._get_analysis_result_payload(case.id, run.id),
+        settings=settings,
+    )
+    assert manifest_index is not None, "new manifests must carry a search index"
 
-    assert isinstance(store, SQLAlchemyStore)
-    assert store.database_url == "sqlite:///.logan/logan.db"
-    assert (tmp_path / ".logan" / "logan.db").exists()
+    # The trailing headerless line merges into the previous entry as a
+    # continuation, so five physical lines produce four entries.
+    everything = store.get_analysis_logs_page(case.id, run.id, limit=100)
+    assert everything.total == 4
+    assert everything.rows[-1].line_numbers == [4, 5]
+
+    searched = store.get_analysis_logs_page(case.id, run.id, q="connection refused")
+    assert searched.total == 2
+    assert all("connection refused" in row.redacted_message for row in searched.rows)
+    assert searched.facets["service"] == {"payment-service": 2}
+
+    windowed = store.get_analysis_logs_page(
+        case.id,
+        run.id,
+        window_start=datetime(2026, 1, 1, 0, 1, tzinfo=UTC),
+        window_end=datetime(2026, 1, 1, 0, 2, tzinfo=UTC),
+    )
+    assert windowed.total == 2
+    assert {row.line_number for row in windowed.rows} == {2, 3}
+
+    by_service = store.get_analysis_logs_page(case.id, run.id, service="auth-service")
+    assert by_service.total == 1
+    assert by_service.rows[0].line_number == 3
+
+    template_id = searched.rows[0].template_id
+    assert template_id is not None
+    by_template = store.get_analysis_logs_page(case.id, run.id, template_id=template_id)
+    assert by_template.total == 2
+    assert {row.line_number for row in by_template.rows} == {1, 4}
+
+    combined = store.get_analysis_logs_page(
+        case.id,
+        run.id,
+        q="connection refused",
+        window_start=datetime(2026, 1, 1, 0, 2, 30, tzinfo=UTC),
+    )
+    assert combined.total == 1
+    assert combined.rows[0].line_number == 4
+
+    missing = store.get_analysis_logs_page(case.id, run.id, q="zzz-not-there")
+    assert missing.total == 0
+    assert missing.rows == []

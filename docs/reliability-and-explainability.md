@@ -1,204 +1,134 @@
-# Reliability and Explainability
+# Reliability and explainability
 
-LogAn uses an LLM, but its trustworthiness does not rest on trusting model output. The platform
-is built so that **deterministic algorithms decide the facts and the model only classifies and
-narrates**, every user-facing claim is **traceable to a specific redacted log line**, quality is
-**measured by a threshold-gated benchmark**, and every model call has a **deterministic fallback**.
-This document explains how to state that reliability story and how the explainability is realized in
-code, with pointers for auditors and reviewers.
+LogAn separates deterministic log processing from optional model enrichment. The system is
+designed to preserve evidence identity, minimize model input, validate model output, and present
+causal results as candidates that require operator confirmation.
 
-For where these steps sit in the flow, see [`life-of-a-log-line.md`](life-of-a-log-line.md); for the
-redaction guarantees see [`security.md`](security.md); for the benchmark runbook see
-[`operations.md`](operations.md).
+## Deterministic foundation
 
-## Design stance: the model explains, the algorithms decide
+The following steps do not call a model:
 
-The analysis pipeline (`apps/workers/logan_workers/pipeline.py`) has 11 steps. Only **two** call the
-model gateway; the rest are deterministic:
+- file and archive ingestion
+- multiline merging
+- parsing and redaction
+- template extraction
+- representative sampling
+- annotation broadcasting
+- time-window aggregation
+- causal association scoring and candidate ranking
 
-| # | Step | Model? | Produces |
-| --- | --- | --- | --- |
-| 1 | `ingest_paths` | no | raw lines with hash evidence and line refs |
-| 2 | `merge_entries` | no | multi-line stack traces merged, original refs retained |
-| 3 | `preprocess_redact` | no | redacted / normalized message (before any model payload) |
-| 4 | `drain_templating` | no | Drain-style templates over redacted text |
-| 5 | `representative_sampling` | no | a small sample set per template |
-| 6 | `ai_platform_annotation` | **yes** | per-template golden signal / fault categories / entities |
-| 7 | `broadcast_annotations` | no | template labels copied to every line in the group |
-| 8 | `temporal_aggregation` | no | fixed time-window counts |
-| 9 | `causal_graph` | no | candidate edges + confidence + root-cause ranking |
-| 10 | `causal_summary` | **yes** | evidence-first RCA narrative |
-| 11 | `export_artifacts` | no | Markdown / HTML / JSON exports |
+The same input files and run context produce stable templates and deterministic causal scoring.
+Identifiers scoped to a run remain consistent inside its stored result.
 
-A third model touchpoint, case chat (`POST /api/chat/stream`, `apps/api/app/api/chat.py`), answers
-questions over an already-computed, redacted analysis result and never re-reads raw logs.
+## Model boundary
 
-Because causal direction, edge confidence, and root-cause rank are computed by step 9
-(`infer_causal_graph` in `apps/workers/logan_workers/activities/causal.py`) and not by the model, a
-wrong or hallucinated model response cannot invent a causal link or inflate a confidence score.
+AI Platform is used only when `LOGAN_LLM_PROVIDER=ai_platform`:
 
-## Reliability
+1. Template annotation classifies bounded redacted samples.
+2. Causal-summary generation turns a bounded evidence packet into cautious prose.
+3. Analysis chat answers from the completed redacted result.
 
-### 1. The model's role is confined
+Raw uploaded files are not sent as model input. Template annotation is limited to 64 templates,
+three samples per template, and 1,200 characters per sample. Chat receives a compact summary,
+selected annotated rows, and up to five evidence references.
 
-Steps 6 and 10 are the only places the model shapes output. Annotation is a bounded classification
-task (choose exactly one of seven golden signals). Summary is a rewriting task over a fixed evidence
-packet. Neither step is allowed to introduce facts that are not already in the structured evidence.
+`LOGAN_LLM_PROVIDER=none` performs no model calls. It skips annotation, uses the structured summary,
+and does not expose analysis chat.
 
-### 2. Quality is measured by a threshold-gated benchmark
+## Redaction boundary
 
-`apps/workers/logan_workers/evaluation/` runs the whole pipeline against a hand-labeled incident
-(`benchmarks/logan/checkout_incident/labels.json`) and scores it with standard metrics. Each metric
-has a threshold; the run reports `passed` only if **all** thresholds are met, and the CLI exits
-non-zero otherwise — a release blocker per [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
+Uploaded files remain unchanged in the protected local data directory. During analysis, sensitive
+patterns are masked before template extraction, representative sampling, report display, or model
+input.
 
-| Metric | Measures | Threshold |
-| --- | --- | --- |
-| `golden_signal_macro_f1` | annotation golden-signal accuracy | ≥ 0.95 |
-| `fault_category_micro_f1` / `fault_category_macro_f1` | fault-category multi-label accuracy | ≥ 0.95 |
-| `entity_precision` / `entity_recall` / `entity_f1` | entity extraction accuracy | ≥ 0.95 |
-| `root_cause_hit_at_3` | true root cause is in the top-3 candidates | = 1.0 |
-| `useful_causal_edge_recall` | key causal edges are recovered | ≥ 0.95 |
-| `summary_rubric_score` | summary covers required framing terms | ≥ 0.95 |
-| `review_load_reduction` | fewer items to review vs raw lines | ≥ 0.25 |
+The redactor covers common secret assignments, URL query secrets, JWTs, bearer tokens, tenant and
+customer identifiers, email addresses, IP addresses, UUIDs, and card-like numbers.
 
-Metric math lives in `evaluation/metrics.py` and the scoring in `evaluation/evaluator.py`. Reports
-are intentionally compact and redaction-safe (see [`operations.md`](operations.md)). Run it with:
+Redaction is rule based. It reduces exposure but cannot guarantee detection of every
+application-specific secret format. Access to the upload directory must therefore remain
+restricted.
 
-```bash
-python -m logan_workers.evaluation.run --benchmark benchmarks/logan/checkout_incident \
-  --out .logan/evaluation/report.json --markdown .logan/evaluation/report.md
+## Output validation
+
+Template annotations are validated with the `TemplateAnnotationResult` schema. A response that
+does not satisfy the expected classification fields becomes an `unknown` annotation with zero
+confidence.
+
+Generated causal summaries are accepted only when:
+
+- required narrative, claims, next actions, uncertainty, and confidence fields validate;
+- every claim cites an evidence id present in the supplied packet;
+- confidence values remain between zero and one.
+
+If summary generation or validation fails, LogAn renders a structured summary from the evidence
+packet. Annotation transport failures fail the run instead of silently creating classifications.
+
+## Evidence-first results
+
+Normalized lines retain their file, line, timestamp, and run identity. Raw entries and ingested
+lines carry SHA-256 hashes while they pass through preprocessing, then are released instead of
+being duplicated in the final result. Templates, samples, causal nodes, summary claims, and next
+actions carry or derive from the durable normalized identities.
+
+The report views expose this chain:
+
+```text
+summary or causal candidate
+  -> evidence reference
+  -> normalized redacted log
+  -> uploaded file and line number
 ```
 
-> **Scope caveat.** The benchmark currently runs the pipeline with the deterministic
-> `MockAIPlatformAnnotationGateway`, so it validates the pipeline, the scoring rubric, and the
-> caution/evidence invariants reproducibly — not `gpt-5.4`'s live accuracy. To measure the production
-> model, run the same harness against the `ai_platform` gateway and expand the labeled corpus beyond
-> the single checkout incident. `useful_causal_edge_precision` is reported but intentionally not
-> gated.
+Evidence references explain where a claim came from; they do not by themselves prove that the
+claim is correct.
 
-### 3. Deterministic and reproducible
+## Causal interpretation
 
-The mock provider (`MockAIPlatformAnnotationGateway`, `apps/workers/logan_workers/activities/inference.py`)
-is pure keyword/regex logic — no randomness, no network, no time dependence — so identical input
-yields identical output. Unit tests inject fakes via
-`create_app(store, model_gateway=..., s3_client_factory=...)` and never touch the network. Repeatable
-output is what makes regressions detectable.
+The causal graph uses temporal association rather than a model-generated graph. Candidate edges
+combine:
 
-### 4. Layered validation keeps bad output away from users
+- ordering of source and target events;
+- the proportion of target events supported by a preceding source event;
+- observed lag;
+- shared service or entity context;
+- source severity.
 
-- **Schema validation.** Annotation output is validated with `TemplateAnnotationResult.model_validate`;
-  on failure it falls back to a safe `golden_signal="unknown", confidence=0.0` annotation
-  (`activities/inference.py`).
-- **Evidence validation.** In `activities/summary.py`, every summary claim must cite an evidence
-  `log_id` that was actually provided in the packet; a claim that cites nothing raises and the run
-  falls back. This structurally blocks fabricated citations.
+Every edge is marked `candidate_cause` and `needs_validation`. Operators should confirm candidates
+with metrics, traces, deployment history, dependency health, and domain knowledge.
 
-### 5. Deterministic fallback: the system works without the model
+## Calibrated language
 
-If the gateway is unavailable or the model output fails schema/evidence validation,
-`_fallback_summary` (`activities/summary.py`) renders a cautious RCA **from the structured evidence
-alone**, tagged `details.source="fallback"` (vs `"llm"`). The LLM augments the system; it is not a
-hard dependency.
+Summary claims are required to use cautious terms such as `candidate`, `likely`,
+`evidence suggests`, or `needs validation`. Claims without that framing are automatically
+prefixed as candidate findings.
 
-### 6. Calibrated caution, enforced in code
+The output includes explicit uncertainty, a confidence value, evidence references, and suggested
+validation actions. A customer update is separated from the internal diagnostic narrative.
 
-Summaries never assert a definitive root cause. `needs_validation` is forced to `True`, and a claim
-lacking cautious wording (`candidate`, `likely`, `evidence suggests`, `needs validation`) is
-automatically prefixed with `Candidate finding:` (`CausalSummaryClaim` validator in
-`activities/summary.py`). Causal edges carry `edge_type="candidate_cause"` (`models.py`). Reliability
-here means *not overclaiming*, not *always answering*.
+## Access and storage controls
 
-### 7. Human-in-the-loop
+- Production authentication is SSO-only; development can use the local default user.
+- Each case is visible only to its creator.
+- Case, upload, run, report, and chat routes enforce ownership.
+- Browser session tokens are random; only their SHA-256 hashes are stored.
+- SQLite foreign-key checks are enabled.
+- Errors are sanitized before being persisted or returned as run failures.
+- AI Platform credentials remain process configuration and are not stored in analysis results.
 
-Causal summaries are editable by owners/editors via
-`PATCH /api/cases/{case_id}/analysis-runs/{run_id}/causal-summary`, and users submit ratings through
-`POST /api/cases/{case_id}/feedback` (`apps/api/app/api/cases.py`). Model output is continuously
-checked and corrected by operators.
+## Operational limits
 
-### 8. Data governance reduces the risk surface
+The current deployment shape intentionally favors a single-instance system:
 
-Redaction runs at step 3, before any model payload exists; the model only ever sees redacted
-representative samples, never full raw logs; and `job_events` / `step_manifest` / metrics / audit
-metadata are count-only. See [`security.md`](security.md) and the redaction red lines in
-[`../CONTRIBUTING.md`](../CONTRIBUTING.md). Less sensitive data reaching the model is itself a
-reliability and privacy property.
+- Analysis tasks run inside one API process and are not resumed after an abrupt process failure.
+- SQLite and local file storage require the API database and upload directory to remain together.
+- An API instance does not share in-memory task state with another instance.
+- Result manifests reference local compressed artifacts, so the SQLite database and
+  `LOGAN_LOCAL_OBJECT_STORE_DIR` must be backed up and restored together.
+- Filtered or searched Logs requests scan all chunks and can be slower than unfiltered pagination
+  for very large runs, although the scan keeps memory bounded.
+- Model annotation availability affects enriched labels and therefore the causal graph.
+- Rule-based parsing, templating, redaction, and temporal association have domain-specific limits.
+- The automated tests verify contracts and deterministic fixtures, not production incident
+  diagnosis accuracy across every log format.
 
-## Explainability
-
-The organizing principle: **every output can be traced back through evidence → method → numbers to
-the exact log line that produced it.**
-
-### 1. Evidence-first: every claim points at a log line
-
-Claims and next actions carry `evidence_refs`, and an `EvidenceRef` (`models.py`) is a precise
-pointer: `case_id`, `analysis_run_id`, `template_id`, `log_id`, `file_path`, `line_number`,
-`timestamp`. The summary prompt (`apps/workers/logan_workers/prompts/causal_summary_prompt.md`)
-requires that *every causal statement refer to evidence_refs*, and the parser rejects claims that do
-not. The workbench renders these as clickable evidence chips that jump to the referenced line.
-
-### 2. White-box causal evidence
-
-Causality is explainable because it is algorithmic, not a black box. A `CausalEdge` (`models.py`)
-exposes `method`, `confidence`, `p_value_adj`, `lift`, `temporal_precedence_score`,
-`correlation_score`, `lag_seconds`, `support_windows`, an `evidence` dict, and `needs_validation`.
-Default methods are `temporal_precedence`, `lagged_correlation`, `lift`, `pgem`, and `granger_linear`,
-with PageRank centrality for ranking; `granger_linear` uses a deterministic pure-Python lagged OLS and
-Benjamini-Hochberg FDR-adjusted p-values (see [`operations.md`](operations.md)). "Why A → B" is
-answerable with concrete statistics.
-
-### 3. Per-annotation rationale, confidence, and provenance
-
-A `TemplateAnnotation` (`models.py`) carries a human-readable `rationale` and a `confidence` alongside
-`golden_signal`, `fault_categories`, `entities`, and `severity_score`, plus full provenance:
-`model_provider`, `model_name`, `prompt_version`, a stable `annotation_id` (uuid5), and the
-`raw_model_response`. Each label has both a "why" and an auditable record of how it was produced.
-
-### 4. Explicit uncertainty
-
-Confidence scores (0–1) appear on annotations, edges, candidates, and summaries; summaries include an
-`uncertainties` list and per-claim `needs_validation`. The system states what it is unsure about
-rather than hiding it.
-
-### 5. Traceable pipeline and prompt versioning
-
-Every step emits `started`/`completed`/`failed` events and a `step_manifest`; benchmark reports include
-per-label match/miss detail (`missing_fault_categories`, `extra_fault_categories`, `hit_rank`). Prompts
-are versioned (`annotation_v1`, `causal_summary_v1`) and the raw model response is stored, so "what the
-model was asked and answered" is reproducible.
-
-### 6. Audience-appropriate surfaces
-
-The summary produces both `internal_rca_markdown` (full evidence for engineers) and
-`customer_update_markdown` (cautious, customer-safe). The workbench presents five linked views —
-Summary, Temporal, Logs, Causal Graph, Causal Summary — so the explanation is surfaced, not buried.
-
-## Limitations and hardening roadmap
-
-Stated plainly, because acknowledging them strengthens the reliability claim:
-
-1. **Benchmark uses the mock gateway.** It validates scaffolding and invariants, not the production
-   model's accuracy. Run the harness against `ai_platform` to measure `gpt-5.4`.
-2. **Narrow labeled set.** One synthetic checkout incident with six templates. Broaden the corpus
-   across fault types and service topologies before claiming generalized accuracy.
-3. **`summary_rubric_score` is term coverage, not semantic correctness.** Consider an LLM-as-judge or
-   human review pass for semantic quality.
-4. **Single attempt, no retry.** A transient model error goes straight to the deterministic fallback;
-   add backoff/retry if the SLA requires it.
-
-## Where the guarantees live (quick reference)
-
-| Guarantee | Code |
-| --- | --- |
-| LLM confined to 2 of 11 steps | `apps/workers/logan_workers/pipeline.py` |
-| Causal facts are algorithmic | `apps/workers/logan_workers/activities/causal.py`, `algorithms/causal_*.py`, `algorithms/pagerank.py` |
-| Gated benchmark + metrics | `apps/workers/logan_workers/evaluation/`, `benchmarks/logan/checkout_incident/labels.json` |
-| Deterministic mock provider | `apps/workers/logan_workers/activities/inference.py` |
-| Annotation schema fallback | `apps/workers/logan_workers/activities/inference.py` |
-| Summary evidence validation + fallback | `apps/workers/logan_workers/activities/summary.py` |
-| Enforced cautious language | `apps/workers/logan_workers/activities/summary.py`, `prompts/causal_summary_prompt.md` |
-| Evidence pointers | `EvidenceRef` in `apps/workers/logan_workers/models.py` |
-| White-box causal evidence | `CausalEdge` in `apps/workers/logan_workers/models.py` |
-| Annotation provenance | `TemplateAnnotation` in `apps/workers/logan_workers/models.py` |
-| Human-in-the-loop | `apps/api/app/api/cases.py` (feedback, causal-summary edit) |
-| Redaction before model calls | `apps/workers/logan_workers/activities/preprocessing.py`, `algorithms/redactors.py` |
+These limits should be considered when interpreting results or planning a larger deployment.
