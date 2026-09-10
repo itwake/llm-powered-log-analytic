@@ -3,6 +3,7 @@
 import Stack from "@mui/material/Stack";
 import { useParams } from "next/navigation";
 import type { ReactNode } from "react";
+import { AnalysisRunVersionBar } from "@/components/AnalysisRunVersionBar";
 import { CaseAnalysisNav } from "@/components/CaseAnalysisNav";
 
 export default function AnalysisRunLayout({ children }: { children: ReactNode }) {
@@ -11,6 +12,7 @@ export default function AnalysisRunLayout({ children }: { children: ReactNode })
   return (
     <Stack spacing={2.5}>
       <CaseAnalysisNav caseId={caseId} runId={runId} />
+      <AnalysisRunVersionBar caseId={caseId} runId={runId} />
       {children}
     </Stack>
   );

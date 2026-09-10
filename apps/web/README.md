@@ -104,6 +104,10 @@ under one `Shell` layout without adding `/app` to the URL.
 | `runs/[runId]/causal-graph` | `/cases/{caseId}/runs/{runId}/causal-graph` | Causal Graph |
 | `runs/[runId]/causal-summary` | `/cases/{caseId}/runs/{runId}/causal-summary` | Causal Summary |
 
+The canonical report URLs are case-scoped. Top-level shortcuts such as `/runs/{runId}/summary`,
+`/runs/{runId}/temporal`, `/runs/{runId}/timeline`, and `/runs/{runId}/logs` resolve the run's
+case for the signed-in user and redirect to the canonical `/cases/{caseId}/runs/{runId}/...` route.
+
 The public login page sits outside the route group. Authenticated pages call `/api/auth/me` when
 the `Shell` mounts. A missing or expired session redirects to `/login` with the current path.
 
@@ -171,7 +175,7 @@ The report navigation keeps every page scoped to a case id and run id:
 
 - Data Summary groups templates and supports attention/all scopes.
 - Temporal View uses ECharts and links selected windows to logs.
-- Tabular Logs supports query, service, window, and pagination filters.
+- Tabular Logs supports query, window, pagination, and loaded-row column filters.
 - Causal Graph renders ranked candidate relationships with Cytoscape.js.
 - Causal Summary renders evidence-bound Markdown and validation actions.
 

@@ -100,6 +100,7 @@ class SummaryEvidencePacket(BaseModel):
 
 class CausalSummaryClaim(BaseModel):
     claim: str = Field(min_length=1, max_length=1200)
+    reason: str = Field(min_length=1, max_length=1200)
     evidence_refs: list[str] = Field(min_length=1)
     confidence: float = Field(ge=0, le=1)
     needs_validation: bool = True
@@ -512,6 +513,35 @@ def _claim_ref_ids(refs: list[EvidenceRef]) -> list[str]:
     return [ref.log_id for ref in refs[:4]]
 
 
+def _fallback_claim_reason(
+    *,
+    packet: SummaryEvidencePacket,
+    confidence: float,
+) -> str:
+    source_description = _signal_descriptor(_primary_source_signal(packet))
+    downstream_description = _signal_descriptor(_primary_downstream_signal(packet))
+    if packet.causal_edges:
+        edge = packet.causal_edges[0]
+        return (
+            f"This claim was selected because causal analysis ranked {source_description} as an "
+            f"early candidate source and linked it to downstream evidence for {downstream_description}. "
+            f"The leading edge scored {edge.confidence:.2f}; the claim confidence is {confidence:.2f} "
+            "from the strongest supported causal edges, so it remains a validation target rather than proof."
+        )
+    if packet.root_cause_candidates:
+        candidate = packet.root_cause_candidates[0]
+        return (
+            f"This claim was selected because {source_description} was the top ranked root-cause "
+            f"candidate with score {candidate.confidence:.2f}. No supported downstream causal edge "
+            "met the threshold, so the claim should be treated as a prioritized investigation lead."
+        )
+    return (
+        "This claim was selected from the highest-priority structured evidence available for the run. "
+        "There was not enough supported causal-chain evidence to explain a stronger upstream link, "
+        "so additional telemetry is needed before relying on it."
+    )
+
+
 def _fallback_next_actions(
     *,
     packet: SummaryEvidencePacket,
@@ -665,6 +695,7 @@ def _fallback_summary(
                     f"Candidate source signal {source_description} may be an early contributing "
                     "signal and needs validation."
                 ),
+                "reason": _fallback_claim_reason(packet=packet, confidence=confidence),
                 "evidence_refs": claim_refs,
                 "confidence": confidence,
                 "needs_validation": True,
@@ -694,7 +725,7 @@ def _load_prompt() -> str:
         return (
             "Generate a cautious incident diagnosis from structured evidence only. "
             "Return valid JSON with internal RCA markdown, customer update markdown, "
-            "evidence claims, next validation steps, uncertainties, and confidence."
+            "evidence claims with reasons, next validation steps, uncertainties, and confidence."
         )
 
 
@@ -779,6 +810,7 @@ def parse_causal_summary_model_output(
         sanitized_claims.append(
             {
                 "claim": _sanitize_output_text(claim.claim),
+                "reason": _sanitize_output_text(claim.reason),
                 "evidence_refs": valid_refs,
                 "confidence": round(claim.confidence, 4),
                 "needs_validation": True,

@@ -106,6 +106,8 @@ async def test_pipeline_without_llm_produces_deterministic_reports() -> None:
     }
     assert result.causal_graph.nodes
     assert result.causal_graph.root_cause_candidates
+    assert result.causal_summary.evidence_claims
+    assert all(claim.get("reason") for claim in result.causal_summary.evidence_claims)
     assert result.progress["current_step"] == "completed"
 
 
@@ -122,6 +124,8 @@ async def test_pipeline_uses_one_gateway_for_annotation_and_summary() -> None:
     assert result.annotations
     assert result.causal_graph.nodes
     assert result.causal_summary.evidence_refs
+    assert result.causal_summary.details["source"] == "llm"
+    assert all(claim.get("reason") for claim in result.causal_summary.evidence_claims)
     assert result.progress["current_step"] == "completed"
     assert gateway.calls
 

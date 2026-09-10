@@ -3,20 +3,15 @@
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, Button, Card, EmptyState } from "@/components/ui";
+import { LogTable } from "@/components/LogTable";
+import { Button, Card, EmptyState } from "@/components/ui";
 import { reportsApi } from "@/lib/api";
 import type { LogsResponse } from "@/lib/api";
-import { apiErrorMessage, formatDateTime } from "@/lib/format";
+import { apiErrorMessage } from "@/lib/format";
 
 export default function LogsPage() {
   const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
@@ -26,18 +21,16 @@ export default function LogsPage() {
   const windowEnd = searchParams.get("window_end") || undefined;
   const [templateId, setTemplateId] = useState(searchParams.get("template_id") || "");
   const [query, setQuery] = useState(initialQuery);
-  const [service, setService] = useState("");
   const [data, setData] = useState<LogsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
 
-  const load = useCallback(async (nextQuery: string, nextService: string, nextTemplateId?: string) => {
+  const load = useCallback(async (nextQuery: string, nextTemplateId?: string) => {
     const currentRequest = ++requestId.current;
     setError(null);
     try {
       const response = await reportsApi.logs(caseId, runId, {
         q: nextQuery || undefined,
-        service: nextService || undefined,
         template_id: nextTemplateId || undefined,
         limit: 500,
         window_start: windowStart,
@@ -54,7 +47,7 @@ export default function LogsPage() {
   }, [caseId, runId, windowEnd, windowStart]);
 
   useEffect(() => {
-    void load(initialQuery, "", templateId);
+    void load(initialQuery, templateId);
     return () => {
       requestId.current += 1;
     };
@@ -69,15 +62,14 @@ export default function LogsPage() {
         <Typography color="text.secondary">Search the redacted log lines in this run.</Typography>
       </Box>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-        <TextField fullWidth label="Search" size="small" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void load(query, service, templateId); }} />
-        <TextField label="Service" size="small" value={service} onChange={(event) => setService(event.target.value)} />
-        <Button onClick={() => void load(query, service, templateId)}>Search</Button>
+        <TextField fullWidth label="Search" size="small" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void load(query, templateId); }} />
+        <Button onClick={() => void load(query, templateId)}>Search</Button>
       </Stack>
       {templateId && (
         <Alert
           onClose={() => {
             setTemplateId("");
-            void load(query, service, "");
+            void load(query, "");
           }}
           severity="info"
         >
@@ -88,30 +80,7 @@ export default function LogsPage() {
       {!data && !error && <Card><EmptyState title="Loading logs" /></Card>}
       {data && (
         <Card>
-          {data.items.length === 0 ? <EmptyState title="No matching logs" /> : (
-            <TableContainer>
-              <Table size="small">
-                <TableHead><TableRow>
-                  <TableCell>Time</TableCell>
-                  <TableCell>Service</TableCell>
-                  <TableCell>Signal</TableCell>
-                  <TableCell>Message</TableCell>
-                  <TableCell>Source</TableCell>
-                </TableRow></TableHead>
-                <TableBody>
-                  {data.items.map((item) => (
-                    <TableRow key={item.log_id} hover>
-                      <TableCell sx={{ whiteSpace: "nowrap" }}>{formatDateTime(item.timestamp)}</TableCell>
-                      <TableCell>{item.service || "unknown"}</TableCell>
-                      <TableCell><Badge>{item.golden_signal}</Badge></TableCell>
-                      <TableCell sx={{ maxWidth: 640, overflowWrap: "anywhere" }}>{item.message}</TableCell>
-                      <TableCell sx={{ whiteSpace: "nowrap" }}>{item.file_path}:{item.line_number}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
+          <LogTable items={data.items} />
         </Card>
       )}
     </Stack>

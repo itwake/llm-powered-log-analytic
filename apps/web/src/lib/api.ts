@@ -305,12 +305,20 @@ export interface CausalGraphResponse {
   root_cause_candidates: RootCauseCandidate[];
 }
 
+export interface CausalSummaryClaim {
+  claim: string;
+  reason?: string;
+  evidence_refs: string[];
+  confidence: number;
+  needs_validation: boolean;
+}
+
 export interface CausalSummaryResponse {
   summary_markdown: string;
   customer_update_markdown: string;
   next_actions: Record<string, unknown>[];
   evidence_refs: EvidenceRef[];
-  evidence_claims?: Record<string, unknown>[];
+  evidence_claims?: CausalSummaryClaim[];
   uncertainties?: string[];
   details?: Record<string, unknown>;
   confidence: number;

@@ -234,6 +234,9 @@ async def test_case_upload_analysis_and_reports(
 
         assert all(response.status_code == 200 for response in reports.values())
         assert reports["logs"].json()["total"] == 1
+        claims = reports["rca"].json()["evidence_claims"]
+        assert claims
+        assert all(claim.get("reason") for claim in claims)
         assert decode_calls == 0
         assert run.json()["progress"]["steps"]
 

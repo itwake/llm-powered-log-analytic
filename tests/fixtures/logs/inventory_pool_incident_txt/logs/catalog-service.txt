@@ -1,0 +1,10 @@
+2026-08-18T10:11:49.204Z level=INFO service=catalog-service env=local version=5.3.9 event=cache_refresh status=success product_count=1240 duration_ms=311 msg="catalog cache refreshed"
+2026-08-18T10:13:18.003Z level=INFO service=catalog-service env=local version=5.4.0 event=deploy_complete image=catalog-service:5.4.0 change_id=chg-1287 msg="catalog service deployment completed"
+2026-08-18T10:13:19.644Z level=INFO service=catalog-service env=local version=5.4.0 event=feature_flag_seen flag=stock-reconcile-v2 enabled=true msg="new stock reconcile publisher enabled"
+2026-08-18T10:13:39.507Z level=WARN service=catalog-service env=local version=5.4.0 event=stock_reconcile_publish batch_id=recon-441 sku=sku-keyboard-01 duplicate_key=missing published_count=32 msg="published repeated stock reconcile events without dedupe key"
+2026-08-18T10:13:41.772Z level=WARN service=catalog-service env=local version=5.4.0 event=stock_reconcile_publish batch_id=recon-441 sku=sku-monitor-04 duplicate_key=missing published_count=38 msg="published repeated stock reconcile events without dedupe key"
+2026-08-18T10:14:07.225Z level=ERROR service=catalog-service env=local version=5.4.0 event=stock_reconcile_backlog batch_id=recon-441 queue_depth=1840 consumer=inventory-service msg="inventory stock reconcile consumer lag increasing"
+2026-08-18T10:14:44.930Z level=WARN service=catalog-service env=local version=5.4.0 event=stock_reconcile_retry batch_id=recon-441 retry_count=5 reason=consumer_timeout target=inventory-service msg="retrying stock reconcile batch after inventory timeout"
+2026-08-18T10:15:34.410Z level=INFO service=catalog-service env=local version=5.4.0 event=feature_flag_seen flag=stock-reconcile-v2 enabled=false msg="stock reconcile publisher disabled"
+2026-08-18T10:16:04.112Z level=INFO service=catalog-service env=local version=5.4.0 event=stock_reconcile_backlog queue_depth=23 consumer=inventory-service msg="inventory stock reconcile backlog draining"
+

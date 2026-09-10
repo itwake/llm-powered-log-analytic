@@ -20,9 +20,10 @@ import { CanvasRenderer } from "echarts/renderers";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LogTable } from "@/components/LogTable";
 import { Button, Card, EmptyState } from "@/components/ui";
 import { reportsApi } from "@/lib/api";
-import type { TemporalResponse, TemporalSeries } from "@/lib/api";
+import type { LogsResponse, TemporalResponse, TemporalSeries } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, formatShortTime } from "@/lib/format";
 import { SIGNAL_COLORS } from "@/lib/signals";
 
@@ -57,6 +58,8 @@ export default function TemporalPage() {
   const [groupBy, setGroupBy] = useState<TemporalGroup>("golden_signal");
   const [data, setData] = useState<TemporalResponse | null>(null);
   const [selectedWindow, setSelectedWindow] = useState<string | null>(null);
+  const [windowLogs, setWindowLogs] = useState<LogsResponse | null>(null);
+  const [windowLogsError, setWindowLogsError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -99,6 +102,41 @@ export default function TemporalPage() {
       0,
     );
   }, [data, selectedWindow]);
+
+  const selectedWindowEnd = useMemo(() => (
+    selectedWindow ? windowEnd(selectedWindow, data?.window_size_seconds ?? 60) : null
+  ), [data, selectedWindow]);
+
+  useEffect(() => {
+    if (!selectedWindow || !selectedWindowEnd) {
+      setWindowLogs(null);
+      setWindowLogsError(null);
+      return;
+    }
+
+    let active = true;
+    setWindowLogs(null);
+    setWindowLogsError(null);
+    reportsApi.logs(caseId, runId, {
+      limit: 100,
+      window_start: selectedWindow,
+      window_end: selectedWindowEnd,
+    })
+      .then((response) => {
+        if (active) {
+          setWindowLogs(response);
+        }
+      })
+      .catch((caught) => {
+        if (active) {
+          setWindowLogsError(apiErrorMessage(caught));
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [caseId, runId, selectedWindow, selectedWindowEnd]);
 
   const chartOption = useMemo<EChartsCoreOption>(() => ({
     animationDuration: 350,
@@ -204,7 +242,8 @@ export default function TemporalPage() {
   const selectedLogsHref = selectedWindow
     ? `/cases/${caseId}/runs/${runId}/logs?${new URLSearchParams({
         window_start: selectedWindow,
-        window_end: windowEnd(selectedWindow, data?.window_size_seconds ?? 60),
+        window_end: selectedWindowEnd
+          ?? windowEnd(selectedWindow, data?.window_size_seconds ?? 60),
       }).toString()}`
     : `/cases/${caseId}/runs/${runId}/logs`;
 
@@ -283,6 +322,47 @@ export default function TemporalPage() {
                 Open logs
               </Button>
             </Stack>
+          </Stack>
+        </Card>
+      )}
+      {data && selectedWindow && (
+        <Card>
+          <Stack spacing={2}>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1.5}
+              sx={{
+                alignItems: { xs: "flex-start", sm: "center" },
+                justifyContent: "space-between",
+              }}
+            >
+              <Box>
+                <Typography component="h2" sx={{ fontWeight: 850 }} variant="h6">
+                  Logs for selected window
+                </Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {formatDateTime(selectedWindow)} to {formatDateTime(selectedWindowEnd)} ·{" "}
+                  {selectedTotal} matching logs
+                </Typography>
+                {windowLogs && windowLogs.total > windowLogs.items.length && (
+                  <Typography color="text.secondary" variant="caption">
+                    Showing first {windowLogs.items.length} of {windowLogs.total} matching logs.
+                  </Typography>
+                )}
+              </Box>
+              <Button component={Link} href={selectedLogsHref} variant="secondary">
+                Open full logs view
+              </Button>
+            </Stack>
+
+            {windowLogsError && <Alert severity="error">{windowLogsError}</Alert>}
+            {!windowLogs && !windowLogsError && <EmptyState title="Loading selected logs" />}
+            {windowLogs && windowLogs.items.length === 0 && (
+              <EmptyState title="No logs in this window" />
+            )}
+            {windowLogs && windowLogs.items.length > 0 && (
+              <LogTable emptyTitle="No logs in this window" items={windowLogs.items} />
+            )}
           </Stack>
         </Card>
       )}

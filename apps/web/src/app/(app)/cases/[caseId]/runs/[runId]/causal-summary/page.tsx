@@ -6,6 +6,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ConfidenceExplainer, confidenceLabel, formatConfidence } from "@/components/ConfidenceExplainer";
 import { EvidenceChip, EvidenceDetail } from "@/components/Evidence";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { Metric } from "@/components/Shell";
@@ -61,10 +62,18 @@ export default function CausalSummaryPage() {
       {data && (
         <>
           <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" } }}>
-            <Metric label="Confidence" value={`${Math.round(data.confidence * 100)}%`} />
+            <Metric label={`${confidenceLabel(data.confidence)} confidence`} value={formatConfidence(data.confidence)} />
             <Metric label="Evidence" value={String(data.evidence_refs.length)} />
             <Metric label="Next actions" value={String(data.next_actions.length)} />
           </Box>
+
+          <ConfidenceExplainer
+            confidence={data.confidence}
+            details={data.details}
+            evidenceClaims={data.evidence_claims}
+            uncertainties={data.uncertainties}
+            variant="rca"
+          />
 
           <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.35fr) minmax(320px, 0.65fr)" } }}>
             <Stack spacing={2}>
