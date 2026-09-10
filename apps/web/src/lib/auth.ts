@@ -1,6 +1,4 @@
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"
-).replace(/\/$/, "");
+import { API_BASE_URL } from "@/lib/api/http";
 
 export function buildLoginUrl(nextPath = "/cases"): string {
   const safeNextPath = nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/cases";
