@@ -11,6 +11,7 @@ from app.records import (
     sanitize_error_message,
 )
 from app.sqlalchemy_store import SQLAlchemyStore
+from app.schema import upgrade_database
 
 Store = SQLAlchemyStore
 
@@ -24,6 +25,7 @@ def create_ephemeral_store(app_settings: Settings = settings) -> Store:
 
 
 def create_store(app_settings: Settings = settings) -> Store:
+    upgrade_database(app_settings.database_path)
     return Store(app_settings=app_settings, database_path=app_settings.database_path)
 
 
