@@ -298,12 +298,13 @@ class GitHubCopilotModelGateway:
         return payload
 
     def _chat_headers(self, token: str, *, initiator: str) -> dict[str, str]:
+        # No X-GitHub-Api-Version here. That header belongs to the GitHub REST API; the Copilot
+        # completions endpoint rejects the request with "invalid apiVersion" when it is present.
         return {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": COPILOT_ACCEPT_HEADER,
             "Openai-Intent": "conversation-panel",
-            "X-GitHub-Api-Version": "2023-06-01",
             "x-initiator": initiator,
             **copilot_plugin_headers(),
         }

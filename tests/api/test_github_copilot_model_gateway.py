@@ -55,6 +55,8 @@ async def test_exchanges_github_token_once_and_sends_chat_completion() -> None:
         assert request.headers["authorization"] == f"Bearer {COPILOT_TOKEN}"
         assert request.headers["x-initiator"] == "agent"
         assert request.headers["editor-plugin-version"] == "copilot-chat/0.41.0"
+        # The completions endpoint answers "invalid apiVersion" when this REST API header is sent.
+        assert "x-github-api-version" not in request.headers
         assert json.loads(request.content) == {
             "model": "gpt-5.6-terra",
             "messages": [
