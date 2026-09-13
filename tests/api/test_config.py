@@ -93,3 +93,19 @@ def test_github_copilot_client_kwargs_honour_proxy_and_ca_bundle() -> None:
         "trust_env": True,
         "proxy": "http://proxy.example.test:3128",
     }
+
+
+def test_every_catalog_model_id_is_usable() -> None:
+    """A typo in the catalog would make provider creation fail for everyone."""
+    from app.llm_catalog import (
+        PROVIDER_DEFAULT_MODEL,
+        PROVIDER_MODELS,
+        is_valid_model_id,
+        normalize_model_list,
+    )
+
+    for provider_type, models in PROVIDER_MODELS.items():
+        assert models, provider_type
+        assert all(is_valid_model_id(model) for model in models), provider_type
+        assert normalize_model_list(list(models)) == list(models), provider_type
+        assert PROVIDER_DEFAULT_MODEL[provider_type] in models

@@ -271,6 +271,13 @@ export function ProviderFormDialog({
               value={state.models}
               onChange={(_, values) => changeModels(values)}
             />
+            {typeCatalog && typeCatalog.models.length > 0 && (
+              <Box sx={{ mt: -1.5 }}>
+                <Button size="sm" variant="ghost" onClick={() => changeModels(typeCatalog.models)}>
+                  Reset to the catalog list ({typeCatalog.models.length} models)
+                </Button>
+              </Box>
+            )}
             <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
               <TextField
                 label="Default model"

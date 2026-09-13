@@ -26,12 +26,29 @@ AI_PLATFORM_MODELS: tuple[str, ...] = (
     "gpt-5.6-sol",
     "gpt-5.6-terra",
 )
+# The Copilot model picker, as ids the Copilot API accepts. Copilot names Anthropic models
+# ``claude-<family>-<version>`` (``claude-sonnet-4``, ``claude-haiku-4.5`` are confirmed), Gemini
+# ``gemini-<version>-<variant>``, and OpenAI ``gpt-<version>[-<variant>]``; the newer entries
+# follow the same pattern. A provider's own list can drop or correct any of them.
 GITHUB_COPILOT_MODELS: tuple[str, ...] = (
-    "gpt-5.4",
-    "gpt-5.5",
-    "gpt-5.6-luna",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
+    "claude-sonnet-4",  # Sonnet 4
+    "claude-haiku-4.5",  # Haiku 4.5
+    "claude-fable-5",  # Fable 5
+    "claude-fable-5.1",  # Fable 5.1
+    "claude-opus-4.7",  # Opus 4.7
+    "claude-opus-4.8",  # Opus 4.8
+    "claude-opus-5",  # Opus 5
+    "claude-sonnet-5",  # Sonnet 5
+    "gemini-3.7-flash",  # Gemini 3.7 Flash
+    "gemini-3.8-flash",  # Gemini 3.8 Flash
+    "gpt-5.4",  # GPT-5.4
+    "gpt-5.4-mini",  # GPT-5.4 mini
+    "gpt-5-mini",  # GPT-5 mini
+    "gpt-5.6-luna",  # GPT-5.6 Luna
+    "gpt-5.6-sol",  # GPT-5.6 Sol
+    "gpt-5.6-terra",  # GPT-5.6 Terra
+    "gpt-6-astra",  # GPT-6 Astra
+    "mai-code-1.1-flash",  # MAI-Code-1.1-Flash
 )
 PROVIDER_MODELS: dict[str, tuple[str, ...]] = {
     AI_PLATFORM_PROVIDER: AI_PLATFORM_MODELS,
