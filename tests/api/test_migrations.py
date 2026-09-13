@@ -51,3 +51,22 @@ def test_migrations_create_current_schema_and_downgrade(tmp_path: Path) -> None:
         assert not CORE_TABLES.intersection(inspect(engine).get_table_names())
     finally:
         engine.dispose()
+
+
+def test_upgrade_creates_a_missing_database_directory(tmp_path: Path) -> None:
+    """A fresh checkout has no data directory, and SQLite will not create one."""
+    from app.schema import upgrade_database
+
+    database_path = tmp_path / "nested" / "data" / "logan.db"
+    assert not database_path.parent.exists()
+
+    upgrade_database(str(database_path))
+
+    engine = create_engine(
+        URL.create("sqlite+pysqlite", database=str(database_path)),
+        future=True,
+    )
+    try:
+        assert CORE_TABLES.issubset(inspect(engine).get_table_names())
+    finally:
+        engine.dispose()

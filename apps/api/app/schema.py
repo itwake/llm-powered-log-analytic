@@ -45,13 +45,27 @@ def _stamp_legacy_current_schema(config: Config, database_path: str) -> None:
     command.stamp(config, _LEGACY_SCHEMA_REVISION)
 
 
+def _prepared_database_path(database_path: str) -> str:
+    """Expand the configured path and create the directory holding the database.
+
+    Alembic connects to this path directly, and SQLite refuses to create a
+    database file inside a directory that does not exist yet.
+    """
+    if database_path == ":memory:":
+        return database_path
+    path = Path(database_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)
+
+
 def upgrade_database(database_path: str) -> None:
+    resolved_path = _prepared_database_path(database_path)
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     config.set_main_option(
         "sqlalchemy.url",
-        URL.create("sqlite+pysqlite", database=database_path).render_as_string(
+        URL.create("sqlite+pysqlite", database=resolved_path).render_as_string(
             hide_password=False
         ),
     )
-    _stamp_legacy_current_schema(config, database_path)
+    _stamp_legacy_current_schema(config, resolved_path)
     command.upgrade(config, "head")
