@@ -1,14 +1,15 @@
 # Data model
 
-The database contains five application tables:
+The database contains six application tables:
 
 | Table | Purpose |
 | --- | --- |
 | `users` | Authenticated user profiles |
 | `sessions` | Hashed browser session tokens |
+| `llm_providers` | Per-user AI providers: type, non-secret config, encrypted credentials, models, defaults |
 | `cases` | Incident context and ownership |
 | `raw_files` | Uploaded file metadata and local object URI |
-| `analysis_runs` | Run state, progress, and compact final-result manifest |
+| `analysis_runs` | Run state, progress, compact final-result manifest, and the provider, model, and thinking level used |
 
 An analysis result contains input-file metadata, redacted normalized log lines, templates,
 samples, optional model annotations, temporal aggregates, a causal graph, and a summary. Existing

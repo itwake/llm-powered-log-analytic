@@ -5,6 +5,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import LogoutIcon from "@mui/icons-material/Logout";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -256,9 +257,11 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
     selectedCase?.case_key ||
     (pathname === "/cases/new"
       ? "New Case"
-      : pathname.startsWith("/cases")
-        ? "Cases"
-        : "Incident workbench");
+      : pathname.startsWith("/settings/ai-providers")
+        ? "AI Providers"
+        : pathname.startsWith("/cases")
+          ? "Cases"
+          : "Incident workbench");
 
   function isActive(href: string): boolean {
     return pathname === href;
@@ -418,6 +421,13 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
               href="/cases"
               icon={<FolderOpenIcon fontSize="small" />}
               label="All Cases"
+            />
+            <NavItem
+              active={pathname.startsWith("/settings/ai-providers")}
+              collapsed={sidebarCollapsed}
+              href="/settings/ai-providers"
+              icon={<SmartToyIcon fontSize="small" />}
+              label="AI Providers"
             />
           </List>
 

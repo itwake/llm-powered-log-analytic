@@ -10,13 +10,16 @@ summary.
 - SQLite
 - Local filesystem uploads
 - Next.js, Material UI, ECharts, and Cytoscape.js
-- Optional AI Platform integration
+- Optional AI providers: AI Platform and GitHub Copilot, configured per user in the app
 
-`LOGAN_LLM_PROVIDER` has two valid values:
+AI is optional and configured in the web app under **AI Providers**. Each user can add AI
+Platform (trust token or iB2B credentials) and GitHub Copilot (GitHub device sign-in) providers,
+choose the models they offer, and set a default thinking level. When starting an analysis run or
+asking analysis chat, the user picks the provider, model, and thinking level.
 
-- `none` runs the complete deterministic pipeline, including causal scoring and an
-  evidence-based summary, without model calls.
-- `ai_platform` adds template annotation, model-generated summary text, and case chat.
+- A run without a provider executes the complete deterministic pipeline, including causal
+  scoring and an evidence-based summary, without model calls.
+- A run with a provider adds template annotation and model-generated summary text.
 
 ## Run locally
 
@@ -74,6 +77,11 @@ Uploads and expanded archives are limited to 300 MiB by default. Set
 In development, an empty `LOGAN_SSO_AUTHORIZE_URL` uses the local default user. When the authorize
 URL is set, the token URL and client id are also required and login uses SSO. Production requires
 complete SSO configuration.
+
+AI provider credentials live in the database, encrypted with a key derived from
+`LOGAN_SECRET_KEY`; changing the secret invalidates stored credentials. The optional
+`LOGAN_AI_PLATFORM_*` settings pre-fill the AI Platform provider form with deployment endpoints
+and control transport behaviour; `LOGAN_GITHUB_COPILOT_*` settings control the GitHub transport.
 
 ## Development
 

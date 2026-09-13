@@ -112,24 +112,20 @@ Compose applies pending database migrations, starts the two applications, and st
 database and uploaded files in the `logan-data` volume. `NEXT_PUBLIC_API_BASE_URL` is a web build
 argument, so rebuild the web image after changing it.
 
-## LLM mode
+## AI providers
 
-The default configuration uses:
+No AI configuration is required to start. Runs without a provider use the deterministic
+processing pipeline. To enable template annotation, generated summary text, and analysis chat,
+open **AI Providers** in the web app and add a provider:
 
-```text
-LOGAN_LLM_PROVIDER=none
-```
+- **AI Platform**: enter the chat host (or accept the deployment default), then either a trust
+  token or iB2B username, password, and usercase.
+- **GitHub Copilot**: save the provider, choose **Connect GitHub**, and confirm the one-time code
+  on github.com. You can also paste an existing GitHub token.
 
-This runs the deterministic processing pipeline without model calls. AI annotation, generated
-summary text, and analysis chat require:
-
-```text
-LOGAN_LLM_PROVIDER=ai_platform
-```
-
-AI Platform mode also requires a chat host and either a token or a complete set of iB2B
-credentials. Copy `.env.full.example` when every supported setting and its default value is
-needed.
+Each provider lists the models it offers and a default thinking level; both can be changed per
+run and per chat question. Deployments can pre-fill the AI Platform endpoints with the
+`LOGAN_AI_PLATFORM_*` settings in `.env.full.example`.
 
 ## Validation
 
@@ -175,16 +171,23 @@ Confirm that the web terminal opened by `scripts\local.bat` is still running. St
 process on port 3000, close stale browser tabs, run the launcher again, and open
 `http://localhost:3000`. The launcher refuses to start when ports 3000 or 8000 are already in use.
 
-### AI Platform configuration is rejected at startup
+### An AI provider test fails
 
-For `ai_platform`, configure `LOGAN_AI_PLATFORM_CHAT_HOST` and either
-`LOGAN_AI_PLATFORM_TOKEN` or all iB2B host, URI, username, password, and usercase settings.
+Use **Test connection** on the provider card. An AI Platform provider needs a reachable chat host
+plus a trust token or complete iB2B credentials (username, password, usercase, iB2B host, and
+URI). A GitHub Copilot provider must be connected through **Connect GitHub**; a `401` from the
+token exchange means the GitHub authorization expired and must be repeated.
 
-### AI Platform TLS verification fails
+### Provider TLS verification fails
 
-Keep TLS verification enabled. Set `LOGAN_AI_PLATFORM_CA_BUNDLE` to the corporate CA bundle
-when the platform uses an internal certificate chain. Proxy and timeout settings are available
-in `.env.full.example`.
+Keep TLS verification enabled. Set `LOGAN_AI_PLATFORM_CA_BUNDLE` or
+`LOGAN_GITHUB_COPILOT_CA_BUNDLE` to the corporate CA bundle when traffic passes an internal
+certificate chain. Proxy and timeout settings are available in `.env.full.example`.
+
+### Stored provider credentials stop working after a redeploy
+
+Provider credentials are encrypted with a key derived from `LOGAN_SECRET_KEY`. Keep the secret
+stable across restarts; after a rotation, users must re-enter credentials or reconnect GitHub.
 
 ### A file cannot be uploaded
 

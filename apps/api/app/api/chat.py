@@ -7,9 +7,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.dependencies import current_user, get_model_gateway, get_store, require_case_owner
+from app.dependencies import current_user, get_gateway_registry, get_store, require_case_owner
 from app.schemas.chat import ChatRequest
+from app.services.llm_providers import LlmProviderError, resolve_inference_selection
 from app.services.model_gateway import ModelGatewayError
+from app.services.model_gateway_factory import ModelGatewayRegistry
 from app.store import Store, UserRecord, sanitize_error_message
 
 
@@ -26,21 +28,30 @@ async def chat_stream(
     payload: ChatRequest,
     user: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),
-    gateway: Any = Depends(get_model_gateway),
+    registry: ModelGatewayRegistry = Depends(get_gateway_registry),
 ) -> StreamingResponse:
     require_case_owner(
         store=store,
         user=user,
         case_id=payload.case_id,
     )
-    if gateway is None:
-        raise HTTPException(status_code=409, detail="LLM is disabled")
     run = store.get_analysis_run(payload.analysis_run_id)
     if run is None or run.case_id != payload.case_id:
         raise HTTPException(status_code=404, detail="analysis run not found")
-    if run.model_provider != "ai_platform":
-        raise HTTPException(status_code=409, detail="LLM was not enabled for this analysis run")
     context = _analysis_chat_context(store, payload)
+    try:
+        selection = resolve_inference_selection(
+            store=store,
+            settings=store.settings,
+            user_id=user.id,
+            provider_id=payload.provider_id,
+            model=payload.model,
+            reasoning_effort=payload.reasoning_effort,
+            fallback_provider_id=run.llm_provider_id,
+        )
+    except LlmProviderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    gateway = registry.gateway_for(selection.provider)
 
     async def events() -> AsyncIterator[str]:
         evidence_refs = context["evidence_refs"]
@@ -48,7 +59,7 @@ async def chat_stream(
         try:
             stream = await gateway.responses(
                 user_id=user.id,
-                model=store.settings.ai_platform_model,
+                model=selection.model,
                 instructions=CHAT_INSTRUCTIONS,
                 input=[
                     {
@@ -67,7 +78,17 @@ async def chat_stream(
                     "analysis_run_id": payload.analysis_run_id,
                     "purpose": "case_chat",
                 },
-                reasoning_effort=store.settings.ai_platform_reasoning_effort,
+                reasoning_effort=selection.reasoning_effort,
+            )
+            yield _sse_frame(
+                "meta",
+                {
+                    "provider_id": selection.provider.id,
+                    "provider_name": selection.provider.name,
+                    "provider_type": selection.provider.provider_type,
+                    "model": selection.model,
+                    "reasoning_effort": selection.reasoning_effort,
+                },
             )
             yield _sse_frame("evidence", {"evidence_refs": evidence_refs})
             completed_text = ""

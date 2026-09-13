@@ -129,8 +129,8 @@ async def test_case_access_is_owner_only() -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_rejects_a_run_created_without_llm() -> None:
-    store = create_ephemeral_store(Settings(llm_provider="none"))
+async def test_chat_requires_a_configured_provider() -> None:
+    store = create_ephemeral_store(Settings())
     user = store.register_user(
         email="owner@example.com",
         username="owner",
@@ -156,7 +156,8 @@ async def test_chat_rejects_a_run_created_without_llm() -> None:
         )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "LLM was not enabled for this analysis run"
+    assert response.json()["detail"] == "analysis result is not ready"
+    assert run.model_provider == "none"
 
 
 @pytest.mark.asyncio

@@ -18,7 +18,8 @@ The API is responsible for:
 - storing uploaded files below the configured local object-store directory;
 - starting and cancelling analysis tasks in the API process;
 - exposing the five report views from one validated `AnalysisResult`;
-- calling AI Platform when `LOGAN_LLM_PROVIDER=ai_platform`;
+- managing per-user AI providers (AI Platform and GitHub Copilot) and calling the provider,
+  model, and thinking level selected for a run or chat request;
 - serving `/healthz` and the OpenAPI document.
 
 ## Technology
@@ -149,9 +150,13 @@ covering its requested offset and limit. The persisted artifacts exclude raw int
 duplicate per-line text while retaining redacted report rows and evidence identity. Causal edges
 remain investigation candidates rather than proof.
 
-`LOGAN_LLM_PROVIDER=none` skips model annotation and produces a deterministic evidence summary.
-`LOGAN_LLM_PROVIDER=ai_platform` enables template annotation, generated summary text, and completed
-run chat. Model input is limited to redacted representative samples or bounded evidence context.
+A run started without a provider skips model annotation and produces a deterministic evidence
+summary. A run started with a provider (`provider_id`, `model`, `reasoning_effort`) adds template
+annotation and generated summary text; chat on a completed run uses whichever connected provider
+the user selects. Model input is limited to redacted representative samples or bounded evidence
+context. Provider records live in `llm_providers` with credentials encrypted under
+`LOGAN_SECRET_KEY`; `app/services/llm_providers.py` validates them and
+`app/services/model_gateway_factory.py` builds one gateway per provider.
 
 ### Case and run lifecycle
 
@@ -197,8 +202,8 @@ The main setting groups are:
 | Persistence | `LOGAN_DATABASE_PATH`, `LOGAN_LOCAL_OBJECT_STORE_DIR`, `LOGAN_MAX_UPLOAD_BYTES` |
 | Browser access | `LOGAN_WEB_BASE_URL`, `LOGAN_CORS_ALLOWED_ORIGINS` |
 | Authentication | `LOGAN_SSO_AUTHORIZE_URL`, `LOGAN_SSO_TOKEN_URL`, `LOGAN_SSO_CLIENT_ID` |
-| Analysis | `LOGAN_LLM_PROVIDER` |
-| AI Platform | model, host, token or iB2B credentials, TLS, proxy, timeout, and token settings |
+| AI Platform | endpoint defaults for the provider form, TLS, proxy, timeout, and token settings |
+| GitHub Copilot | TLS, proxy, and timeout settings |
 
 `app/config.py` is the runtime contract and `.env.full.example` documents every supported setting.
 Production validation requires a strong secret, complete SSO, and TLS verification.

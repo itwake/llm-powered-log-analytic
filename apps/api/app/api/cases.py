@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from app.dependencies import current_user, get_model_gateway, get_store, require_case_owner
+from app.dependencies import current_user, get_gateway_registry, get_store, require_case_owner
 from app.schemas.case import (
     AnalysisRunListResponse,
     AnalysisRunRequest,
@@ -21,6 +21,8 @@ from app.schemas.case import (
     UploadRequest,
     UploadStartResponse,
 )
+from app.services.llm_providers import LlmProviderError, resolve_inference_selection
+from app.services.model_gateway_factory import ModelGatewayRegistry
 from app.services.object_store import file_uri_to_path
 from app.store import Store, UserRecord
 
@@ -67,6 +69,9 @@ def _analysis_run_response(record: Any) -> AnalysisRunResponse:
         error_message=record.error_message,
         model_provider=record.model_provider,
         model_name=record.model_name,
+        llm_provider_id=record.llm_provider_id,
+        llm_provider_name=record.llm_provider_name,
+        reasoning_effort=record.reasoning_effort,
     )
 
 
@@ -322,7 +327,7 @@ async def start_analysis(
     payload: AnalysisRunRequest,
     user: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),
-    gateway: Any = Depends(get_model_gateway),
+    registry: ModelGatewayRegistry = Depends(get_gateway_registry),
 ) -> AnalysisRunResponse:
     require_case_owner(
         store=store,
@@ -333,9 +338,27 @@ async def start_analysis(
         _upload_path(_upload_for_case(store, case_id, file_id))
         for file_id in payload.input_file_ids
     ]
+    gateway: Any = None
+    selection = None
+    if payload.provider_id:
+        try:
+            selection = resolve_inference_selection(
+                store=store,
+                settings=store.settings,
+                user_id=user.id,
+                provider_id=payload.provider_id,
+                model=payload.model,
+                reasoning_effort=payload.reasoning_effort,
+            )
+        except LlmProviderError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+        gateway = registry.gateway_for(selection.provider)
     run = store.create_analysis_run(
         case_id=case_id,
         user_id=user.id,
+        provider=selection.provider if selection else None,
+        model=selection.model if selection else None,
+        reasoning_effort=selection.reasoning_effort if selection else None,
     )
     task = asyncio.create_task(
         store.run_analysis(

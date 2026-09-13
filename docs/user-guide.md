@@ -54,7 +54,7 @@ The workspace displays:
 - analysis progress;
 - run history;
 - selected evidence;
-- analysis chat for AI-enabled runs.
+- analysis chat for completed runs, with provider, model, and thinking selection.
 
 Use **Edit case** to change incident context. Deleting a case marks it deleted and removes it from
 normal case access. Uploaded files are not automatically erased and should be managed with the
@@ -62,8 +62,10 @@ local data directory as part of operational retention.
 
 ## Start another run
 
-Select one or more files under **Analyze evidence**, then choose **Upload and analyze files**.
-Every action creates a separate run over the newly uploaded file ids.
+Select one or more files under **Analyze evidence**, pick the AI provider, model, and thinking
+level (or **No AI** for the deterministic pipeline), then choose **Upload and analyze files**.
+Every action creates a separate run over the newly uploaded file ids. The run inspector and the
+report header show which provider, model, and thinking level produced a run.
 
 Run states are:
 
@@ -139,18 +141,36 @@ Causal Summary contains:
 
 Select an evidence reference to inspect its file and line details or open it in Tabular Logs.
 
-With AI Platform disabled or unavailable during summary generation, the page shows a structured
+Without an AI provider, or when the provider is unavailable during summary generation, the page shows a structured
 evidence summary instead of generated prose.
 
 ## Analysis chat
 
-Analysis chat appears only when the latest run was created with
-`LOGAN_LLM_PROVIDER=ai_platform`. Complete the run before asking questions.
+Analysis chat appears in the case workspace once the case has at least one run and answers about
+the most recent completed run. Choose the AI provider, model, and thinking level above the
+composer; the choice defaults to the provider the run was created with, or to your default
+provider. Runs created without AI can still be discussed with any connected provider.
 
 Chat answers from the stored redacted analysis result. Responses stream into the workspace and can
 include evidence references. Use those references to verify important statements in Tabular Logs.
+Each answer is labelled with the provider, model, and thinking level that produced it.
 
 Chat history is held in the current browser page and is not stored as part of the case.
+
+## AI Providers
+
+Open **AI Providers** in the sidebar to manage the providers available to your account. Providers
+belong to you only; other users configure their own.
+
+- **Add AI Platform**: name the provider, confirm the chat host (deployment defaults are
+  pre-filled when configured), and enter either iB2B credentials (username, password, usercase)
+  or a trust token. Credentials are stored encrypted on the server.
+- **Add GitHub Copilot**: name the provider and save it, then choose **Connect GitHub**. Enter the
+  one-time code on the GitHub page that opens and confirm; the card shows the connected account.
+- Edit the model list, the default model, and the default thinking level on each provider. Extra
+  model ids can be typed into the list.
+- **Test connection** sends a minimal request through the provider.
+- **Set as default** chooses the provider pre-selected for new runs and chat.
 
 ## Interpreting results
 

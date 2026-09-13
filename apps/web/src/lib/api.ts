@@ -155,7 +155,13 @@ export interface UploadContentResponse {
   size_bytes: number;
 }
 
-export interface AnalysisRunRequest {
+export interface InferenceSelection {
+  provider_id: string | null;
+  model: string | null;
+  reasoning_effort: string | null;
+}
+
+export interface AnalysisRunRequest extends Partial<InferenceSelection> {
   input_file_ids: string[];
 }
 
@@ -170,6 +176,9 @@ export interface AnalysisRunResponse {
   error_message: string | null;
   model_provider: string;
   model_name: string;
+  llm_provider_id: string | null;
+  llm_provider_name: string | null;
+  reasoning_effort: string | null;
 }
 
 export interface AnalysisRunListResponse {
@@ -324,13 +333,114 @@ export interface CausalSummaryResponse {
   confidence: number;
 }
 
-export interface ChatRequest {
+export interface ChatRequest extends Partial<InferenceSelection> {
   message: string;
   case_id: string;
   analysis_run_id: string;
 }
 
+export interface ChatMeta {
+  provider_id: string;
+  provider_name: string;
+  provider_type: string;
+  model: string;
+  reasoning_effort: string;
+}
+
+export type ProviderType = "ai_platform" | "github_copilot";
+
+export interface ReasoningEffortOption {
+  value: string;
+  label: string;
+}
+
+export interface ProviderTypeCatalog {
+  provider_type: ProviderType;
+  label: string;
+  models: string[];
+  default_model: string;
+  config_fields: string[];
+  secret_fields: string[];
+  supports_device_flow: boolean;
+}
+
+export interface LlmProviderCatalogResponse {
+  provider_types: ProviderTypeCatalog[];
+  reasoning_efforts: ReasoningEffortOption[];
+  default_reasoning_effort: string;
+  ai_platform_defaults: Record<string, string>;
+}
+
+export interface LlmProviderResponse {
+  provider_id: string;
+  name: string;
+  provider_type: ProviderType;
+  provider_label: string;
+  models: string[];
+  default_model: string;
+  default_reasoning_effort: string;
+  is_default: boolean;
+  credentials_configured: boolean;
+  credential_summary: string | null;
+  secret_fields: string[];
+  config: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LlmProviderListResponse {
+  items: LlmProviderResponse[];
+  total: number;
+}
+
+export interface LlmProviderCreateRequest {
+  name: string;
+  provider_type: ProviderType;
+  models?: string[];
+  default_model?: string;
+  default_reasoning_effort?: string;
+  is_default?: boolean;
+  config?: Record<string, string | null>;
+  secrets?: Record<string, string | null>;
+}
+
+export interface LlmProviderUpdateRequest {
+  name?: string;
+  models?: string[];
+  default_model?: string;
+  default_reasoning_effort?: string;
+  is_default?: boolean;
+  config?: Record<string, string | null>;
+  secrets?: Record<string, string | null>;
+}
+
+export interface LlmProviderTestResponse {
+  ok: boolean;
+  message: string;
+  model: string;
+}
+
+export interface GitHubDeviceStartResponse {
+  auth_id: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string;
+  expires_in: number;
+  interval: number;
+}
+
+export type GitHubDeviceStatus = "pending" | "authorized" | "expired" | "declined" | "failed";
+
+export interface GitHubDeviceCheckResponse {
+  status: GitHubDeviceStatus;
+  github_login: string | null;
+  message: string | null;
+  interval: number | null;
+  provider: LlmProviderResponse | null;
+}
+
 export interface ChatStreamHandlers {
+  meta?: (meta: ChatMeta) => void;
   delta?: (delta: string) => void;
   evidence?: (evidenceRefs: EvidenceRef[]) => void;
   done?: (message: string) => void;
@@ -478,6 +588,33 @@ export const reportsApi = {
     ),
 };
 
+export const providersApi = {
+  catalog: () => request<LlmProviderCatalogResponse>("/api/llm-providers/catalog"),
+  list: () => request<LlmProviderListResponse>("/api/llm-providers"),
+  create: (payload: LlmProviderCreateRequest) =>
+    request<LlmProviderResponse>("/api/llm-providers", {method: "POST", body: payload}),
+  get: (providerId: string) => request<LlmProviderResponse>(`/api/llm-providers/${providerId}`),
+  update: (providerId: string, payload: LlmProviderUpdateRequest) =>
+    request<LlmProviderResponse>(`/api/llm-providers/${providerId}`, {
+      method: "PATCH",
+      body: payload,
+    }),
+  remove: (providerId: string) =>
+    request<{deleted: boolean}>(`/api/llm-providers/${providerId}`, {method: "DELETE"}),
+  test: (providerId: string) =>
+    request<LlmProviderTestResponse>(`/api/llm-providers/${providerId}/test`, {method: "POST"}),
+  githubDeviceStart: (providerId: string) =>
+    request<GitHubDeviceStartResponse>(
+      `/api/llm-providers/${providerId}/github-device/start`,
+      {method: "POST"},
+    ),
+  githubDeviceCheck: (providerId: string, authId: string) =>
+    request<GitHubDeviceCheckResponse>(
+      `/api/llm-providers/${providerId}/github-device/check`,
+      {method: "POST", body: {auth_id: authId}},
+    ),
+};
+
 export const chatApi = {
   stream: async (
     payload: ChatRequest,
@@ -555,6 +692,8 @@ function dispatchSseFrame(frame: string, handlers: ChatStreamHandlers): void {
 
   if (event === "delta" && typeof payload.delta === "string") {
     handlers.delta?.(payload.delta);
+  } else if (event === "meta" && typeof payload.model === "string") {
+    handlers.meta?.(payload as unknown as ChatMeta);
   } else if (event === "evidence" && Array.isArray(payload.evidence_refs)) {
     handlers.evidence?.(payload.evidence_refs as EvidenceRef[]);
   } else if (event === "done" && typeof payload.message === "string") {

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, Request, status
-from logan_analysis.ports import ModelGateway
 
+from app.services.model_gateway_factory import ModelGatewayRegistry
 from app.store import Store, UserRecord
 
 
@@ -10,8 +10,8 @@ def get_store(request: Request) -> Store:
     return request.app.state.store
 
 
-def get_model_gateway(request: Request) -> ModelGateway | None:
-    return request.app.state.model_gateway
+def get_gateway_registry(request: Request) -> ModelGatewayRegistry:
+    return request.app.state.gateway_registry
 
 
 def current_user(request: Request) -> UserRecord:

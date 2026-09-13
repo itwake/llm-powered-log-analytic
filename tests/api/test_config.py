@@ -55,17 +55,43 @@ def test_sso_authorize_url_requires_token_url_and_client_id() -> None:
         ).validate_for_runtime()
 
 
-def test_ai_platform_requires_usable_credentials() -> None:
-    with pytest.raises(ValueError, match="token or complete iB2B credentials"):
-        Settings(
-            llm_provider="ai_platform",
-            ai_platform_chat_host="https://ai.example.test",
-        ).validate_for_runtime()
+def test_production_requires_provider_tls_verification() -> None:
+    base = dict(
+        env="production",
+        secret_key="s" * 40,
+        sso_authorize_url="https://sso.example.test/authorize",
+        sso_token_url="https://sso.example.test/token",
+        sso_client_id="logan",
+    )
+    Settings(**base).validate_for_runtime()
+    with pytest.raises(ValueError, match="LOGAN_AI_PLATFORM_TLS_VERIFY"):
+        Settings(**base, ai_platform_tls_verify=False).validate_for_runtime()
+    with pytest.raises(ValueError, match="LOGAN_GITHUB_COPILOT_TLS_VERIFY"):
+        Settings(**base, github_copilot_tls_verify=False).validate_for_runtime()
 
 
-def test_ai_platform_accepts_a_configured_token() -> None:
-    Settings(
-        llm_provider="ai_platform",
-        ai_platform_chat_host="https://ai.example.test",
-        ai_platform_token="trust-token",
-    ).validate_for_runtime()
+def test_ai_platform_form_defaults_come_from_deployment_settings() -> None:
+    defaults = Settings(
+        ai_platform_chat_host="https://ai.example.test/",
+        ai_platform_ib2b_host="https://identity.example.test",
+    ).ai_platform_form_defaults()
+
+    assert defaults["chat_host"] == "https://ai.example.test"
+    assert defaults["chat_uri"] == "/v1/api/v1/chat/completions"
+    assert defaults["ib2b_host"] == "https://identity.example.test"
+    assert defaults["trust_token_header"] == "X-XXXX-E2E-Trust-Token"
+
+
+def test_github_copilot_client_kwargs_honour_proxy_and_ca_bundle() -> None:
+    kwargs = Settings(
+        github_copilot_proxy_url="http://proxy.example.test:3128",
+        github_copilot_ca_bundle="/etc/ssl/corp.pem",
+        github_copilot_timeout_seconds=42,
+    ).github_copilot_httpx_client_kwargs()
+
+    assert kwargs == {
+        "timeout": 42.0,
+        "verify": "/etc/ssl/corp.pem",
+        "trust_env": True,
+        "proxy": "http://proxy.example.test:3128",
+    }
