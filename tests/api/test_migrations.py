@@ -70,3 +70,17 @@ def test_upgrade_creates_a_missing_database_directory(tmp_path: Path) -> None:
         assert CORE_TABLES.issubset(inspect(engine).get_table_names())
     finally:
         engine.dispose()
+
+
+def test_migrations_do_not_disable_application_loggers(tmp_path: Path) -> None:
+    """The API runs migrations in-process, so Alembic must not switch its loggers off."""
+    import logging
+
+    from app.schema import upgrade_database
+
+    logger = logging.getLogger("logan.analysis")
+    logger.disabled = False
+
+    upgrade_database(str(tmp_path / "logan.db"))
+
+    assert not logger.disabled

@@ -10,7 +10,10 @@ from sqlalchemy.engine import Connection
 
 config = context.config
 if config.config_file_name:
-    fileConfig(config.config_file_name)
+    # The API runs migrations in-process before serving, so this must configure the
+    # Alembic loggers without switching off every logger that already exists -- the
+    # default would permanently disable "logan.analysis" and drop analysis failure logs.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(REPOSITORY_ROOT / ".env")
