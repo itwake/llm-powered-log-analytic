@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { runsApi } from "@/lib/api";
 import type { AnalysisRunResponse } from "@/lib/api";
 import { apiErrorMessage, formatDateTime } from "@/lib/format";
+import { describeRunModel } from "@/lib/inference";
 import { Badge, Button, Card, statusTone } from "@/components/ui";
 
 interface AnalysisRunVersionBarProps {
@@ -210,7 +211,7 @@ export function AnalysisRunVersionBar({ caseId, runId }: AnalysisRunVersionBarPr
             </Typography>
             <Typography sx={{ fontWeight: 700 }} variant="body2">
               {currentRun
-                ? `${currentRun.model_provider} / ${currentRun.model_name}`
+                ? describeRunModel(currentRun)
                 : loading
                   ? "Loading…"
                   : "n/a"}

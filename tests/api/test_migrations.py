@@ -10,6 +10,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CORE_TABLES = {
     "analysis_runs",
     "cases",
+    "llm_providers",
     "raw_files",
     "sessions",
     "users",
@@ -42,7 +43,7 @@ def test_migrations_create_current_schema_and_downgrade(tmp_path: Path) -> None:
         assert set(inspect(engine).get_table_names()) == CORE_TABLES | {"alembic_version"}
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "0001_initial"
+                "0002_llm_providers"
             )
 
         command.check(config)

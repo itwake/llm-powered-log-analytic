@@ -7,6 +7,9 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import URL, create_engine, inspect
 
+# Tables created by the first revision. A database that has these tables but no
+# ``alembic_version`` predates Alembic and is stamped at that revision so later
+# revisions still apply.
 _CORE_TABLES = {
     "analysis_runs",
     "cases",
@@ -14,6 +17,7 @@ _CORE_TABLES = {
     "sessions",
     "users",
 }
+_LEGACY_SCHEMA_REVISION = "0001_initial"
 
 
 def _stamp_legacy_current_schema(config: Config, database_path: str) -> None:
@@ -38,7 +42,7 @@ def _stamp_legacy_current_schema(config: Config, database_path: str) -> None:
             f"existing tables: {existing}; missing tables: {missing}"
         )
 
-    command.stamp(config, "head")
+    command.stamp(config, _LEGACY_SCHEMA_REVISION)
 
 
 def upgrade_database(database_path: str) -> None:

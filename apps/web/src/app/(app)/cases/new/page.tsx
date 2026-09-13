@@ -8,10 +8,18 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
-import { casesApi, runsApi, type UploadProgressEvent } from "@/lib/api";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import {
+  casesApi,
+  runsApi,
+  type InferenceSelection,
+  type UploadProgressEvent,
+} from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
+import { EMPTY_SELECTION, defaultInferenceSelection } from "@/lib/inference";
+import { useLlmProviders } from "@/lib/useLlmProviders";
 import { FileUploadDropzone } from "@/components/FileUploadDropzone";
+import { InferenceSelector } from "@/components/InferenceSelector";
 import { Button, Card, SectionHeader } from "@/components/ui";
 
 function emptyToNull(value: string): string | null {
@@ -69,6 +77,16 @@ export default function NewCasePage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [runSelection, setRunSelection] = useState<InferenceSelection>(EMPTY_SELECTION);
+  const runSelectionTouched = useRef(false);
+  const providerState = useLlmProviders();
+  const { providers } = providerState;
+
+  useEffect(() => {
+    if (!runSelectionTouched.current) {
+      setRunSelection(defaultInferenceSelection(providers));
+    }
+  }, [providers]);
 
   function handleUploadProgress(event: UploadProgressEvent) {
     setSubmitStatus(uploadProgressLabel(event));
@@ -107,6 +125,9 @@ export default function NewCasePage() {
         setSubmitStatus("Starting analysis");
         await runsApi.start(created.case_id, {
           input_file_ids: uploaded.map((file) => file.file_id),
+          provider_id: runSelection.provider_id,
+          model: runSelection.model,
+          reasoning_effort: runSelection.reasoning_effort,
         });
         router.push(`/cases/${created.case_id}`);
         return;
@@ -212,6 +233,18 @@ export default function NewCasePage() {
                   ))}
                 </Stack>
               )}
+              <InferenceSelector
+                allowNone
+                catalog={providerState.catalog}
+                disabled={submitting}
+                loading={providerState.loading}
+                providers={providers}
+                value={runSelection}
+                onChange={(next) => {
+                  runSelectionTouched.current = true;
+                  setRunSelection(next);
+                }}
+              />
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
                 <Button disabled={submitting} name="mode" type="submit" value="create">
                   {submitting && submitMode === "create" ? "Creating" : "Create case"}

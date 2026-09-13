@@ -65,6 +65,15 @@ class UploadContentResponse(BaseModel):
 
 class AnalysisRunRequest(BaseModel):
     input_file_ids: list[str] = Field(min_length=1)
+    provider_id: str | None = Field(
+        default=None,
+        description="AI provider for annotation, summary, and chat. Omit for a deterministic run.",
+    )
+    model: str | None = Field(default=None, description="Model enabled on the provider.")
+    reasoning_effort: str | None = Field(
+        default=None,
+        description="Thinking level: low, medium, high, xhigh, or max.",
+    )
 
 
 class AnalysisRunResponse(BaseModel):
@@ -78,6 +87,9 @@ class AnalysisRunResponse(BaseModel):
     error_message: str | None = None
     model_provider: str
     model_name: str
+    llm_provider_id: str | None = None
+    llm_provider_name: str | None = None
+    reasoning_effort: str | None = None
 
 
 class AnalysisRunListResponse(BaseModel):

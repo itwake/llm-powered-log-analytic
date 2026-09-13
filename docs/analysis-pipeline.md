@@ -94,8 +94,10 @@ references and provide bounded input for template annotation.
 
 ### 6. Annotate templates — `ai_platform_annotation`
 
-With `LOGAN_LLM_PROVIDER=ai_platform`, at most 64 templates are sent to AI Platform. Each sample
-message is limited to 1,200 characters. The validated response supplies:
+When the run was started with an AI provider, at most 64 templates are sent to that provider
+using the run's model and thinking level. Each sample message is limited to 1,200 characters.
+The step name is historical; it applies to AI Platform and GitHub Copilot alike. The validated
+response supplies:
 
 - one golden signal
 - fault categories
@@ -103,8 +105,8 @@ message is limited to 1,200 characters. The validated response supplies:
 - severity and confidence
 - a short rationale
 
-With `LOGAN_LLM_PROVIDER=none`, this step is marked `skipped`; the pipeline does not create
-synthetic annotations.
+Without a provider, this step is marked `skipped`; the pipeline does not create synthetic
+annotations.
 
 ### 7. Broadcast annotations — `broadcast_annotations`
 
@@ -143,13 +145,13 @@ proof of causation.
 The summary receives a bounded, redacted evidence packet containing selected log lines, supported
 edges, candidates, and case context.
 
-In AI Platform mode, model output must satisfy the summary schema and cite evidence ids from the
-packet. Invalid output falls back to a structured, cautious summary. In `none` mode, the structured
-summary is used directly.
+With a provider, model output must satisfy the summary schema and cite evidence ids from the
+packet. Invalid output falls back to a structured, cautious summary. Without a provider, the
+structured summary is used directly.
 
 ## LLM modes
 
-| Capability | `none` | `ai_platform` |
+| Capability | No provider | AI provider selected |
 | --- | --- | --- |
 | Ingestion, parsing, redaction, templates | Yes | Yes |
 | Representative samples | Yes | Yes |
@@ -157,10 +159,11 @@ summary is used directly.
 | Temporal aggregation | Yes | Yes |
 | Causal candidate scoring | Runs on available offending labels | Runs on model annotations |
 | Causal summary | Structured evidence summary | Generated text with structured fallback |
-| Analysis chat | No | Yes, after a completed AI-enabled run |
+| Analysis chat | Yes, with any connected provider, after the run completes | Yes, after the run completes |
 
-Because `none` does not invent template classifications, attention-only summaries and causal
-graphs can be empty. Use the `all` scope in Data Summary to review extracted templates.
+Because a run without a provider does not invent template classifications, attention-only
+summaries and causal graphs can be empty. Use the `all` scope in Data Summary to review extracted
+templates.
 
 ## Persistence and reports
 

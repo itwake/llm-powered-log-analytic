@@ -17,15 +17,19 @@ import {
   AnalysisRunResponse,
   CaseResponse,
   EvidenceRef,
+  InferenceSelection,
   UploadProgressEvent,
   casesApi,
   runsApi,
 } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
+import { EMPTY_SELECTION, defaultInferenceSelection } from "@/lib/inference";
+import { useLlmProviders } from "@/lib/useLlmProviders";
 import { CaseAnalysisNav } from "@/components/CaseAnalysisNav";
 import { CaseRunInspector } from "@/components/CaseRunInspector";
 import { ChatWorkspace } from "@/components/ChatWorkspace";
 import { FileUploadDropzone } from "@/components/FileUploadDropzone";
+import { InferenceSelector } from "@/components/InferenceSelector";
 import { Badge, Button, Card, EmptyState, SectionHeader, statusTone } from "@/components/ui";
 
 type UploadItemStatus = "queued" | "preparing" | "hashing" | "uploading" | "verifying" | "completed" | "failed";
@@ -128,7 +132,17 @@ export default function CaseWorkspacePage() {
   const [caseEnvironment, setCaseEnvironment] = useState("");
   const [caseIncidentStart, setCaseIncidentStart] = useState("");
   const [caseIncidentEnd, setCaseIncidentEnd] = useState("");
+  const [runSelection, setRunSelection] = useState<InferenceSelection>(EMPTY_SELECTION);
+  const runSelectionTouched = useRef(false);
   const loadRequestId = useRef(0);
+  const providerState = useLlmProviders();
+  const { providers } = providerState;
+
+  useEffect(() => {
+    if (!runSelectionTouched.current) {
+      setRunSelection(defaultInferenceSelection(providers));
+    }
+  }, [providers]);
 
   const load = useCallback(async () => {
     const currentRequest = ++loadRequestId.current;
@@ -224,6 +238,7 @@ export default function CaseWorkspacePage() {
   }, [caseRecord]);
 
   const latestRun = runs[0] || null;
+  const chatRun = runs.find((run) => run.status === "completed") || null;
   const trackedRun = runs.find((run) => run.analysis_run_id === activeRunId) || latestRun;
   const trackedRunId = trackedRun?.analysis_run_id;
   const trackedRunStatus = trackedRun?.status;
@@ -266,6 +281,9 @@ export default function CaseWorkspacePage() {
       });
       const run = await runsApi.start(caseId, {
         input_file_ids: uploaded.map((file) => file.file_id),
+        provider_id: runSelection.provider_id,
+        model: runSelection.model,
+        reasoning_effort: runSelection.reasoning_effort,
       });
       setActiveRunId(run.analysis_run_id);
       await refreshRunProgress(run.analysis_run_id);
@@ -460,10 +478,13 @@ export default function CaseWorkspacePage() {
               </Card>
             )}
 
-            {latestRun?.model_provider === "ai_platform" && (
+            {runs.length > 0 && (
               <ChatWorkspace
                 caseId={caseId}
-                run={latestRun}
+                catalog={providerState.catalog}
+                providers={providers}
+                providersLoading={providerState.loading}
+                run={chatRun}
                 onEvidenceSelect={setSelectedEvidence}
               />
             )}
@@ -505,6 +526,18 @@ export default function CaseWorkspacePage() {
                     })}
                   </Stack>
                 )}
+                <InferenceSelector
+                  allowNone
+                  catalog={providerState.catalog}
+                  disabled={starting !== null}
+                  loading={providerState.loading}
+                  providers={providers}
+                  value={runSelection}
+                  onChange={(next) => {
+                    runSelectionTouched.current = true;
+                    setRunSelection(next);
+                  }}
+                />
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
                   <Button disabled={starting !== null || selectedFiles.length === 0} onClick={startUploadedAnalysis}>
                     {starting === "files" ? "Uploading" : "Upload and analyze files"}
@@ -512,6 +545,8 @@ export default function CaseWorkspacePage() {
                 </Stack>
                 <Typography color="text.secondary">
                   Files stay in the configured local data directory and are analyzed in one background run.
+                  With an AI provider selected, the run annotates templates and generates the summary with
+                  that provider, model, and thinking level.
                 </Typography>
               </Stack>
             </Card>

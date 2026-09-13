@@ -757,7 +757,7 @@ async def _call_gateway(
             "purpose": "causal_summary",
             "prompt_version": PROMPT_VERSION,
         },
-        reasoning_effort="high",
+        reasoning_effort=str((case_context or {}).get("reasoning_effort") or "high"),
         response_format={"type": "json_object"},
     )
     if isinstance(response, AsyncIterator):

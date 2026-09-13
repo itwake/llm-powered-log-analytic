@@ -22,7 +22,8 @@ Identifiers scoped to a run remain consistent inside its stored result.
 
 ## Model boundary
 
-AI Platform is used only when `LOGAN_LLM_PROVIDER=ai_platform`:
+A model is called only through a user-configured AI provider (AI Platform or GitHub Copilot)
+selected for a run or a chat question:
 
 1. Template annotation classifies bounded redacted samples.
 2. Causal-summary generation turns a bounded evidence packet into cautious prose.
@@ -32,8 +33,9 @@ Raw uploaded files are not sent as model input. Template annotation is limited t
 three samples per template, and 1,200 characters per sample. Chat receives a compact summary,
 selected annotated rows, and up to five evidence references.
 
-`LOGAN_LLM_PROVIDER=none` performs no model calls. It skips annotation, uses the structured summary,
-and does not expose analysis chat.
+A run without a provider performs no model calls: it skips annotation and uses the structured
+summary. Chat about such a run is still possible with any connected provider and uses only the
+stored redacted result.
 
 ## Redaction boundary
 
@@ -113,7 +115,8 @@ validation actions. A customer update is separated from the internal diagnostic 
 - Browser session tokens are random; only their SHA-256 hashes are stored.
 - SQLite foreign-key checks are enabled.
 - Errors are sanitized before being persisted or returned as run failures.
-- AI Platform credentials remain process configuration and are not stored in analysis results.
+- AI provider credentials are stored encrypted per user and never appear in analysis results,
+  progress metadata, or API responses.
 
 ## Operational limits
 

@@ -25,8 +25,12 @@ Production configuration requires:
 
 - a secret key containing at least 32 characters
 - SSO authorize URL, token URL, and client id
-- TLS verification enabled for SSO and, when configured, AI Platform
+- TLS verification enabled for SSO, AI Platform, and GitHub Copilot transports
 - a persistent database and upload directory
+- a stable `LOGAN_SECRET_KEY`, because stored AI provider credentials are encrypted with it
+- outbound access from the API to the AI Platform endpoints and, for GitHub Copilot, to
+  `github.com`, `api.github.com`, and `api.githubcopilot.com` (directly or through
+  `LOGAN_GITHUB_COPILOT_PROXY_URL`)
 
 Development uses the local default user when `LOGAN_SSO_AUTHORIZE_URL` is empty. Non-development
 deployments require complete SSO configuration.

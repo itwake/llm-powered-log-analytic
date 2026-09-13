@@ -19,7 +19,7 @@ The web application provides:
 - polling for active analysis-run progress;
 - Data Summary, Temporal View, Tabular Logs, Causal Graph, and Causal Summary;
 - evidence inspection and links between report views;
-- AI chat for completed AI Platform runs.
+- AI provider management (AI Platform and GitHub Copilot) and AI chat for completed runs.
 
 It calls the API directly from the browser. It does not connect to SQLite, read uploaded files from
 disk, or run analysis algorithms.
@@ -54,6 +54,7 @@ apps/web/
     │   ├── healthz/route.ts        # web-container health endpoint
     │   └── (app)/
     │       ├── layout.tsx          # authenticated Shell wrapper
+    │       ├── settings/ai-providers/page.tsx  # provider management
     │       └── cases/
     │           ├── page.tsx        # case list
     │           ├── new/page.tsx    # create, upload, and analyze
@@ -73,12 +74,16 @@ apps/web/
     │   ├── CaseRunInspector.tsx
     │   ├── FileUploadDropzone.tsx
     │   ├── ChatWorkspace.tsx
+    │   ├── InferenceSelector.tsx   # provider, model, and thinking pickers
+    │   ├── providers/              # provider form and GitHub connect dialogs
     │   ├── Evidence.tsx
     │   ├── MarkdownMessage.tsx
     │   └── ui.tsx
     ├── lib/
     │   ├── api.ts                  # domain types and API methods
     │   ├── api/http.ts             # fetch, errors, query strings, XHR upload
+    │   ├── inference.ts            # provider selection helpers
+    │   ├── useLlmProviders.ts      # loads providers and the catalog
     │   ├── auth.ts                 # login URL builder
     │   ├── navigation.ts           # safe redirect path handling
     │   ├── signals.ts              # golden-signal semantics and colors
@@ -98,6 +103,7 @@ under one `Shell` layout without adding `/app` to the URL.
 | `app/(app)/cases/page.tsx` | `/cases` | browse and filter cases |
 | `app/(app)/cases/new/page.tsx` | `/cases/new` | create a case and optionally start analysis |
 | `app/(app)/cases/[caseId]/page.tsx` | `/cases/{caseId}` | workspace, files, runs, progress, chat |
+| `app/(app)/settings/ai-providers/page.tsx` | `/settings/ai-providers` | manage AI providers |
 | `runs/[runId]/summary` | `/cases/{caseId}/runs/{runId}/summary` | Data Summary |
 | `runs/[runId]/temporal` | `/cases/{caseId}/runs/{runId}/temporal` | Temporal View |
 | `runs/[runId]/logs` | `/cases/{caseId}/runs/{runId}/logs` | Tabular Logs |
@@ -132,7 +138,7 @@ the `Shell` mounts. A missing or expired session redirects to `/login` with the 
 - converts non-success responses to `ApiError`;
 - uses `XMLHttpRequest` for upload progress.
 
-`src/lib/api.ts` defines the browser-side request and response types plus four clients:
+`src/lib/api.ts` defines the browser-side request and response types plus these clients:
 
 | Client | Responsibility |
 | --- | --- |
@@ -140,6 +146,7 @@ the `Shell` mounts. A missing or expired session redirects to `/login` with the 
 | `casesApi` | cases, upload reservation, content upload |
 | `runsApi` | list, start, inspect, and cancel runs |
 | `reportsApi` | the five report endpoints |
+| `providersApi` | AI providers, catalog, connection test, GitHub device flow |
 | `chatApi` | parse streaming chat SSE events |
 
 These TypeScript interfaces are a maintained browser view of the backend contract. When a backend
@@ -184,9 +191,17 @@ Markdown passes through `rehype-sanitize`; keep URL and HTML restrictions intact
 
 ### Chat
 
-Chat is available only for a completed run created with `LOGAN_LLM_PROVIDER=ai_platform`.
-`chatApi.stream()` parses `evidence`, `delta`, `done`, and `error` server-sent events from
-`POST /api/chat/stream`. Chat history lives in the current page and is not persisted.
+Chat is available for the latest completed run and requires a connected AI provider chosen with
+`InferenceSelector`. `chatApi.stream()` parses `meta`, `evidence`, `delta`, `done`, and `error`
+server-sent events from `POST /api/chat/stream`. Chat history lives in the current page and is not
+persisted.
+
+### AI providers
+
+`/settings/ai-providers` lists the user's providers and opens `ProviderFormDialog` to create or
+edit one and `GitHubConnectDialog` to run the GitHub device flow. `useLlmProviders()` loads the
+provider list and catalog; `lib/inference.ts` derives default selections and labels. The same
+`InferenceSelector` appears in the run form (with a **No AI** option) and in the chat composer.
 
 ## State and UI conventions
 

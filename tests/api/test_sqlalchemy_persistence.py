@@ -22,6 +22,7 @@ def test_database_contains_only_core_tables() -> None:
     assert set(Base.metadata.tables) == {
         "analysis_runs",
         "cases",
+        "llm_providers",
         "raw_files",
         "sessions",
         "users",

@@ -14,7 +14,7 @@ The API owns background analysis tasks. A run follows one ordered pipeline:
 3. parse and redact
 4. extract templates
 5. select representative samples
-6. annotate templates when AI Platform is enabled
+6. annotate templates when the run has an AI provider
 7. broadcast annotations to log lines
 8. aggregate temporal activity
 9. score causal candidates
@@ -33,3 +33,10 @@ schema and applies ordered revisions before the API process starts.
 The browser authenticates with an HTTP-only session cookie. The login endpoint either starts the
 configured SSO flow or signs in the development default user. The web application sends API
 requests directly to `NEXT_PUBLIC_API_BASE_URL`.
+
+AI providers are per-user records (`llm_providers`) with encrypted credentials. The API resolves
+the provider, model, and thinking level for each run or chat request, and a
+`ModelGatewayRegistry` keeps one gateway per provider so exchanged tokens are reused. The AI
+Platform gateway exchanges iB2B credentials for a JWT or uses a trust token; the GitHub Copilot
+gateway exchanges the GitHub OAuth token obtained through the device flow for a Copilot session
+token. Both call OpenAI-compatible chat completions with the `reasoning_effort` chosen by the user.

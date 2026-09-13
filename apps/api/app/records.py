@@ -95,6 +95,25 @@ class UploadRecord:
 
 
 @dataclass
+class LlmProviderRecord:
+    """A user-managed AI provider. ``secrets`` holds decrypted credentials for in-process use
+    only and must never be serialized into API responses, logs, or progress metadata."""
+
+    id: str
+    user_id: str
+    name: str
+    provider_type: str
+    config: dict[str, Any]
+    models: list[str]
+    default_model: str
+    default_reasoning_effort: str
+    is_default: bool
+    created_at: datetime
+    updated_at: datetime
+    secrets: dict[str, str] = field(default_factory=dict, repr=False)
+
+
+@dataclass
 class AnalysisRunRecord:
     id: str
     case_id: str
@@ -108,6 +127,9 @@ class AnalysisRunRecord:
     error_message: str | None = None
     result: AnalysisResult | None = None
     progress: dict[str, Any] = field(default_factory=dict)
+    llm_provider_id: str | None = None
+    llm_provider_name: str | None = None
+    reasoning_effort: str | None = None
 
 
 @dataclass
