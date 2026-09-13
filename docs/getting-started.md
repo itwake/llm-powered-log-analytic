@@ -118,14 +118,14 @@ No AI configuration is required to start. Runs without a provider use the determ
 processing pipeline. To enable template annotation, generated summary text, and analysis chat,
 open **AI Providers** in the web app and add a provider:
 
-- **AI Platform**: enter the chat host (or accept the deployment default), then either a trust
-  token or iB2B username, password, and usercase.
+- **AI Platform**: enter your iB2B username, password, and usercase. The endpoints belong to the
+  deployment, so `LOGAN_AI_PLATFORM_CHAT_HOST` and the iB2B host and URI must be set in `.env`
+  before this provider type can be added.
 - **GitHub Copilot**: save the provider, choose **Connect GitHub**, and confirm the one-time code
-  on github.com. You can also paste an existing GitHub token.
+  on github.com.
 
 Each provider lists the models it offers and a default thinking level; both can be changed per
-run and per chat question. Deployments can pre-fill the AI Platform endpoints with the
-`LOGAN_AI_PLATFORM_*` settings in `.env.full.example`.
+run and per chat question.
 
 ## Validation
 
@@ -173,10 +173,10 @@ process on port 3000, close stale browser tabs, run the launcher again, and open
 
 ### An AI provider test fails
 
-Use **Test connection** on the provider card. An AI Platform provider needs a reachable chat host
-plus a trust token or complete iB2B credentials (username, password, usercase, iB2B host, and
-URI). A GitHub Copilot provider must be connected through **Connect GitHub**; a `401` from the
-token exchange means the GitHub authorization expired and must be repeated.
+Use **Test connection** on the provider card. An AI Platform provider needs reachable deployment
+endpoints plus a complete set of credentials (username, password, and usercase). A GitHub Copilot
+provider must be connected through **Connect GitHub**; a `401` from the token exchange means the
+GitHub authorization expired and must be repeated.
 
 ### Provider TLS verification fails
 
@@ -184,10 +184,11 @@ Keep TLS verification enabled. Set `LOGAN_AI_PLATFORM_CA_BUNDLE` or
 `LOGAN_GITHUB_COPILOT_CA_BUNDLE` to the corporate CA bundle when traffic passes an internal
 certificate chain. Proxy and timeout settings are available in `.env.full.example`.
 
-### Stored provider credentials stop working after a redeploy
+### An AI Platform provider cannot be added
 
-Provider credentials are encrypted with a key derived from `LOGAN_SECRET_KEY`. Keep the secret
-stable across restarts; after a rotation, users must re-enter credentials or reconnect GitHub.
+The **Add AI Platform** form reports that the deployment endpoints are missing. Set
+`LOGAN_AI_PLATFORM_CHAT_HOST`, `LOGAN_AI_PLATFORM_IB2B_HOST`, and `LOGAN_AI_PLATFORM_IB2B_URI`,
+then restart the API.
 
 ### A file cannot be uploaded
 

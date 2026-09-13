@@ -15,17 +15,14 @@ class LlmProviderCreateRequest(BaseModel):
     )
     default_model: str | None = None
     default_reasoning_effort: str | None = None
-    is_default: bool = False
     config: dict[str, str | None] = Field(
         default_factory=dict,
-        description="Non-secret settings. AI Platform: chat_host, chat_uri, ib2b_host, ib2b_uri, "
-        "usercase, trust_token_header, tracking_prefix, username, token_expires_at. "
-        "GitHub Copilot: api_base_url.",
+        description="Non-secret settings. AI Platform: username, usercase.",
     )
     secrets: dict[str, str | None] = Field(
         default_factory=dict,
-        description="Credentials stored encrypted. AI Platform: password or token. "
-        "GitHub Copilot: github_token.",
+        description="Credentials. AI Platform: password. GitHub Copilot: github_token, "
+        "normally written by the device flow rather than sent here.",
     )
 
 
@@ -34,7 +31,6 @@ class LlmProviderUpdateRequest(BaseModel):
     models: list[str] | None = None
     default_model: str | None = None
     default_reasoning_effort: str | None = None
-    is_default: bool | None = None
     config: dict[str, str | None] | None = Field(
         default=None,
         description="Fields to change; null or empty removes a field.",
@@ -53,7 +49,6 @@ class LlmProviderResponse(BaseModel):
     models: list[str]
     default_model: str
     default_reasoning_effort: str
-    is_default: bool
     credentials_configured: bool
     credential_summary: str | None = None
     secret_fields: list[str] = Field(default_factory=list)
@@ -75,6 +70,10 @@ class ProviderTypeCatalog(BaseModel):
     config_fields: list[str]
     secret_fields: list[str]
     supports_device_flow: bool
+    available: bool = Field(
+        description="Whether this deployment can host the provider type at all.",
+    )
+    unavailable_reason: str | None = None
 
 
 class ReasoningEffortOption(BaseModel):
@@ -86,7 +85,6 @@ class LlmProviderCatalogResponse(BaseModel):
     provider_types: list[ProviderTypeCatalog]
     reasoning_efforts: list[ReasoningEffortOption]
     default_reasoning_effort: str
-    ai_platform_defaults: dict[str, str]
 
 
 class LlmProviderTestResponse(BaseModel):

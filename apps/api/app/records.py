@@ -96,8 +96,8 @@ class UploadRecord:
 
 @dataclass
 class LlmProviderRecord:
-    """A user-managed AI provider. ``secrets`` holds decrypted credentials for in-process use
-    only and must never be serialized into API responses, logs, or progress metadata."""
+    """A user-managed AI provider. ``secrets`` holds credentials for in-process use only and
+    must never be serialized into API responses, logs, or progress metadata."""
 
     id: str
     user_id: str
@@ -107,7 +107,6 @@ class LlmProviderRecord:
     models: list[str]
     default_model: str
     default_reasoning_effort: str
-    is_default: bool
     created_at: datetime
     updated_at: datetime
     secrets: dict[str, str] = field(default_factory=dict, repr=False)

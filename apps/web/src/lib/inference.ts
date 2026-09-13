@@ -49,7 +49,7 @@ export function selectionForProvider(
 
 /**
  * The preferred provider (with its preferred model and thinking level when still valid) when
- * one is known, else the user's default provider, else the first ready one.
+ * one is known, else the first provider that has usable credentials.
  */
 export function defaultInferenceSelection(
   providers: LlmProviderResponse[],
@@ -67,7 +67,7 @@ export function defaultInferenceSelection(
       reasoning_effort: preferred?.reasoning_effort || preferredProvider.default_reasoning_effort,
     };
   }
-  const provider = ready.find((item) => item.is_default) ?? ready[0] ?? null;
+  const provider = ready[0] ?? null;
   return selectionForProvider(provider);
 }
 

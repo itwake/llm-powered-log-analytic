@@ -73,5 +73,5 @@ token on the provider.
 
 Chat requires a completed analysis run, access to its case, and a connected AI provider. The
 request may name `provider_id`, `model`, and `reasoning_effort`; otherwise the run's provider or
-the user's default provider answers. The stream starts with a `meta` event naming the provider,
+the first provider with usable credentials answers. The stream starts with a `meta` event naming the provider,
 model, and thinking level used.

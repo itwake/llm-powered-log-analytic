@@ -42,7 +42,6 @@ async def chat_stream(
     try:
         selection = resolve_inference_selection(
             store=store,
-            settings=store.settings,
             user_id=user.id,
             provider_id=payload.provider_id,
             model=payload.model,
@@ -56,6 +55,18 @@ async def chat_stream(
     async def events() -> AsyncIterator[str]:
         evidence_refs = context["evidence_refs"]
         message_parts: list[str] = []
+        # Announce the choice before calling the provider so a failed answer is still labelled
+        # with the provider, model, and thinking level that were attempted.
+        yield _sse_frame(
+            "meta",
+            {
+                "provider_id": selection.provider.id,
+                "provider_name": selection.provider.name,
+                "provider_type": selection.provider.provider_type,
+                "model": selection.model,
+                "reasoning_effort": selection.reasoning_effort,
+            },
+        )
         try:
             stream = await gateway.responses(
                 user_id=user.id,
@@ -79,16 +90,6 @@ async def chat_stream(
                     "purpose": "case_chat",
                 },
                 reasoning_effort=selection.reasoning_effort,
-            )
-            yield _sse_frame(
-                "meta",
-                {
-                    "provider_id": selection.provider.id,
-                    "provider_name": selection.provider.name,
-                    "provider_type": selection.provider.provider_type,
-                    "model": selection.model,
-                    "reasoning_effort": selection.reasoning_effort,
-                },
             )
             yield _sse_frame("evidence", {"evidence_refs": evidence_refs})
             completed_text = ""

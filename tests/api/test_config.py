@@ -70,16 +70,14 @@ def test_production_requires_provider_tls_verification() -> None:
         Settings(**base, github_copilot_tls_verify=False).validate_for_runtime()
 
 
-def test_ai_platform_form_defaults_come_from_deployment_settings() -> None:
-    defaults = Settings(
-        ai_platform_chat_host="https://ai.example.test/",
+def test_ai_platform_needs_deployment_endpoints_to_be_offered() -> None:
+    assert not Settings().ai_platform_configured
+    assert not Settings(ai_platform_chat_host="https://ai.example.test").ai_platform_configured
+    assert Settings(
+        ai_platform_chat_host="https://ai.example.test",
         ai_platform_ib2b_host="https://identity.example.test",
-    ).ai_platform_form_defaults()
-
-    assert defaults["chat_host"] == "https://ai.example.test"
-    assert defaults["chat_uri"] == "/v1/api/v1/chat/completions"
-    assert defaults["ib2b_host"] == "https://identity.example.test"
-    assert defaults["trust_token_header"] == "X-XXXX-E2E-Trust-Token"
+        ai_platform_ib2b_uri="/token",
+    ).ai_platform_configured
 
 
 def test_github_copilot_client_kwargs_honour_proxy_and_ca_bundle() -> None:

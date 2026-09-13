@@ -115,8 +115,8 @@ validation actions. A customer update is separated from the internal diagnostic 
 - Browser session tokens are random; only their SHA-256 hashes are stored.
 - SQLite foreign-key checks are enabled.
 - Errors are sanitized before being persisted or returned as run failures.
-- AI provider credentials are stored encrypted per user and never appear in analysis results,
-  progress metadata, or API responses.
+- AI provider credentials are stored per user and never appear in analysis results, progress
+  metadata, or API responses.
 
 ## Operational limits
 

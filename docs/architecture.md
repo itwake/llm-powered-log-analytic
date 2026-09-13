@@ -34,9 +34,9 @@ The browser authenticates with an HTTP-only session cookie. The login endpoint e
 configured SSO flow or signs in the development default user. The web application sends API
 requests directly to `NEXT_PUBLIC_API_BASE_URL`.
 
-AI providers are per-user records (`llm_providers`) with encrypted credentials. The API resolves
+AI providers are per-user records (`llm_providers`). The API resolves
 the provider, model, and thinking level for each run or chat request, and a
 `ModelGatewayRegistry` keeps one gateway per provider so exchanged tokens are reused. The AI
-Platform gateway exchanges iB2B credentials for a JWT or uses a trust token; the GitHub Copilot
+Platform gateway exchanges iB2B credentials for a JWT; the GitHub Copilot
 gateway exchanges the GitHub OAuth token obtained through the device flow for a Copilot session
 token. Both call OpenAI-compatible chat completions with the `reasoning_effort` chosen by the user.

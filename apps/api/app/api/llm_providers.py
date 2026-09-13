@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.dependencies import current_user, get_gateway_registry, get_store
 from app.llm_catalog import (
+    AI_PLATFORM_PROVIDER,
     DEFAULT_REASONING_EFFORT,
     GITHUB_COPILOT_PROVIDER,
     PROVIDER_TYPES,
@@ -40,10 +41,14 @@ from app.services.model_gateway_factory import ModelGatewayRegistry
 from app.store import LlmProviderRecord, Store, UserRecord, sanitize_error_message
 
 router = APIRouter(prefix="/api/llm-providers", tags=["llm-providers"])
+AI_PLATFORM_UNAVAILABLE = (
+    "AI Platform endpoints are not configured for this deployment; set "
+    "LOGAN_AI_PLATFORM_CHAT_HOST and the iB2B host and URI."
+)
 
 
-def _response(provider: LlmProviderRecord, store: Store) -> LlmProviderResponse:
-    return LlmProviderResponse(**provider_public_view(provider, store.settings))
+def _response(provider: LlmProviderRecord) -> LlmProviderResponse:
+    return LlmProviderResponse(**provider_public_view(provider))
 
 
 def _owned_provider(store: Store, user: UserRecord, provider_id: str) -> LlmProviderRecord:
@@ -66,6 +71,7 @@ def provider_catalog(
     _: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),
 ) -> LlmProviderCatalogResponse:
+    ai_platform_available = store.settings.ai_platform_configured
     return LlmProviderCatalogResponse(
         provider_types=[
             ProviderTypeCatalog(
@@ -76,6 +82,14 @@ def provider_catalog(
                 config_fields=list(PROVIDER_CONFIG_FIELDS[provider_type]),
                 secret_fields=list(PROVIDER_SECRET_FIELDS[provider_type]),
                 supports_device_flow=provider_type == GITHUB_COPILOT_PROVIDER,
+                available=(
+                    ai_platform_available if provider_type == AI_PLATFORM_PROVIDER else True
+                ),
+                unavailable_reason=(
+                    None
+                    if provider_type != AI_PLATFORM_PROVIDER or ai_platform_available
+                    else AI_PLATFORM_UNAVAILABLE
+                ),
             )
             for provider_type in PROVIDER_TYPES
         ],
@@ -84,7 +98,6 @@ def provider_catalog(
             for value in REASONING_EFFORTS
         ],
         default_reasoning_effort=DEFAULT_REASONING_EFFORT,
-        ai_platform_defaults=store.settings.ai_platform_form_defaults(),
     )
 
 
@@ -95,7 +108,7 @@ def list_providers(
 ) -> LlmProviderListResponse:
     providers = store.list_llm_providers(user.id)
     return LlmProviderListResponse(
-        items=[_response(provider, store) for provider in providers],
+        items=[_response(provider) for provider in providers],
         total=len(providers),
     )
 
@@ -126,13 +139,12 @@ def create_provider(
             models=definition.models,
             default_model=definition.default_model,
             default_reasoning_effort=definition.default_reasoning_effort,
-            is_default=payload.is_default,
         )
     except LlmProviderError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return _response(provider, store)
+    return _response(provider)
 
 
 @router.get("/{provider_id}", response_model=LlmProviderResponse)
@@ -141,7 +153,7 @@ def get_provider(
     user: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),
 ) -> LlmProviderResponse:
-    return _response(_owned_provider(store, user, provider_id), store)
+    return _response(_owned_provider(store, user, provider_id))
 
 
 @router.patch("/{provider_id}", response_model=LlmProviderResponse)
@@ -174,16 +186,18 @@ def update_provider(
             models=definition.models,
             default_model=definition.default_model,
             default_reasoning_effort=definition.default_reasoning_effort,
-            is_default=payload.is_default,
         )
     except LlmProviderError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI provider not found") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="AI provider not found",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     registry.discard(provider_id)
-    return _response(provider, store)
+    return _response(provider)
 
 
 @router.delete("/{provider_id}")
@@ -271,22 +285,20 @@ async def check_github_device_flow(
             message=result.message,
             interval=result.interval,
         )
-    config = {"github_login": result.github_login} if result.github_login else {"github_login": None}
+    config = dict(provider.config)
+    if result.github_login:
+        config["github_login"] = result.github_login
+    else:
+        config.pop("github_login", None)
     updated = store.update_llm_provider(
         provider_id=provider.id,
         user_id=user.id,
-        config={**provider.config, **{k: v for k, v in config.items() if v}},
+        config=config,
         secrets={**provider.secrets, "github_token": result.access_token},
     )
-    if not result.github_login and "github_login" in updated.config:
-        updated = store.update_llm_provider(
-            provider_id=provider.id,
-            user_id=user.id,
-            config={k: v for k, v in updated.config.items() if k != "github_login"},
-        )
     registry.discard(provider.id)
     return GitHubDeviceCheckResponse(
         status="authorized",
         github_login=result.github_login,
-        provider=_response(updated, store),
+        provider=_response(updated),
     )

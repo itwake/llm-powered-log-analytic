@@ -154,8 +154,7 @@ A run started without a provider skips model annotation and produces a determini
 summary. A run started with a provider (`provider_id`, `model`, `reasoning_effort`) adds template
 annotation and generated summary text; chat on a completed run uses whichever connected provider
 the user selects. Model input is limited to redacted representative samples or bounded evidence
-context. Provider records live in `llm_providers` with credentials encrypted under
-`LOGAN_SECRET_KEY`; `app/services/llm_providers.py` validates them and
+context. Provider records live in `llm_providers`; `app/services/llm_providers.py` validates them and
 `app/services/model_gateway_factory.py` builds one gateway per provider.
 
 ### Case and run lifecycle

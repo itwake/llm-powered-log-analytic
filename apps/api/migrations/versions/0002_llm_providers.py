@@ -21,11 +21,10 @@ def upgrade() -> None:
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("provider_type", sa.Text(), nullable=False),
         sa.Column("config_json", sa.JSON(), server_default="{}", nullable=False),
-        sa.Column("encrypted_secrets", sa.Text(), nullable=True),
+        sa.Column("secrets_json", sa.JSON(), server_default="{}", nullable=False),
         sa.Column("models_json", sa.JSON(), server_default="[]", nullable=False),
         sa.Column("default_model", sa.Text(), nullable=False),
         sa.Column("default_reasoning_effort", sa.Text(), nullable=False),
-        sa.Column("is_default", sa.Boolean(), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

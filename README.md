@@ -13,9 +13,9 @@ summary.
 - Optional AI providers: AI Platform and GitHub Copilot, configured per user in the app
 
 AI is optional and configured in the web app under **AI Providers**. Each user can add AI
-Platform (trust token or iB2B credentials) and GitHub Copilot (GitHub device sign-in) providers,
-choose the models they offer, and set a default thinking level. When starting an analysis run or
-asking analysis chat, the user picks the provider, model, and thinking level.
+Platform (iB2B credentials) and GitHub Copilot (GitHub device sign-in) providers, choose the
+models they offer, and set a default thinking level. When starting an analysis run or asking
+analysis chat, the user picks the provider, model, and thinking level.
 
 - A run without a provider executes the complete deterministic pipeline, including causal
   scoring and an evidence-based summary, without model calls.
@@ -78,10 +78,10 @@ In development, an empty `LOGAN_SSO_AUTHORIZE_URL` uses the local default user. 
 URL is set, the token URL and client id are also required and login uses SSO. Production requires
 complete SSO configuration.
 
-AI provider credentials live in the database, encrypted with a key derived from
-`LOGAN_SECRET_KEY`; changing the secret invalidates stored credentials. The optional
-`LOGAN_AI_PLATFORM_*` settings pre-fill the AI Platform provider form with deployment endpoints
-and control transport behaviour; `LOGAN_GITHUB_COPILOT_*` settings control the GitHub transport.
+AI provider credentials live in the database and are readable by anyone with the database file,
+so protect it like any other credential store. `LOGAN_AI_PLATFORM_*` supplies the AI Platform
+endpoints and transport, and an AI Platform provider can only be created once they are set;
+`LOGAN_GITHUB_COPILOT_*` controls the GitHub transport.
 
 ## Development
 

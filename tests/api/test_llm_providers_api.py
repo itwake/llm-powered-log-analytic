@@ -10,7 +10,6 @@ from httpx import ASGITransport, AsyncClient
 
 from app.config import Settings
 from app.main import create_app
-from app.models import tables
 from app.services.github_copilot_auth import GitHubDeviceFlow
 from app.store import Store, UserRecord, create_ephemeral_store
 from tests.model_gateway_stub import StubModelGateway
@@ -20,13 +19,19 @@ AI_PLATFORM_PAYLOAD: dict[str, Any] = {
     "provider_type": "ai_platform",
     "default_model": "gpt-5.6-terra",
     "default_reasoning_effort": "medium",
-    "config": {
-        "chat_host": "https://ai.example.test/",
-        "chat_uri": "/v1/chat",
-        "usercase": "logan",
-    },
-    "secrets": {"token": "trust-token-value"},
+    "config": {"username": "engineer", "usercase": "logan"},
+    "secrets": {"password": "secret-password"},
 }
+# AI Platform endpoints are deployment settings, so every store in these tests needs them.
+AI_PLATFORM_SETTINGS: dict[str, Any] = {
+    "ai_platform_chat_host": "https://ai.example.test",
+    "ai_platform_ib2b_host": "https://identity.example.test",
+    "ai_platform_ib2b_uri": "/token",
+}
+
+
+def _store(**overrides: Any) -> Store:
+    return create_ephemeral_store(Settings(**{**AI_PLATFORM_SETTINGS, **overrides}))
 
 
 def _user(store: Store, name: str = "owner") -> tuple[UserRecord, str]:
@@ -49,9 +54,7 @@ def _client(app, token: str) -> AsyncClient:
 
 @pytest.mark.asyncio
 async def test_catalog_lists_provider_types_models_and_thinking_levels() -> None:
-    store = create_ephemeral_store(
-        Settings(ai_platform_chat_host="https://ai.example.test")
-    )
+    store = _store()
     _, token = _user(store)
     app = create_app(store=store)
 
@@ -75,13 +78,13 @@ async def test_catalog_lists_provider_types_models_and_thinking_levels() -> None
         "max",
     ]
     assert catalog["default_reasoning_effort"] == "high"
-    assert catalog["ai_platform_defaults"]["chat_host"] == "https://ai.example.test"
+    assert [item["available"] for item in catalog["provider_types"]] == [True, True]
 
 
 @pytest.mark.asyncio
-async def test_create_ai_platform_provider_encrypts_secrets_and_masks_them() -> None:
-    store = create_ephemeral_store(Settings(secret_key="unit-test-secret-key"))
-    user, token = _user(store)
+async def test_create_ai_platform_provider_stores_secrets_without_exposing_them() -> None:
+    store = _store()
+    _, token = _user(store)
     app = create_app(store=store)
 
     async with _client(app, token) as client:
@@ -92,30 +95,25 @@ async def test_create_ai_platform_provider_encrypts_secrets_and_masks_them() -> 
     body = created.json()
     assert body["provider_type"] == "ai_platform"
     assert body["provider_label"] == "AI Platform"
-    assert body["is_default"] is True
     assert body["credentials_configured"] is True
-    assert body["credential_summary"] == "Trust token configured"
-    assert body["secret_fields"] == ["token"]
+    assert body["credential_summary"] == "iB2B credentials for engineer"
+    assert body["secret_fields"] == ["password"]
     assert body["default_model"] == "gpt-5.6-terra"
     assert body["default_reasoning_effort"] == "medium"
-    assert body["config"]["chat_host"] == "https://ai.example.test"
-    assert "trust-token-value" not in created.text
-    assert "trust-token-value" not in listed.text
+    assert body["config"] == {"username": "engineer", "usercase": "logan"}
+    assert "secret-password" not in created.text
+    assert "secret-password" not in listed.text
     assert listed.json()["total"] == 1
 
     provider = store.get_llm_provider(body["provider_id"])
     assert provider is not None
-    assert provider.secrets == {"token": "trust-token-value"}
-    assert "trust-token-value" not in repr(provider)
-    with store.session_factory() as session:
-        row = session.get(tables.LlmProvider, body["provider_id"])
-        assert row.encrypted_secrets.startswith("enc:v1:")
-        assert "trust-token-value" not in row.encrypted_secrets
+    assert provider.secrets == {"password": "secret-password"}
+    assert "secret-password" not in repr(provider)
 
 
 @pytest.mark.asyncio
 async def test_provider_validation_rejects_bad_definitions() -> None:
-    store = create_ephemeral_store(Settings())
+    store = _store()
     _, token = _user(store)
     app = create_app(store=store)
 
@@ -123,10 +121,6 @@ async def test_provider_validation_rejects_bad_definitions() -> None:
         unknown_type = await client.post(
             "/api/llm-providers",
             json={"name": "x", "provider_type": "openai"},
-        )
-        missing_host = await client.post(
-            "/api/llm-providers",
-            json={"name": "x", "provider_type": "ai_platform"},
         )
         bad_default = await client.post(
             "/api/llm-providers",
@@ -145,12 +139,12 @@ async def test_provider_validation_rejects_bad_definitions() -> None:
                 "default_reasoning_effort": "ultra",
             },
         )
-        partial_ib2b = await client.post(
+        partial_credentials = await client.post(
             "/api/llm-providers",
             json={
                 "name": "x",
                 "provider_type": "ai_platform",
-                "config": {"chat_host": "https://ai.example.test", "username": "alice"},
+                "config": {"username": "alice"},
             },
         )
         unknown_field = await client.post(
@@ -159,14 +153,6 @@ async def test_provider_validation_rejects_bad_definitions() -> None:
                 "name": "x",
                 "provider_type": "github_copilot",
                 "config": {"api_key": "nope"},
-            },
-        )
-        bad_url = await client.post(
-            "/api/llm-providers",
-            json={
-                "name": "x",
-                "provider_type": "ai_platform",
-                "config": {"chat_host": "ai.example.test"},
             },
         )
         first = await client.post(
@@ -180,21 +166,18 @@ async def test_provider_validation_rejects_bad_definitions() -> None:
 
     assert unknown_type.status_code == 400
     assert "provider_type" in unknown_type.json()["detail"]
-    assert missing_host.status_code == 400
-    assert "chat_host" in missing_host.json()["detail"]
     assert bad_default.status_code == 400
     assert bad_effort.status_code == 400
-    assert partial_ib2b.status_code == 400
-    assert "usercase" in partial_ib2b.json()["detail"]
+    assert partial_credentials.status_code == 400
+    assert "usercase" in partial_credentials.json()["detail"]
     assert unknown_field.status_code == 400
-    assert bad_url.status_code == 400
     assert first.status_code == 200
     assert duplicate.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_default_provider_switches_and_survives_deletion() -> None:
-    store = create_ephemeral_store(Settings())
+async def test_providers_can_be_renamed_and_deleted() -> None:
+    store = _store()
     _, token = _user(store)
     app = create_app(store=store)
 
@@ -206,32 +189,27 @@ async def test_default_provider_switches_and_survives_deletion() -> None:
                 json={"name": "Copilot", "provider_type": "github_copilot"},
             )
         ).json()
-        assert first["is_default"] is True
-        assert second["is_default"] is False
         assert second["credentials_configured"] is False
 
-        promoted = await client.patch(
+        renamed = await client.patch(
             f"/api/llm-providers/{second['provider_id']}",
-            json={"is_default": True, "name": "Copilot (work)"},
+            json={"name": "Copilot (work)"},
         )
-        assert promoted.status_code == 200
-        assert promoted.json()["is_default"] is True
-        assert promoted.json()["name"] == "Copilot (work)"
-        demoted = await client.get(f"/api/llm-providers/{first['provider_id']}")
-        assert demoted.json()["is_default"] is False
+        assert renamed.status_code == 200
+        assert renamed.json()["name"] == "Copilot (work)"
 
         deleted = await client.delete(f"/api/llm-providers/{second['provider_id']}")
         assert deleted.status_code == 200
         remaining = await client.get("/api/llm-providers")
 
-    items = remaining.json()["items"]
-    assert [item["provider_id"] for item in items] == [first["provider_id"]]
-    assert items[0]["is_default"] is True
+    assert [item["provider_id"] for item in remaining.json()["items"]] == [
+        first["provider_id"]
+    ]
 
 
 @pytest.mark.asyncio
 async def test_provider_update_merges_secrets_and_models() -> None:
-    store = create_ephemeral_store(Settings())
+    store = _store()
     _, token = _user(store)
     app = create_app(store=store)
 
@@ -241,13 +219,8 @@ async def test_provider_update_merges_secrets_and_models() -> None:
         switched = await client.patch(
             f"/api/llm-providers/{provider_id}",
             json={
-                "config": {
-                    "username": "alice",
-                    "usercase": "logan",
-                    "ib2b_host": "https://identity.example.test",
-                    "ib2b_uri": "/token",
-                },
-                "secrets": {"password": "s3cret", "token": ""},
+                "config": {"username": "alice", "usercase": "logan"},
+                "secrets": {"password": "s3cret"},
                 "models": ["gpt-5.4", "custom-model-1"],
                 "default_model": "custom-model-1",
             },
@@ -274,12 +247,12 @@ async def test_provider_update_merges_secrets_and_models() -> None:
     provider = store.get_llm_provider(provider_id)
     assert provider is not None
     assert provider.secrets == {"password": "s3cret"}
-    assert provider.config["chat_host"] == "https://ai.example.test"
+    assert provider.config == {"username": "alice", "usercase": "logan"}
 
 
 @pytest.mark.asyncio
 async def test_providers_are_scoped_to_their_owner() -> None:
-    store = create_ephemeral_store(Settings())
+    store = _store()
     _, owner_token = _user(store, "owner")
     _, other_token = _user(store, "other")
     app = create_app(store=store)
@@ -305,10 +278,8 @@ async def test_providers_are_scoped_to_their_owner() -> None:
 
 
 @pytest.mark.asyncio
-async def test_analysis_run_and_chat_use_the_selected_provider(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = create_ephemeral_store(Settings())
+async def test_analysis_run_and_chat_use_the_selected_provider() -> None:
+    store = _store()
     _, token = _user(store)
     gateway = StubModelGateway()
     app = create_app(store=store, model_gateway=gateway)
@@ -427,8 +398,8 @@ async def test_analysis_run_and_chat_use_the_selected_provider(
 
 
 @pytest.mark.asyncio
-async def test_chat_falls_back_to_run_provider_then_default_provider() -> None:
-    store = create_ephemeral_store(Settings())
+async def test_chat_falls_back_to_the_first_connected_provider() -> None:
+    store = _store()
     user, token = _user(store)
     gateway = StubModelGateway()
     app = create_app(store=store, model_gateway=gateway)
@@ -475,7 +446,15 @@ async def test_chat_falls_back_to_run_provider_then_default_provider() -> None:
                 json={"name": "Copilot", "provider_type": "github_copilot"},
             )
         ).json()
-        not_ready = await client.post("/api/chat/stream", json=chat_payload)
+        # A provider without credentials is skipped by the fallback, and naming it explicitly
+        # reports why it cannot answer.
+        still_none = await client.post("/api/chat/stream", json=chat_payload)
+        assert still_none.status_code == 409
+        assert "No AI provider is configured" in still_none.json()["detail"]
+        not_ready = await client.post(
+            "/api/chat/stream",
+            json={**chat_payload, "provider_id": unconnected["provider_id"]},
+        )
         assert not_ready.status_code == 409
         assert "no usable credentials" in not_ready.json()["detail"]
 
@@ -493,7 +472,7 @@ async def test_chat_falls_back_to_run_provider_then_default_provider() -> None:
 
 @pytest.mark.asyncio
 async def test_github_device_flow_connects_a_copilot_provider() -> None:
-    store = create_ephemeral_store(Settings())
+    store = _store()
     _, token = _user(store)
     app = create_app(store=store)
     polls = 0

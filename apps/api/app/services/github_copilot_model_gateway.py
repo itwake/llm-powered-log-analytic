@@ -1,8 +1,8 @@
 """GitHub Copilot model gateway.
 
-A GitHub OAuth token obtained through the device flow (or pasted by the user) is exchanged for a
-short-lived Copilot session token, which authorizes OpenAI-compatible chat completions on the
-Copilot API. The exchange mirrors the Copilot editor plugins, so the same plugin headers are sent.
+A GitHub OAuth token obtained through the device flow is exchanged for a short-lived Copilot
+session token, which authorizes OpenAI-compatible chat completions on the Copilot API. The
+exchange mirrors the Copilot editor plugins, so the same plugin headers are sent.
 """
 
 from __future__ import annotations
@@ -24,11 +24,9 @@ from app.services.model_gateway import (
     ModelTransportError,
     ResolvedToken,
     build_chat_messages,
-    chat_completion_stream_events,
     completion_result,
     http_error_message,
-    iter_sse_json,
-    sanitized_response_detail,
+    single_response_stream,
     token_is_fresh,
     transport_error_message,
 )
@@ -71,27 +69,15 @@ def parse_copilot_api_base_url(token: str) -> str | None:
 
 
 @dataclass(frozen=True)
-class GitHubCopilotProviderConfig:
+class GitHubCopilotCredentials:
     github_token: str = field(default="", repr=False)
-    api_base_url: str = ""
-    github_api_base_url: str = GITHUB_API_BASE_URL
 
     @classmethod
-    def from_provider(cls, provider: LlmProviderRecord) -> GitHubCopilotProviderConfig:
-        api_base_url = provider.config.get("api_base_url")
-        github_api_base_url = provider.config.get("github_api_base_url")
-        return cls(
-            github_token=str(provider.secrets.get("github_token") or ""),
-            api_base_url=str(api_base_url).strip().rstrip("/") if isinstance(api_base_url, str) else "",
-            github_api_base_url=(
-                str(github_api_base_url).strip().rstrip("/")
-                if isinstance(github_api_base_url, str) and github_api_base_url.strip()
-                else GITHUB_API_BASE_URL
-            ),
-        )
+    def from_provider(cls, provider: LlmProviderRecord) -> GitHubCopilotCredentials:
+        return cls(github_token=str(provider.secrets.get("github_token") or ""))
 
     @property
-    def credentials_configured(self) -> bool:
+    def configured(self) -> bool:
         return bool(self.github_token.strip())
 
 
@@ -101,20 +87,17 @@ class GitHubCopilotModelGateway:
     def __init__(
         self,
         *,
-        config: GitHubCopilotProviderConfig,
+        credentials: GitHubCopilotCredentials,
         app_settings: Settings = settings,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        self.config = config
+        self.credentials = credentials
         self.settings = app_settings
         self.http_client = http_client or httpx.AsyncClient(
             **app_settings.github_copilot_httpx_client_kwargs()
         )
         self._session: ResolvedToken | None = None
-        self._api_base_url = config.api_base_url or COPILOT_API_BASE_URL
-
-    async def aclose(self) -> None:
-        await self.http_client.aclose()
+        self._api_base_url = COPILOT_API_BASE_URL
 
     async def responses(
         self,
@@ -138,17 +121,17 @@ class GitHubCopilotModelGateway:
             reasoning_effort=reasoning_effort,
             temperature=temperature,
             response_format=response_format,
-            stream=stream,
         )
         initiator = "user" if (metadata or {}).get("purpose") == "case_chat" else "agent"
-        if stream:
-            return self._stream(payload=payload, model=model, initiator=initiator)
-        return await self._complete(
+        response = await self._complete(
             payload=payload,
             model=model,
             initiator=initiator,
             response_format=response_format,
         )
+        if stream:
+            return single_response_stream(response)
+        return response
 
     async def _complete(
         self,
@@ -159,10 +142,12 @@ class GitHubCopilotModelGateway:
         response_format: dict[str, Any] | None,
     ) -> dict[str, Any]:
         session = await self._resolve_session()
-        response = await self._post(payload, session, initiator=initiator, stream=False)
+        response = await self._post(payload, session, initiator=initiator)
         if response.status_code == 401:
+            # The session token has a short life; a refresh covers the race where it expires
+            # between two requests.
             session = await self._resolve_session(force_refresh=True)
-            response = await self._post(payload, session, initiator=initiator, stream=False)
+            response = await self._post(payload, session, initiator=initiator)
         try:
             response.raise_for_status()
             provider_json = response.json()
@@ -171,7 +156,7 @@ class GitHubCopilotModelGateway:
                 http_error_message(
                     "GitHub Copilot chat completions",
                     exc,
-                    known_tokens=[session.token, self.config.github_token],
+                    known_tokens=[session.token, self.credentials.github_token],
                 )
             ) from exc
         except ValueError as exc:
@@ -187,95 +172,30 @@ class GitHubCopilotModelGateway:
             response_format=response_format,
         )
 
-    async def _stream(
-        self,
-        *,
-        payload: dict[str, Any],
-        model: str,
-        initiator: str,
-    ) -> AsyncIterator[dict[str, Any]]:
-        session = await self._resolve_session()
-        endpoint = self._chat_endpoint()
-        known_tokens = [session.token, self.config.github_token]
-        for attempt in range(2):
-            try:
-                request = self.http_client.build_request(
-                    "POST",
-                    endpoint,
-                    json=payload,
-                    headers=self._chat_headers(session.token, initiator=initiator, stream=True),
-                )
-                response = await self.http_client.send(request, stream=True)
-            except Exception as exc:
-                raise ModelTransportError(
-                    transport_error_message(
-                        "GitHub Copilot chat completions",
-                        exc,
-                        known_tokens=known_tokens,
-                    )
-                ) from exc
-            try:
-                if response.status_code == 401 and attempt == 0:
-                    await response.aclose()
-                    session = await self._resolve_session(force_refresh=True)
-                    known_tokens = [session.token, self.config.github_token]
-                    continue
-                if response.status_code >= 400:
-                    await response.aread()
-                    detail = sanitized_response_detail(response)
-                    message = (
-                        "GitHub Copilot chat completions failed with HTTP "
-                        f"{response.status_code}"
-                    )
-                    if detail:
-                        message = f"{message}: {detail}"
-                    raise ModelTransportError(message)
-                async for event in chat_completion_stream_events(
-                    iter_sse_json(response),
-                    provider=self.provider,
-                    model=model,
-                    token_source=session.source,
-                ):
-                    yield event
-                return
-            except ModelTransportError:
-                raise
-            except Exception as exc:
-                raise ModelTransportError(
-                    transport_error_message(
-                        "GitHub Copilot chat completions",
-                        exc,
-                        known_tokens=known_tokens,
-                    )
-                ) from exc
-            finally:
-                await response.aclose()
-
     async def _post(
         self,
         payload: dict[str, Any],
         session: ResolvedToken,
         *,
         initiator: str,
-        stream: bool,
     ) -> httpx.Response:
         try:
             return await self.http_client.post(
-                self._chat_endpoint(),
+                f"{self._api_base_url}{COPILOT_CHAT_COMPLETIONS_PATH}",
                 json=payload,
-                headers=self._chat_headers(session.token, initiator=initiator, stream=stream),
+                headers=self._chat_headers(session.token, initiator=initiator),
             )
         except Exception as exc:
             raise ModelTransportError(
                 transport_error_message(
                     "GitHub Copilot chat completions",
                     exc,
-                    known_tokens=[session.token, self.config.github_token],
+                    known_tokens=[session.token, self.credentials.github_token],
                 )
             ) from exc
 
     async def _resolve_session(self, *, force_refresh: bool = False) -> ResolvedToken:
-        if not self.config.credentials_configured:
+        if not self.credentials.configured:
             raise ModelCredentialError(
                 "The GitHub Copilot provider is not connected; authorize GitHub in AI Providers"
             )
@@ -292,11 +212,10 @@ class GitHubCopilotModelGateway:
         return self._session
 
     async def _exchange_token(self) -> ResolvedToken:
-        source_token = self.config.github_token.strip()
-        endpoint = f"{self.config.github_api_base_url}{COPILOT_TOKEN_PATH}"
+        source_token = self.credentials.github_token.strip()
         try:
             response = await self.http_client.get(
-                endpoint,
+                f"{GITHUB_API_BASE_URL}{COPILOT_TOKEN_PATH}",
                 headers={
                     "Authorization": f"Bearer {source_token}",
                     "Accept": "application/json",
@@ -335,24 +254,19 @@ class GitHubCopilotModelGateway:
         if not isinstance(token, str) or not token.strip():
             raise ModelTransportError("GitHub Copilot token exchange returned an invalid token")
         expires_at_raw = data.get("expires_at")
-        expires_at: datetime | None = None
         if isinstance(expires_at_raw, (int, float)) and not isinstance(expires_at_raw, bool):
             expires_at = datetime.fromtimestamp(float(expires_at_raw), UTC)
         else:
             expires_at = datetime.now(UTC) + timedelta(minutes=25)
-        if not self.config.api_base_url:
-            endpoints = data.get("endpoints") if isinstance(data, dict) else None
-            api_endpoint = endpoints.get("api") if isinstance(endpoints, dict) else None
-            derived = (
-                str(api_endpoint).strip().rstrip("/")
-                if isinstance(api_endpoint, str) and api_endpoint.strip()
-                else parse_copilot_api_base_url(token)
-            )
-            self._api_base_url = derived or COPILOT_API_BASE_URL
+        endpoints = data.get("endpoints") if isinstance(data, dict) else None
+        api_endpoint = endpoints.get("api") if isinstance(endpoints, dict) else None
+        derived = (
+            str(api_endpoint).strip().rstrip("/")
+            if isinstance(api_endpoint, str) and api_endpoint.strip()
+            else parse_copilot_api_base_url(token)
+        )
+        self._api_base_url = derived or COPILOT_API_BASE_URL
         return ResolvedToken(token=token.strip(), source="github_exchange", expires_at=expires_at)
-
-    def _chat_endpoint(self) -> str:
-        return f"{self._api_base_url}{COPILOT_CHAT_COMPLETIONS_PATH}"
 
     def _build_chat_payload(
         self,
@@ -364,7 +278,6 @@ class GitHubCopilotModelGateway:
         reasoning_effort: str,
         temperature: float | None,
         response_format: dict[str, Any] | None,
-        stream: bool,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model,
@@ -382,15 +295,13 @@ class GitHubCopilotModelGateway:
             payload["temperature"] = temperature
         if tools:
             payload["tools"] = tools
-        if stream:
-            payload["stream"] = True
         return payload
 
-    def _chat_headers(self, token: str, *, initiator: str, stream: bool) -> dict[str, str]:
+    def _chat_headers(self, token: str, *, initiator: str) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
-            "Accept": "text/event-stream" if stream else COPILOT_ACCEPT_HEADER,
+            "Accept": COPILOT_ACCEPT_HEADER,
             "Openai-Intent": "conversation-panel",
             "X-GitHub-Api-Version": "2023-06-01",
             "x-initiator": initiator,

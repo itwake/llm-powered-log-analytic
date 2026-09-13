@@ -6,7 +6,7 @@ The database contains six application tables:
 | --- | --- |
 | `users` | Authenticated user profiles |
 | `sessions` | Hashed browser session tokens |
-| `llm_providers` | Per-user AI providers: type, non-secret config, encrypted credentials, models, defaults |
+| `llm_providers` | Per-user AI providers: type, credentials, offered models, request defaults |
 | `cases` | Incident context and ownership |
 | `raw_files` | Uploaded file metadata and local object URI |
 | `analysis_runs` | Run state, progress, compact final-result manifest, and the provider, model, and thinking level used |

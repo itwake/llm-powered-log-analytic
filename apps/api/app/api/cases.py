@@ -344,7 +344,6 @@ async def start_analysis(
         try:
             selection = resolve_inference_selection(
                 store=store,
-                settings=store.settings,
                 user_id=user.id,
                 provider_id=payload.provider_id,
                 model=payload.model,

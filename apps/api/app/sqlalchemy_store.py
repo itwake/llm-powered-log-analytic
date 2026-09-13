@@ -49,7 +49,6 @@ from app.services.analysis_result_artifacts import (
     write_analysis_result_manifest,
 )
 from app.services.object_store import local_upload_object_uri, safe_filename
-from app.services.secret_encryption import SecretCipher
 from app.records import (
     TERMINAL_ANALYSIS_RUN_STATUSES,
     AnalysisLogPageRecord,
@@ -1214,9 +1213,6 @@ class SQLAlchemyStore:
 
     # --- AI providers ----------------------------------------------------------------
 
-    def _secret_cipher(self) -> SecretCipher:
-        return SecretCipher(self.settings.secret_key)
-
     def create_llm_provider(
         self,
         *,
@@ -1228,20 +1224,11 @@ class SQLAlchemyStore:
         models: list[str],
         default_model: str,
         default_reasoning_effort: str,
-        is_default: bool = False,
     ) -> LlmProviderRecord:
         try:
             with self._session() as session:
                 if session.get(tables.User, user_id) is None:
                     raise KeyError(user_id)
-                owned = session.scalar(
-                    select(func.count())
-                    .select_from(tables.LlmProvider)
-                    .where(tables.LlmProvider.user_id == user_id)
-                )
-                make_default = bool(is_default) or int(owned or 0) == 0
-                if make_default:
-                    self._clear_default_llm_provider(session, user_id)
                 now = _now()
                 row = tables.LlmProvider(
                     id=str(uuid.uuid4()),
@@ -1249,11 +1236,10 @@ class SQLAlchemyStore:
                     name=name,
                     provider_type=provider_type,
                     config_json=dict(config),
-                    encrypted_secrets=self._secret_cipher().encrypt_json(secrets),
+                    secrets_json=dict(secrets),
                     models_json=list(models),
                     default_model=default_model,
                     default_reasoning_effort=default_reasoning_effort,
-                    is_default=make_default,
                     created_at=now,
                     updated_at=now,
                 )
@@ -1277,18 +1263,6 @@ class SQLAlchemyStore:
             row = session.get(tables.LlmProvider, provider_id)
             return self._llm_provider_record(row) if row else None
 
-    def get_default_llm_provider(self, user_id: str) -> LlmProviderRecord | None:
-        with self._session() as session:
-            row = session.scalar(
-                select(tables.LlmProvider)
-                .where(
-                    tables.LlmProvider.user_id == user_id,
-                    tables.LlmProvider.is_default.is_(True),
-                )
-                .order_by(tables.LlmProvider.created_at)
-            )
-            return self._llm_provider_record(row) if row else None
-
     def update_llm_provider(
         self,
         *,
@@ -1300,7 +1274,6 @@ class SQLAlchemyStore:
         models: list[str] | None = None,
         default_model: str | None = None,
         default_reasoning_effort: str | None = None,
-        is_default: bool | None = None,
     ) -> LlmProviderRecord:
         try:
             with self._session() as session:
@@ -1312,16 +1285,13 @@ class SQLAlchemyStore:
                 if config is not None:
                     row.config_json = dict(config)
                 if secrets is not None:
-                    row.encrypted_secrets = self._secret_cipher().encrypt_json(secrets)
+                    row.secrets_json = dict(secrets)
                 if models is not None:
                     row.models_json = list(models)
                 if default_model is not None:
                     row.default_model = default_model
                 if default_reasoning_effort is not None:
                     row.default_reasoning_effort = default_reasoning_effort
-                if is_default:
-                    self._clear_default_llm_provider(session, user_id, keep=row.id)
-                    row.is_default = True
                 row.updated_at = _now()
                 session.flush()
                 return self._llm_provider_record(row)
@@ -1333,46 +1303,17 @@ class SQLAlchemyStore:
             row = session.get(tables.LlmProvider, provider_id)
             if row is None or row.user_id != user_id:
                 return False
-            was_default = bool(row.is_default)
             session.execute(
                 update(tables.AnalysisRun)
                 .where(tables.AnalysisRun.llm_provider_id == provider_id)
                 .values(llm_provider_id=None)
             )
             session.delete(row)
-            session.flush()
-            if was_default:
-                replacement = session.scalar(
-                    select(tables.LlmProvider)
-                    .where(tables.LlmProvider.user_id == user_id)
-                    .order_by(tables.LlmProvider.created_at)
-                )
-                if replacement is not None:
-                    replacement.is_default = True
-                    replacement.updated_at = _now()
             return True
-
-    def _clear_default_llm_provider(
-        self,
-        session: Session,
-        user_id: str,
-        *,
-        keep: str | None = None,
-    ) -> None:
-        statement = (
-            update(tables.LlmProvider)
-            .where(
-                tables.LlmProvider.user_id == user_id,
-                tables.LlmProvider.is_default.is_(True),
-            )
-            .values(is_default=False)
-        )
-        if keep is not None:
-            statement = statement.where(tables.LlmProvider.id != keep)
-        session.execute(statement)
 
     def _llm_provider_record(self, row: tables.LlmProvider) -> LlmProviderRecord:
         config = row.config_json if isinstance(row.config_json, dict) else {}
+        secrets = row.secrets_json if isinstance(row.secrets_json, dict) else {}
         models = row.models_json if isinstance(row.models_json, list) else []
         return LlmProviderRecord(
             id=row.id,
@@ -1383,10 +1324,13 @@ class SQLAlchemyStore:
             models=[str(model) for model in models],
             default_model=row.default_model,
             default_reasoning_effort=row.default_reasoning_effort,
-            is_default=bool(row.is_default),
             created_at=_utc(row.created_at) or _now(),
             updated_at=_utc(row.updated_at) or _now(),
-            secrets=self._secret_cipher().decrypt_json(row.encrypted_secrets),
+            secrets={
+                str(key): str(value)
+                for key, value in secrets.items()
+                if isinstance(value, str) and value
+            },
         )
 
     def _user_record(self, row: tables.User) -> UserRecord:

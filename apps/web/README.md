@@ -200,8 +200,9 @@ persisted.
 
 `/settings/ai-providers` lists the user's providers and opens `ProviderFormDialog` to create or
 edit one and `GitHubConnectDialog` to run the GitHub device flow. `useLlmProviders()` loads the
-provider list and catalog; `lib/inference.ts` derives default selections and labels. The same
-`InferenceSelector` appears in the run form (with a **No AI** option) and in the chat composer.
+provider list and catalog; `lib/inference.ts` derives default selections and labels, preferring
+the first provider with usable credentials. The same `InferenceSelector` appears in the run form
+(with a **No AI** option) and in the chat composer.
 
 ## State and UI conventions
 

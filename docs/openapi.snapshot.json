@@ -669,13 +669,6 @@
       },
       "LlmProviderCatalogResponse": {
         "properties": {
-          "ai_platform_defaults": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "title": "Ai Platform Defaults",
-            "type": "object"
-          },
           "default_reasoning_effort": {
             "title": "Default Reasoning Effort",
             "type": "string"
@@ -698,8 +691,7 @@
         "required": [
           "provider_types",
           "reasoning_efforts",
-          "default_reasoning_effort",
-          "ai_platform_defaults"
+          "default_reasoning_effort"
         ],
         "title": "LlmProviderCatalogResponse",
         "type": "object"
@@ -717,7 +709,7 @@
                 }
               ]
             },
-            "description": "Non-secret settings. AI Platform: chat_host, chat_uri, ib2b_host, ib2b_uri, usercase, trust_token_header, tracking_prefix, username, token_expires_at. GitHub Copilot: api_base_url.",
+            "description": "Non-secret settings. AI Platform: username, usercase.",
             "title": "Config",
             "type": "object"
           },
@@ -742,11 +734,6 @@
               }
             ],
             "title": "Default Reasoning Effort"
-          },
-          "is_default": {
-            "default": false,
-            "title": "Is Default",
-            "type": "boolean"
           },
           "models": {
             "anyOf": [
@@ -785,7 +772,7 @@
                 }
               ]
             },
-            "description": "Credentials stored encrypted. AI Platform: password or token. GitHub Copilot: github_token.",
+            "description": "Credentials. AI Platform: password. GitHub Copilot: github_token, normally written by the device flow rather than sent here.",
             "title": "Secrets",
             "type": "object"
           }
@@ -853,10 +840,6 @@
             "title": "Default Reasoning Effort",
             "type": "string"
           },
-          "is_default": {
-            "title": "Is Default",
-            "type": "boolean"
-          },
           "models": {
             "items": {
               "type": "string"
@@ -901,7 +884,6 @@
           "models",
           "default_model",
           "default_reasoning_effort",
-          "is_default",
           "credentials_configured",
           "created_at",
           "updated_at"
@@ -978,17 +960,6 @@
             ],
             "title": "Default Reasoning Effort"
           },
-          "is_default": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Default"
-          },
           "models": {
             "anyOf": [
               {
@@ -1044,6 +1015,11 @@
       },
       "ProviderTypeCatalog": {
         "properties": {
+          "available": {
+            "description": "Whether this deployment can host the provider type at all.",
+            "title": "Available",
+            "type": "boolean"
+          },
           "config_fields": {
             "items": {
               "type": "string"
@@ -1080,6 +1056,17 @@
           "supports_device_flow": {
             "title": "Supports Device Flow",
             "type": "boolean"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
           }
         },
         "required": [
@@ -1089,7 +1076,8 @@
           "default_model",
           "config_fields",
           "secret_fields",
-          "supports_device_flow"
+          "supports_device_flow",
+          "available"
         ],
         "title": "ProviderTypeCatalog",
         "type": "object"

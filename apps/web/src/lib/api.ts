@@ -362,13 +362,14 @@ export interface ProviderTypeCatalog {
   config_fields: string[];
   secret_fields: string[];
   supports_device_flow: boolean;
+  available: boolean;
+  unavailable_reason: string | null;
 }
 
 export interface LlmProviderCatalogResponse {
   provider_types: ProviderTypeCatalog[];
   reasoning_efforts: ReasoningEffortOption[];
   default_reasoning_effort: string;
-  ai_platform_defaults: Record<string, string>;
 }
 
 export interface LlmProviderResponse {
@@ -379,7 +380,6 @@ export interface LlmProviderResponse {
   models: string[];
   default_model: string;
   default_reasoning_effort: string;
-  is_default: boolean;
   credentials_configured: boolean;
   credential_summary: string | null;
   secret_fields: string[];
@@ -399,7 +399,6 @@ export interface LlmProviderCreateRequest {
   models?: string[];
   default_model?: string;
   default_reasoning_effort?: string;
-  is_default?: boolean;
   config?: Record<string, string | null>;
   secrets?: Record<string, string | null>;
 }
@@ -409,7 +408,6 @@ export interface LlmProviderUpdateRequest {
   models?: string[];
   default_model?: string;
   default_reasoning_effort?: string;
-  is_default?: boolean;
   config?: Record<string, string | null>;
   secrets?: Record<string, string | null>;
 }

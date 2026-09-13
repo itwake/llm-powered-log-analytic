@@ -33,7 +33,7 @@ export default function AiProvidersPage() {
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
-  const defaults = catalog?.ai_platform_defaults ?? {};
+  const aiPlatform = catalog?.provider_types.find((item) => item.provider_type === "ai_platform");
 
   const handleSaved = useCallback(
     (saved: LlmProviderResponse) => {
@@ -71,19 +71,6 @@ export default function AiProvidersPage() {
         ...current,
         [provider.provider_id]: { ok: false, message: apiErrorMessage(caught) },
       }));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function makeDefault(provider: LlmProviderResponse) {
-    setBusy(`${provider.provider_id}:default`);
-    setPageError(null);
-    try {
-      await providersApi.update(provider.provider_id, { is_default: true });
-      await reload();
-    } catch (caught) {
-      setPageError(apiErrorMessage(caught));
     } finally {
       setBusy(null);
     }
@@ -142,6 +129,9 @@ export default function AiProvidersPage() {
       </Stack>
 
       {(error || pageError) && <Alert severity="error">{pageError || error}</Alert>}
+      {aiPlatform && !aiPlatform.available && (
+        <Alert severity="info">{aiPlatform.unavailable_reason}</Alert>
+      )}
 
       {loading && providers.length === 0 && (
         <Card>
@@ -165,12 +155,6 @@ export default function AiProvidersPage() {
           {providers.map((provider) => {
             const testResult = testResults[provider.provider_id];
             const isBusy = busy?.startsWith(`${provider.provider_id}:`) ?? false;
-            const endpoint =
-              provider.provider_type === "ai_platform"
-                ? `${provider.config.chat_host || defaults.chat_host || "chat host not set"}${provider.config.chat_uri || defaults.chat_uri || ""}`
-                : provider.config.github_login
-                  ? `GitHub account ${provider.config.github_login}`
-                  : "GitHub account not connected";
             return (
               <Card key={provider.provider_id}>
                 <Stack spacing={2}>
@@ -178,7 +162,6 @@ export default function AiProvidersPage() {
                     actions={
                       <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
                         <Badge tone="info">{provider.provider_label}</Badge>
-                        {provider.is_default && <Badge tone="success">Default</Badge>}
                         <Badge tone={provider.credentials_configured ? "success" : "warning"}>
                           {provider.credentials_configured ? "Ready" : "Not connected"}
                         </Badge>
@@ -200,8 +183,6 @@ export default function AiProvidersPage() {
                   >
                     <dt>Credentials</dt>
                     <dd>{provider.credential_summary || "None stored yet"}</dd>
-                    <dt>{provider.provider_type === "ai_platform" ? "Endpoint" : "Account"}</dt>
-                    <dd>{endpoint}</dd>
                     <dt>Default model</dt>
                     <dd>
                       {provider.default_model} · {reasoningLabel(catalog, provider.default_reasoning_effort)} thinking
@@ -246,11 +227,6 @@ export default function AiProvidersPage() {
                     >
                       Edit
                     </Button>
-                    {!provider.is_default && (
-                      <Button disabled={isBusy} size="sm" variant="ghost" onClick={() => void makeDefault(provider)}>
-                        {busy === `${provider.provider_id}:default` ? "Saving" : "Set as default"}
-                      </Button>
-                    )}
                     <Button disabled={isBusy} size="sm" variant="danger" onClick={() => void remove(provider)}>
                       {busy === `${provider.provider_id}:delete` ? "Deleting" : "Delete"}
                     </Button>
@@ -270,8 +246,7 @@ export default function AiProvidersPage() {
           <Typography color="text.secondary" variant="body2">
             When you start an analysis run you pick a provider, a model, and a thinking level; the
             run annotates templates and writes the causal summary with that choice. Analysis chat
-            lets you pick again for every question. Credentials are stored encrypted with the
-            server secret and only ever leave the server to reach the provider itself.
+            lets you pick again for every question.
           </Typography>
         </Stack>
       </Card>

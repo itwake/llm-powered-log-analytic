@@ -33,33 +33,6 @@ class ResolvedToken:
     expires_at: datetime | None = None
 
 
-def parse_expires_at(value: Any) -> datetime | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        try:
-            return datetime.fromtimestamp(float(value), UTC)
-        except (OverflowError, OSError, ValueError):
-            return None
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return datetime.fromtimestamp(float(raw), UTC)
-        except (OverflowError, OSError, ValueError):
-            pass
-        iso_value = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
-        try:
-            parsed = datetime.fromisoformat(iso_value)
-        except ValueError:
-            return None
-        return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
-    return None
-
-
 def token_is_fresh(expires_at: datetime | None, *, margin_seconds: int = 5) -> bool:
     if expires_at is None:
         return True
@@ -211,75 +184,6 @@ async def single_response_stream(response: dict[str, Any]) -> AsyncIterator[dict
     }
 
 
-async def iter_sse_json(response: httpx.Response) -> AsyncIterator[dict[str, Any]]:
-    """Yield the JSON payload of every ``data:`` frame in a server-sent event stream."""
-    data_lines: list[str] = []
-    async for raw_line in response.aiter_lines():
-        line = raw_line.rstrip("\r")
-        if line == "":
-            if data_lines:
-                data = "\n".join(data_lines)
-                data_lines = []
-                if data.strip() == "[DONE]":
-                    return
-                parsed = _parse_sse_json(data)
-                if parsed is not None:
-                    yield parsed
-            continue
-        if line.startswith(":"):
-            continue
-        if line.startswith("data:"):
-            value = line[5:]
-            data_lines.append(value[1:] if value.startswith(" ") else value)
-    if data_lines:
-        data = "\n".join(data_lines)
-        if data.strip() != "[DONE]":
-            parsed = _parse_sse_json(data)
-            if parsed is not None:
-                yield parsed
-
-
-async def chat_completion_stream_events(
-    chunks: AsyncIterator[dict[str, Any]],
-    *,
-    provider: str,
-    model: str,
-    token_source: str,
-) -> AsyncIterator[dict[str, Any]]:
-    """Convert OpenAI-style chat completion chunks into gateway stream events."""
-    parts: list[str] = []
-    last_chunk: dict[str, Any] | None = None
-    async for chunk in chunks:
-        last_chunk = chunk
-        error = chunk.get("error")
-        if isinstance(error, dict) or isinstance(error, str):
-            detail = _detail_from_value(error)
-            raise ModelTransportError(
-                redact_token_material(f"{provider} streaming failed: {detail or 'error'}")
-            )
-        choices = chunk.get("choices")
-        if not isinstance(choices, list):
-            continue
-        for choice in choices:
-            if not isinstance(choice, dict):
-                continue
-            delta = choice.get("delta")
-            text = delta.get("content") if isinstance(delta, dict) else None
-            if not isinstance(text, str) and isinstance(choice.get("text"), str):
-                text = choice["text"]
-            if isinstance(text, str) and text:
-                parts.append(text)
-                yield {"type": "message.delta", "delta": text}
-    yield {
-        "type": "message.completed",
-        "provider": provider,
-        "model": model,
-        "output_text": "".join(parts),
-        "provider_json": last_chunk,
-        "token_source": token_source,
-    }
-
-
 def http_error_message(
     prefix: str,
     exc: httpx.HTTPStatusError,
@@ -332,14 +236,6 @@ def _content_contains_json_keyword(content: Any) -> bool:
     if isinstance(content, dict):
         return any(_content_contains_json_keyword(value) for value in content.values())
     return False
-
-
-def _parse_sse_json(data: str) -> dict[str, Any] | None:
-    try:
-        parsed = json.loads(data)
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
 
 
 def _detail_from_value(value: Any) -> str:

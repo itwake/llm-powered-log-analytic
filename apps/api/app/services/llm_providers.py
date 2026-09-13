@@ -1,10 +1,9 @@
-"""Validation, masking, and selection logic for user-managed AI providers."""
+"""Validation and selection logic for user-managed AI providers."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlparse
 
 from app.config import Settings
 from app.llm_catalog import (
@@ -20,11 +19,10 @@ from app.llm_catalog import (
     normalize_reasoning_effort,
     provider_label,
 )
-from app.records import LlmProviderRecord
-from app.services.aiplatform_model_gateway import AIPlatformProviderConfig
-from app.services.github_copilot_model_gateway import GitHubCopilotProviderConfig
+from app.records import LlmProviderRecord, sanitize_error_message
+from app.services.aiplatform_model_gateway import AIPlatformCredentials
+from app.services.github_copilot_model_gateway import GitHubCopilotCredentials
 from app.services.model_gateway import ModelGatewayError
-from app.records import sanitize_error_message
 
 
 class LlmProviderError(ValueError):
@@ -39,19 +37,11 @@ class LlmProviderNotReady(LlmProviderError):
     status_code = 409
 
 
-AI_PLATFORM_CONFIG_FIELDS: tuple[str, ...] = (
-    "chat_host",
-    "chat_uri",
-    "ib2b_host",
-    "ib2b_uri",
-    "usercase",
-    "trust_token_header",
-    "tracking_prefix",
-    "username",
-    "token_expires_at",
-)
-AI_PLATFORM_SECRET_FIELDS: tuple[str, ...] = ("password", "token")
-GITHUB_COPILOT_CONFIG_FIELDS: tuple[str, ...] = ("api_base_url", "github_login")
+# Only per-user credentials are stored on a provider. Endpoints and transport headers are
+# deployment settings in app/config.py, so a user never has to know them.
+AI_PLATFORM_CONFIG_FIELDS: tuple[str, ...] = ("username", "usercase")
+AI_PLATFORM_SECRET_FIELDS: tuple[str, ...] = ("password",)
+GITHUB_COPILOT_CONFIG_FIELDS: tuple[str, ...] = ("github_login",)
 GITHUB_COPILOT_SECRET_FIELDS: tuple[str, ...] = ("github_token",)
 PROVIDER_CONFIG_FIELDS: dict[str, tuple[str, ...]] = {
     AI_PLATFORM_PROVIDER: AI_PLATFORM_CONFIG_FIELDS,
@@ -61,7 +51,6 @@ PROVIDER_SECRET_FIELDS: dict[str, tuple[str, ...]] = {
     AI_PLATFORM_PROVIDER: AI_PLATFORM_SECRET_FIELDS,
     GITHUB_COPILOT_PROVIDER: GITHUB_COPILOT_SECRET_FIELDS,
 }
-_URL_FIELDS = frozenset({"chat_host", "ib2b_host", "api_base_url"})
 MAX_CONFIG_VALUE_LENGTH = 500
 MAX_SECRET_LENGTH = 8192
 
@@ -113,7 +102,9 @@ def normalize_provider_definition(
         raise LlmProviderError(f"name must be at most {MAX_PROVIDER_NAME_LENGTH} characters")
 
     if models is None:
-        normalized_models = list(existing.models) if existing else list(models_for_provider(canonical_type))
+        normalized_models = (
+            list(existing.models) if existing else list(models_for_provider(canonical_type))
+        )
     else:
         try:
             normalized_models = normalize_model_list(models)
@@ -128,12 +119,17 @@ def normalize_provider_definition(
         chosen_model = existing.default_model
     else:
         catalog_default = default_model_for_provider(canonical_type)
-        chosen_model = catalog_default if catalog_default in normalized_models else normalized_models[0]
+        chosen_model = (
+            catalog_default if catalog_default in normalized_models else normalized_models[0]
+        )
     if chosen_model not in normalized_models:
         raise LlmProviderError("default_model must be one of the enabled models")
 
     if default_reasoning_effort is not None:
-        effort = normalize_reasoning_effort(default_reasoning_effort, default=DEFAULT_REASONING_EFFORT)
+        effort = normalize_reasoning_effort(
+            default_reasoning_effort,
+            default=DEFAULT_REASONING_EFFORT,
+        )
         if effort is None:
             supported = ", ".join(REASONING_EFFORTS)
             raise LlmProviderError(f"default_reasoning_effort must be one of: {supported}")
@@ -155,9 +151,6 @@ def normalize_provider_definition(
         label="secrets",
         strip=False,
     )
-    for field_name in _URL_FIELDS & set(merged_config):
-        merged_config[field_name] = _validated_origin(merged_config[field_name], field_name)
-
     if canonical_type == AI_PLATFORM_PROVIDER:
         _validate_ai_platform(settings, merged_config, merged_secrets)
 
@@ -172,25 +165,22 @@ def normalize_provider_definition(
     )
 
 
-def credentials_configured(provider: LlmProviderRecord, settings: Settings) -> bool:
+def credentials_configured(provider: LlmProviderRecord) -> bool:
     if provider.provider_type == AI_PLATFORM_PROVIDER:
-        return AIPlatformProviderConfig.from_provider(provider, settings).credentials_configured
+        return AIPlatformCredentials.from_provider(provider).configured
     if provider.provider_type == GITHUB_COPILOT_PROVIDER:
-        return GitHubCopilotProviderConfig.from_provider(provider).credentials_configured
+        return GitHubCopilotCredentials.from_provider(provider).configured
     return False
 
 
-def credential_summary(provider: LlmProviderRecord, settings: Settings) -> str | None:
+def credential_summary(provider: LlmProviderRecord) -> str | None:
     if provider.provider_type == AI_PLATFORM_PROVIDER:
-        config = AIPlatformProviderConfig.from_provider(provider, settings)
-        if config.token.strip():
-            return "Trust token configured"
-        if config.exchange_credentials_configured:
-            return f"iB2B credentials for {config.username}"
+        credentials = AIPlatformCredentials.from_provider(provider)
+        if credentials.configured:
+            return f"iB2B credentials for {credentials.username}"
         return None
     if provider.provider_type == GITHUB_COPILOT_PROVIDER:
-        config = GitHubCopilotProviderConfig.from_provider(provider)
-        if not config.credentials_configured:
+        if not GitHubCopilotCredentials.from_provider(provider).configured:
             return None
         login = provider.config.get("github_login")
         if isinstance(login, str) and login.strip():
@@ -199,7 +189,7 @@ def credential_summary(provider: LlmProviderRecord, settings: Settings) -> str |
     return None
 
 
-def provider_public_view(provider: LlmProviderRecord, settings: Settings) -> dict[str, Any]:
+def provider_public_view(provider: LlmProviderRecord) -> dict[str, Any]:
     """The API representation of a provider. Secrets are reported by name only."""
     allowed = PROVIDER_CONFIG_FIELDS.get(provider.provider_type, ())
     return {
@@ -210,9 +200,8 @@ def provider_public_view(provider: LlmProviderRecord, settings: Settings) -> dic
         "models": list(provider.models),
         "default_model": provider.default_model,
         "default_reasoning_effort": provider.default_reasoning_effort,
-        "is_default": provider.is_default,
-        "credentials_configured": credentials_configured(provider, settings),
-        "credential_summary": credential_summary(provider, settings),
+        "credentials_configured": credentials_configured(provider),
+        "credential_summary": credential_summary(provider),
         "secret_fields": sorted(key for key, value in provider.secrets.items() if value),
         "config": {
             key: provider.config[key]
@@ -227,7 +216,6 @@ def provider_public_view(provider: LlmProviderRecord, settings: Settings) -> dic
 def resolve_inference_selection(
     *,
     store: Any,
-    settings: Settings,
     user_id: str,
     provider_id: str | None,
     model: str | None,
@@ -246,7 +234,10 @@ def resolve_inference_selection(
             if candidate is not None and candidate.user_id == user_id:
                 provider = candidate
         if provider is None:
-            provider = store.get_default_llm_provider(user_id)
+            provider = next(
+                (item for item in store.list_llm_providers(user_id) if credentials_configured(item)),
+                None,
+            )
         if provider is None:
             raise LlmProviderNotReady(
                 "No AI provider is configured; add one under AI Providers first"
@@ -261,7 +252,7 @@ def resolve_inference_selection(
     if effort is None:
         supported = ", ".join(REASONING_EFFORTS)
         raise LlmProviderError(f"reasoning_effort must be one of: {supported}")
-    if not credentials_configured(provider, settings):
+    if not credentials_configured(provider):
         raise LlmProviderNotReady(
             f"AI provider {provider.name} has no usable credentials; "
             "complete its setup under AI Providers"
@@ -292,9 +283,8 @@ async def smoke_test_provider(
         return False, sanitize_error_message(exc, max_length=600)
     if not isinstance(response, dict):
         return False, "the provider returned a stream instead of a completion"
-    text = str(response.get("output_text") or "").strip()
     label = provider_label(provider.provider_type)
-    if text:
+    if str(response.get("output_text") or "").strip():
         return True, f"{label} responded with model {provider.default_model}."
     return True, f"{label} accepted the request for model {provider.default_model}."
 
@@ -330,29 +320,31 @@ def _merge_fields(
     return merged
 
 
-def _validated_origin(value: str, field_name: str) -> str:
-    parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise LlmProviderError(f"{field_name} must be an http(s) URL")
-    return value.rstrip("/")
-
-
 def _validate_ai_platform(
     settings: Settings,
     config: dict[str, str],
     secrets: dict[str, str],
 ) -> None:
-    defaults = settings.ai_platform_form_defaults()
-    if not (config.get("chat_host") or defaults["chat_host"]):
-        raise LlmProviderError("chat_host is required for an AI Platform provider")
-    username = config.get("username", "")
-    password = secrets.get("password", "")
-    usercase = config.get("usercase", "")
-    if (username or password) and not (username and password and usercase):
-        raise LlmProviderError(
-            "iB2B credentials require username, password, and usercase together"
+    missing_endpoints = [
+        name
+        for name, value in (
+            ("LOGAN_AI_PLATFORM_CHAT_HOST", settings.ai_platform_chat_host),
+            ("LOGAN_AI_PLATFORM_IB2B_HOST", settings.ai_platform_ib2b_host),
+            ("LOGAN_AI_PLATFORM_IB2B_URI", settings.ai_platform_ib2b_uri),
         )
-    if password and not (config.get("ib2b_host") or defaults["ib2b_host"]):
-        raise LlmProviderError("ib2b_host is required for iB2B credentials")
-    if password and not (config.get("ib2b_uri") or defaults["ib2b_uri"]):
-        raise LlmProviderError("ib2b_uri is required for iB2B credentials")
+        if not (value or "").strip()
+    ]
+    if missing_endpoints:
+        raise LlmProviderError(
+            "AI Platform endpoints are not configured for this deployment; set "
+            + ", ".join(missing_endpoints)
+        )
+    provided = [
+        bool(config.get("username", "").strip()),
+        bool(secrets.get("password", "").strip()),
+        bool(config.get("usercase", "").strip()),
+    ]
+    if any(provided) and not all(provided):
+        raise LlmProviderError(
+            "AI Platform credentials require username, password, and usercase together"
+        )

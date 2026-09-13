@@ -54,8 +54,8 @@ class Settings:
     sso_tls_verify: bool = _env_bool("LOGAN_SSO_TLS_VERIFY", True)
     sso_timeout_seconds: float = float(os.getenv("LOGAN_SSO_TIMEOUT_SECONDS", "15"))
 
-    # AI providers are configured per user in the web application. The settings below are
-    # deployment defaults for the AI Platform provider form and transport behaviour.
+    # AI providers are configured per user in the web application, but the AI Platform
+    # endpoints and transport belong to the deployment: a user supplies only credentials.
     ai_platform_chat_host: str | None = _env_first("LOGAN_AI_PLATFORM_CHAT_HOST")
     ai_platform_chat_uri: str = os.getenv(
         "LOGAN_AI_PLATFORM_CHAT_URI",
@@ -172,16 +172,22 @@ class Settings:
         origins = self.cors_origins()
         return origins[0].rstrip("/") if origins else None
 
-    def ai_platform_form_defaults(self) -> dict[str, str]:
-        """Deployment defaults shown when a user creates an AI Platform provider."""
-        return {
-            "chat_host": (self.ai_platform_chat_host or "").rstrip("/"),
-            "chat_uri": self.ai_platform_chat_uri,
-            "ib2b_host": (self.ai_platform_ib2b_host or "").rstrip("/"),
-            "ib2b_uri": self.ai_platform_ib2b_uri,
-            "trust_token_header": self.ai_platform_trust_token_header,
-            "tracking_prefix": self.ai_platform_tracking_prefix,
-        }
+    @property
+    def ai_platform_configured(self) -> bool:
+        """Whether this deployment can reach AI Platform at all.
+
+        Users supply only their own credentials, so without these endpoints an AI Platform
+        provider cannot be created.
+        """
+        return all(
+            (value or "").strip()
+            for value in (
+                self.ai_platform_chat_host,
+                self.ai_platform_chat_uri,
+                self.ai_platform_ib2b_host,
+                self.ai_platform_ib2b_uri,
+            )
+        )
 
     def ai_platform_httpx_client_kwargs(self) -> dict[str, object]:
         return _httpx_client_kwargs(

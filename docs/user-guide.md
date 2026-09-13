@@ -148,8 +148,8 @@ evidence summary instead of generated prose.
 
 Analysis chat appears in the case workspace once the case has at least one run and answers about
 the most recent completed run. Choose the AI provider, model, and thinking level above the
-composer; the choice defaults to the provider the run was created with, or to your default
-provider. Runs created without AI can still be discussed with any connected provider.
+composer; the choice defaults to the provider, model, and thinking level the run was created
+with. Runs created without AI can still be discussed with any connected provider.
 
 Chat answers from the stored redacted analysis result. Responses stream into the workspace and can
 include evidence references. Use those references to verify important statements in Tabular Logs.
@@ -162,15 +162,15 @@ Chat history is held in the current browser page and is not stored as part of th
 Open **AI Providers** in the sidebar to manage the providers available to your account. Providers
 belong to you only; other users configure their own.
 
-- **Add AI Platform**: name the provider, confirm the chat host (deployment defaults are
-  pre-filled when configured), and enter either iB2B credentials (username, password, usercase)
-  or a trust token. Credentials are stored encrypted on the server.
+- **Add AI Platform**: name the provider and enter your iB2B username, password, and usercase.
+  The gateway endpoints come from the deployment, so they are not asked for here.
 - **Add GitHub Copilot**: name the provider and save it, then choose **Connect GitHub**. Enter the
   one-time code on the GitHub page that opens and confirm; the card shows the connected account.
 - Edit the model list, the default model, and the default thinking level on each provider. Extra
   model ids can be typed into the list.
 - **Test connection** sends a minimal request through the provider.
-- **Set as default** chooses the provider pre-selected for new runs and chat.
+
+New runs and chat pre-select the first provider that has usable credentials.
 
 ## Interpreting results
 

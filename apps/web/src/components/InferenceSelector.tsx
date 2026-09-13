@@ -84,7 +84,6 @@ export function InferenceSelector({
               value={provider.provider_id}
             >
               {provider.name}
-              {provider.is_default ? " (default)" : ""}
               {provider.credentials_configured ? "" : " — not connected"}
             </MenuItem>
           ))}

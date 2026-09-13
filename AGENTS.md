@@ -65,9 +65,9 @@ The pipeline steps in `apps/api/logan_analysis/pipeline.py` run in this order:
 10. `causal_summary`
 
 AI providers are configured per user in the web application (**AI Providers**) and stored in the
-`llm_providers` table with credentials encrypted under `LOGAN_SECRET_KEY`. Two provider types
-exist: `ai_platform` (trust token or iB2B credential exchange) and `github_copilot` (GitHub
-device flow, then a Copilot session-token exchange). An analysis run or chat request names a
+`llm_providers` table. Two provider types exist: `ai_platform` (iB2B credential exchange, with
+endpoints supplied by `LOGAN_AI_PLATFORM_*`) and `github_copilot` (GitHub device flow, then a
+Copilot session-token exchange). An analysis run or chat request names a
 provider, a model enabled on it, and a thinking level (`reasoning_effort`); a run without a
 provider executes the deterministic pipeline only. `ModelGatewayRegistry` builds one gateway per
 provider record. Tests may inject a fake `ModelGateway` through `create_app(model_gateway=...)`,
@@ -89,9 +89,9 @@ but fake gateways are not runtime providers.
 
 - Raw customer logs, prompts, credentials, tokens, database URLs, and unrestricted filesystem
   paths must not appear in progress metadata, stored error messages, logs, or model diagnostics.
-- Provider API responses report secrets by field name only. Never return decrypted provider
-  credentials or a GitHub access token to the browser; the device flow stores the token
-  server-side.
+- Provider API responses report secrets by field name only. Never return provider credentials or
+  a GitHub access token to the browser; the device flow stores the token server-side. Credentials
+  are held in the database as given, so the database file is the security boundary.
 - Redact log content before template generation, model input, and report display. Model calls may
   receive only bounded, redacted representative samples and evidence packets.
 - Keep production authentication SSO-only. Development may use the local default user only when

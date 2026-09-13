@@ -18,96 +18,59 @@ from app.services.model_gateway import (
     completion_result,
     http_error_message,
     join_url,
-    parse_expires_at,
     single_response_stream,
     token_is_fresh,
     transport_error_message,
 )
 
-AI_PLATFORM_DEFAULT_TRUST_TOKEN_HEADER = "X-XXXX-E2E-Trust-Token"
-AI_PLATFORM_DEFAULT_TRACKING_PREFIX = "EFP"
-AI_PLATFORM_DEFAULT_CHAT_URI = "/v1/api/v1/chat/completions"
-
 
 @dataclass(frozen=True)
-class AIPlatformProviderConfig:
-    """Endpoint and credential settings of one user-managed AI Platform provider."""
+class AIPlatformCredentials:
+    """The per-user half of an AI Platform provider. Endpoints are deployment-managed."""
 
-    chat_host: str
-    chat_uri: str = AI_PLATFORM_DEFAULT_CHAT_URI
-    ib2b_host: str = ""
-    ib2b_uri: str = ""
-    usercase: str = ""
-    trust_token_header: str = AI_PLATFORM_DEFAULT_TRUST_TOKEN_HEADER
-    tracking_prefix: str = AI_PLATFORM_DEFAULT_TRACKING_PREFIX
     username: str = ""
-    token_expires_at: str = ""
+    usercase: str = ""
     password: str = field(default="", repr=False)
-    token: str = field(default="", repr=False)
 
     @classmethod
-    def from_provider(
-        cls,
-        provider: LlmProviderRecord,
-        app_settings: Settings = settings,
-    ) -> AIPlatformProviderConfig:
-        defaults = app_settings.ai_platform_form_defaults()
-
+    def from_provider(cls, provider: LlmProviderRecord) -> AIPlatformCredentials:
         def value(name: str) -> str:
             raw = provider.config.get(name)
-            text = str(raw).strip() if isinstance(raw, str) else ""
-            return text or defaults.get(name, "")
+            return str(raw).strip() if isinstance(raw, str) else ""
 
         return cls(
-            chat_host=value("chat_host").rstrip("/"),
-            chat_uri=value("chat_uri") or AI_PLATFORM_DEFAULT_CHAT_URI,
-            ib2b_host=value("ib2b_host").rstrip("/"),
-            ib2b_uri=value("ib2b_uri"),
-            usercase=value("usercase"),
-            trust_token_header=value("trust_token_header") or AI_PLATFORM_DEFAULT_TRUST_TOKEN_HEADER,
-            tracking_prefix=value("tracking_prefix") or AI_PLATFORM_DEFAULT_TRACKING_PREFIX,
             username=value("username"),
-            token_expires_at=value("token_expires_at"),
+            usercase=value("usercase"),
             password=str(provider.secrets.get("password") or ""),
-            token=str(provider.secrets.get("token") or ""),
         )
 
     @property
-    def exchange_credentials_configured(self) -> bool:
-        return all(
-            (
-                self.ib2b_host.strip(),
-                self.ib2b_uri.strip(),
-                self.username.strip(),
-                self.password.strip(),
-                self.usercase.strip(),
-            )
-        )
-
-    @property
-    def credentials_configured(self) -> bool:
-        return bool(self.token.strip()) or self.exchange_credentials_configured
+    def configured(self) -> bool:
+        return all((self.username.strip(), self.password.strip(), self.usercase.strip()))
 
 
 class AIPlatformModelGateway:
+    """Chat completions through the enterprise AI Platform gateway.
+
+    The user's credentials are exchanged for a short-lived JWT through iB2B, and the token is
+    reused until it expires.
+    """
+
     provider = AI_PLATFORM_PROVIDER
 
     def __init__(
         self,
         *,
-        config: AIPlatformProviderConfig,
+        credentials: AIPlatformCredentials,
         app_settings: Settings = settings,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        self.config = config
+        self.credentials = credentials
         self.settings = app_settings
         self.http_client = http_client or httpx.AsyncClient(
             **app_settings.ai_platform_httpx_client_kwargs()
         )
         self._cached_token: ResolvedToken | None = None
-
-    async def aclose(self) -> None:
-        await self.http_client.aclose()
 
     async def responses(
         self,
@@ -123,7 +86,7 @@ class AIPlatformModelGateway:
         temperature: float | None = None,
         response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
-        response = await self._responses_core(
+        response = await self._complete(
             model=model,
             instructions=instructions,
             input=input,
@@ -137,7 +100,7 @@ class AIPlatformModelGateway:
             return single_response_stream(response)
         return response
 
-    async def _responses_core(
+    async def _complete(
         self,
         *,
         model: str,
@@ -150,7 +113,11 @@ class AIPlatformModelGateway:
         response_format: dict[str, Any] | None,
     ) -> dict[str, Any]:
         resolved = await self._resolve_token()
-        endpoint = join_url(self.config.chat_host, self.config.chat_uri, label="AI Platform")
+        endpoint = join_url(
+            self.settings.ai_platform_chat_host,
+            self.settings.ai_platform_chat_uri,
+            label="AI Platform",
+        )
         payload = self._build_chat_payload(
             model=model,
             instructions=instructions,
@@ -182,7 +149,7 @@ class AIPlatformModelGateway:
                 transport_error_message(
                     "AI Platform chat completions",
                     exc,
-                    known_tokens=[resolved.token, self.config.password],
+                    known_tokens=[resolved.token, self.credentials.password],
                 )
             ) from exc
 
@@ -196,36 +163,27 @@ class AIPlatformModelGateway:
         )
 
     async def _resolve_token(self) -> ResolvedToken:
-        configured_token = self.config.token.strip()
-        configured_expires_at = parse_expires_at(self.config.token_expires_at)
-        if configured_token and token_is_fresh(configured_expires_at):
-            return ResolvedToken(
-                token=configured_token,
-                source="provider_token",
-                expires_at=configured_expires_at,
-            )
         if self._cached_token and token_is_fresh(self._cached_token.expires_at):
             return self._cached_token
-        if self.config.exchange_credentials_configured:
-            self._cached_token = await self._exchange_token()
-            return self._cached_token
-        if configured_token and configured_expires_at is not None:
+        if not self.credentials.configured:
             raise ModelCredentialError(
-                "The configured AI Platform token is expired and no iB2B credentials are available"
+                "The AI Platform provider is missing credentials; add the username, password, "
+                "and usercase in AI Providers"
             )
-        raise ModelCredentialError(
-            "The AI Platform provider has no usable credentials; add a trust token or complete "
-            "iB2B credentials in AI Providers"
-        )
+        self._cached_token = await self._exchange_token()
+        return self._cached_token
 
     async def _exchange_token(self) -> ResolvedToken:
-        endpoint = join_url(self.config.ib2b_host, self.config.ib2b_uri, label="AI Platform iB2B")
-        username = self.config.username.strip()
-        password = self.config.password
+        endpoint = join_url(
+            self.settings.ai_platform_ib2b_host,
+            self.settings.ai_platform_ib2b_uri,
+            label="AI Platform iB2B",
+        )
+        password = self.credentials.password
         payload = {
             "input_token_state": {
                 "token_type": "CREDENTIAL",
-                "username": username,
+                "username": self.credentials.username.strip(),
                 "password": password,
             },
             "output_token_state": {"token_type": "JWT"},
@@ -287,7 +245,7 @@ class AIPlatformModelGateway:
             "reasoning_effort": reasoning_effort,
             "max_completion_tokens": self.settings.ai_platform_max_completion_tokens,
         }
-        usercase = self.config.usercase.strip()
+        usercase = self.credentials.usercase.strip()
         if usercase:
             payload["user"] = usercase
         if response_format is not None:
@@ -303,21 +261,15 @@ class AIPlatformModelGateway:
         return payload
 
     def _chat_headers(self, token: str) -> dict[str, str]:
-        trust_token_header = self.config.trust_token_header.strip()
-        if not trust_token_header:
-            trust_token_header = AI_PLATFORM_DEFAULT_TRUST_TOKEN_HEADER
         tracking = self._tracking_id()
         return {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            trust_token_header: token,
+            self.settings.ai_platform_trust_token_header: token,
             "x-correlation-id": tracking,
             "x-usersession-id": tracking,
         }
 
     def _tracking_id(self) -> str:
-        prefix = self.config.tracking_prefix.strip()
-        if not prefix:
-            prefix = AI_PLATFORM_DEFAULT_TRACKING_PREFIX
         stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")[:-3]
-        return f"{prefix}-{stamp}"
+        return f"{self.settings.ai_platform_tracking_prefix}-{stamp}"
