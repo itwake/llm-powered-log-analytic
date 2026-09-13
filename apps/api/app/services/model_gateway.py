@@ -106,6 +106,46 @@ def build_chat_messages(
     return messages
 
 
+def build_responses_input(input: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Project input items onto the Responses API shape the Copilot plugins send.
+
+    Text parts become ``input_text`` for user and developer roles and ``output_text`` for the
+    assistant; images stay ``input_image`` with a plain URL; anything else is dropped.
+    """
+    items: list[dict[str, Any]] = []
+    for item in input:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "user")
+        text_type = "output_text" if role == "assistant" else "input_text"
+        content: list[dict[str, Any]] = []
+        raw = item.get("content")
+        parts = [raw] if isinstance(raw, str) else raw if isinstance(raw, list) else []
+        for part in parts:
+            if isinstance(part, str):
+                content.append({"type": text_type, "text": part})
+            elif not isinstance(part, dict):
+                continue
+            elif part.get("type") in {"input_text", "output_text", "text"} and isinstance(
+                part.get("text"), str
+            ):
+                content.append({"type": text_type, "text": part["text"]})
+            elif (
+                role != "assistant"
+                and part.get("type") == "input_image"
+                and isinstance(part.get("image_url"), str)
+            ):
+                content.append({"type": "input_image", "image_url": part["image_url"]})
+        if content:
+            items.append({"role": role, "content": content})
+    return items
+
+
+def contains_json_keyword(value: Any) -> bool:
+    """Whether a prompt fragment already asks for JSON, so no extra instruction is needed."""
+    return _content_contains_json_keyword(value)
+
+
 def chat_content(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []

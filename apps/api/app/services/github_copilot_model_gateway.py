@@ -1,8 +1,10 @@
 """GitHub Copilot model gateway.
 
 A GitHub OAuth token obtained through the device flow is exchanged for a short-lived Copilot
-session token, which authorizes OpenAI-compatible chat completions on the Copilot API. The
-exchange mirrors the Copilot editor plugins, so the same plugin headers are sent.
+session token, which authorizes the Copilot Responses API. The request shape, endpoint, and
+headers mirror the EFP runtime and the Copilot editor plugins: the payload carries only
+``model``, ``input``, ``stream``, ``instructions``, and ``reasoning``, because the endpoint
+rejects unknown fields and headers outright.
 """
 
 from __future__ import annotations
@@ -20,12 +22,15 @@ from app.config import Settings, settings
 from app.llm_catalog import GITHUB_COPILOT_PROVIDER
 from app.records import LlmProviderRecord
 from app.services.model_gateway import (
+    JSON_OBJECT_FORMAT_INSTRUCTION,
     ModelCredentialError,
     ModelTransportError,
     ResolvedToken,
-    build_chat_messages,
+    build_responses_input,
     completion_result,
+    contains_json_keyword,
     http_error_message,
+    requires_json_keyword,
     single_response_stream,
     token_is_fresh,
     transport_error_message,
@@ -34,7 +39,7 @@ from app.services.model_gateway import (
 GITHUB_API_BASE_URL = "https://api.github.com"
 COPILOT_API_BASE_URL = "https://api.githubcopilot.com"
 COPILOT_TOKEN_PATH = "/copilot_internal/v2/token"
-COPILOT_CHAT_COMPLETIONS_PATH = "/chat/completions"
+COPILOT_RESPONSES_PATH = "/responses"
 COPILOT_TOKEN_REFRESH_MARGIN_SECONDS = 300
 COPILOT_USER_AGENT = "GitHubCopilotChat/0.41.0"
 COPILOT_EDITOR_VERSION = "vscode/1.133.0"
@@ -113,13 +118,12 @@ class GitHubCopilotModelGateway:
         temperature: float | None = None,
         response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
-        payload = self._build_chat_payload(
+        payload = self._build_responses_payload(
             model=model,
             instructions=instructions,
             input=input,
             tools=tools,
             reasoning_effort=reasoning_effort,
-            temperature=temperature,
             response_format=response_format,
         )
         initiator = "user" if (metadata or {}).get("purpose") == "case_chat" else "agent"
@@ -154,14 +158,14 @@ class GitHubCopilotModelGateway:
         except httpx.HTTPStatusError as exc:
             raise ModelTransportError(
                 http_error_message(
-                    "GitHub Copilot chat completions",
+                    "GitHub Copilot responses",
                     exc,
                     known_tokens=[session.token, self.credentials.github_token],
                 )
             ) from exc
         except ValueError as exc:
             raise ModelTransportError(
-                "GitHub Copilot chat completions returned a non-JSON response"
+                "GitHub Copilot responses returned a non-JSON response"
             ) from exc
         return completion_result(
             provider=self.provider,
@@ -181,14 +185,14 @@ class GitHubCopilotModelGateway:
     ) -> httpx.Response:
         try:
             return await self.http_client.post(
-                f"{self._api_base_url}{COPILOT_CHAT_COMPLETIONS_PATH}",
+                f"{self._api_base_url}{COPILOT_RESPONSES_PATH}",
                 json=payload,
-                headers=self._chat_headers(session.token, initiator=initiator),
+                headers=self._responses_headers(session.token, initiator=initiator),
             )
         except Exception as exc:
             raise ModelTransportError(
                 transport_error_message(
-                    "GitHub Copilot chat completions",
+                    "GitHub Copilot responses",
                     exc,
                     known_tokens=[session.token, self.credentials.github_token],
                 )
@@ -268,7 +272,7 @@ class GitHubCopilotModelGateway:
         self._api_base_url = derived or COPILOT_API_BASE_URL
         return ResolvedToken(token=token.strip(), source="github_exchange", expires_at=expires_at)
 
-    def _build_chat_payload(
+    def _build_responses_payload(
         self,
         *,
         model: str,
@@ -276,35 +280,34 @@ class GitHubCopilotModelGateway:
         input: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None,
         reasoning_effort: str,
-        temperature: float | None,
         response_format: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "model": model,
-            "messages": build_chat_messages(
-                instructions=instructions,
-                input=input,
-                response_format=response_format,
-            ),
-        }
+        items = build_responses_input(input)
+        text_instructions = (instructions or "").strip()
+        # The Responses endpoint has no response_format; the JSON contract travels as text.
+        if requires_json_keyword(response_format) and not (
+            contains_json_keyword(text_instructions) or contains_json_keyword(items)
+        ):
+            text_instructions = "\n\n".join(
+                part for part in (text_instructions, JSON_OBJECT_FORMAT_INSTRUCTION) if part
+            )
+        payload: dict[str, Any] = {"model": model, "input": items, "stream": False}
+        if text_instructions:
+            payload["instructions"] = text_instructions
         if reasoning_effort:
-            payload["reasoning_effort"] = reasoning_effort
-        if response_format is not None:
-            payload["response_format"] = response_format
-        if temperature is not None:
-            payload["temperature"] = temperature
+            payload["reasoning"] = {"effort": reasoning_effort}
         if tools:
             payload["tools"] = tools
         return payload
 
-    def _chat_headers(self, token: str, *, initiator: str) -> dict[str, str]:
+    def _responses_headers(self, token: str, *, initiator: str) -> dict[str, str]:
         # No X-GitHub-Api-Version here. That header belongs to the GitHub REST API; the Copilot
-        # completions endpoint rejects the request with "invalid apiVersion" when it is present.
+        # endpoint rejects the request with "invalid apiVersion" when it is present.
         return {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": COPILOT_ACCEPT_HEADER,
-            "Openai-Intent": "conversation-panel",
+            "Openai-Intent": "conversation-edits",
             "x-initiator": initiator,
             **copilot_plugin_headers(),
         }

@@ -39,4 +39,4 @@ the provider, model, and thinking level for each run or chat request, and a
 `ModelGatewayRegistry` keeps one gateway per provider so exchanged tokens are reused. The AI
 Platform gateway exchanges iB2B credentials for a JWT; the GitHub Copilot
 gateway exchanges the GitHub OAuth token obtained through the device flow for a Copilot session
-token. Both call OpenAI-compatible chat completions with the `reasoning_effort` chosen by the user.
+token. AI Platform is called through its chat completions endpoint with `reasoning_effort`; GitHub Copilot is called through the Copilot Responses endpoint with `reasoning.effort`, using exactly the payload fields and headers the EFP runtime sends, because that endpoint rejects unknown ones.
