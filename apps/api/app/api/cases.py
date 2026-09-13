@@ -23,7 +23,7 @@ from app.schemas.case import (
 )
 from app.services.llm_providers import LlmProviderError, resolve_inference_selection
 from app.services.model_gateway_factory import ModelGatewayRegistry
-from app.services.object_store import file_uri_to_path
+from app.services.object_store import file_uri_to_path, filesystem_path
 from app.store import Store, UserRecord
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
@@ -85,7 +85,7 @@ def _upload_for_case(store: Store, case_id: str, file_id: str):
 def _upload_path(upload: Any) -> str:
     if not upload.completed:
         raise HTTPException(status_code=400, detail=f"upload {upload.id} is not completed")
-    path = file_uri_to_path(upload.object_uri)
+    path = filesystem_path(file_uri_to_path(upload.object_uri))
     if not path.is_file():
         raise HTTPException(status_code=400, detail=f"upload {upload.id} content is missing")
     return str(path)
@@ -274,11 +274,11 @@ async def upload_content(
     )
     upload = _upload_for_case(store, case_id, file_id)
     max_upload_bytes = store.settings.max_upload_bytes
-    target_path = file_uri_to_path(upload.object_uri)
+    target_path = filesystem_path(file_uri_to_path(upload.object_uri))
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = target_path.with_name(
-        f".{target_path.name}.{uuid.uuid4().hex}.part"
-    )
+    # Only a random identifier: repeating the upload name would double its length in the
+    # path, and the name is under the uploader's control.
+    temporary_path = target_path.with_name(f".{uuid.uuid4().hex}.part")
     digest = hashlib.sha256()
     received_bytes = 0
     try:

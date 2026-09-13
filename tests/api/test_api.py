@@ -9,7 +9,7 @@ from app import sqlalchemy_store
 from app.api.cases import _track_task
 from app.config import Settings
 from app.main import create_app
-from app.services.object_store import file_uri_to_path
+from app.services.object_store import file_uri_to_path, filesystem_path
 from app.store import create_ephemeral_store, sanitize_error_message
 from httpx import ASGITransport, AsyncClient
 from starlette.requests import Request
@@ -352,3 +352,45 @@ async def test_reports_distinguish_an_unfinished_run_from_a_missing_result() -> 
 
     assert response.status_code == 409
     assert response.json()["detail"] == "analysis result is not ready"
+
+
+@pytest.mark.asyncio
+async def test_long_upload_names_below_a_deep_object_store_are_written(tmp_path: Path) -> None:
+    """A pod-log name below a deep data directory exceeds the Windows 260-character limit."""
+    deep_root = tmp_path.joinpath(*(["nested-object-store-directory"] * 3))
+    store = create_ephemeral_store(Settings(local_object_store_dir=str(deep_root)))
+    user = store.register_user(
+        email="owner@example.com",
+        username="owner",
+        full_name=None,
+    )
+    token, _ = store.create_session(user.id)
+    case = store.create_case(user_id=user.id, data={"title": "Long names"})
+    app = create_app(store=store)
+    filename = f"logs-from-agent-in-agent-{'0' * 60}-5997846489-4srzl.log"
+    content = b"2026-01-01T00:00:00Z ERROR payment-service connection pool exhausted\n"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"logan_session": token},
+    ) as client:
+        upload = await client.post(
+            f"/api/cases/{case.id}/uploads",
+            json={"filename": filename, "size_bytes": len(content)},
+        )
+        assert upload.status_code == 200
+        completed = await client.put(upload.json()["upload_url"], content=content)
+        assert completed.status_code == 200, completed.text
+        started = await client.post(
+            f"/api/cases/{case.id}/analysis-runs",
+            json={"input_file_ids": [upload.json()["file_id"]]},
+        )
+        assert started.status_code == 200, started.text
+
+    record = store.get_upload(upload.json()["file_id"])
+    assert record is not None
+    stored = file_uri_to_path(record.object_uri)
+    assert len(str(stored)) > 260
+    assert stored.name == filename
+    assert list(filesystem_path(stored).parent.glob("*.part")) == []

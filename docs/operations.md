@@ -48,6 +48,12 @@ requested page. Filters and free-text searches currently scan all log chunks, bu
 one at a time so memory use remains bounded. Results created by older application versions retain
 the single-envelope format and use a five-minute decoded-result compatibility cache.
 
+Upload names are chosen by the uploader, and a data directory a few levels deep plus two
+identifiers and a long name exceeds the 260-character limit that Windows applies to plain paths.
+The API therefore reads and writes uploads through the Windows extended-length path form and
+names the upload's temporary file with only a random identifier; the stored `file://` URIs keep
+the plain spelling.
+
 Each result artifact is written to a unique temporary file and atomically moved into place.
 Configured result roots are resolved to absolute paths, and temporary filenames contain only a
 full 128-bit random identifier plus the `.part` suffix. Avoiding a second copy of the artifact name

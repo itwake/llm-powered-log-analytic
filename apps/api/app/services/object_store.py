@@ -62,6 +62,34 @@ def local_upload_object_uri(
     )
 
 
+EXTENDED_LENGTH_PREFIX = "\\\\?\\"
+
+
+def extended_length_form(absolute_path: str) -> str:
+    """Return the Windows extended-length form of an absolute path.
+
+    Windows refuses paths longer than 260 characters unless they carry the ``\\\\?\\`` prefix.
+    An object-store root a few directories deep plus two identifiers and a long upload name
+    crosses that limit easily, and the failure surfaces as a misleading "file not found".
+    """
+    if absolute_path.startswith(EXTENDED_LENGTH_PREFIX):
+        return absolute_path
+    if absolute_path.startswith("\\\\"):
+        return f"{EXTENDED_LENGTH_PREFIX}UNC\\{absolute_path[2:]}"
+    return f"{EXTENDED_LENGTH_PREFIX}{absolute_path}"
+
+
+def filesystem_path(path: Path) -> Path:
+    """The path to hand to the operating system for reading or writing ``path``.
+
+    Only Windows needs a different spelling. The ``file://`` object URIs stored in the
+    database keep the plain form; convert at the point of filesystem access.
+    """
+    if os.name != "nt":
+        return path
+    return Path(extended_length_form(str(path.resolve())))
+
+
 def file_uri_to_path(object_uri: str) -> Path:
     if not object_uri.startswith("file://"):
         raise ValueError("object URI is not file-backed")
@@ -81,7 +109,7 @@ def digest_bytes(content: bytes) -> tuple[str, int]:
 
 
 def write_bytes(object_uri: str, content: bytes) -> StoredObject:
-    path = file_uri_to_path(object_uri)
+    path = filesystem_path(file_uri_to_path(object_uri))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
     sha256, size_bytes = digest_bytes(content)
