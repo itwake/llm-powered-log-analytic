@@ -66,6 +66,10 @@ export function GitHubConnectDialog({ onClose, onConnected, open, provider }: Gi
       return undefined;
     }
     let cancelled = false;
+    // Set when the countdown ends: the server still answers an in-flight poll (an
+    // "authorized" reply is honoured because the token is already stored), but no further
+    // poll is scheduled and a later "pending" or "expired" reply does not replace the message.
+    let expired = false;
     const providerId = provider.provider_id;
     setPhase("starting");
     setFlow(null);
@@ -93,6 +97,9 @@ export function GitHubConnectDialog({ onClose, onConnected, open, provider }: Gi
             }
             return;
           }
+          if (expired) {
+            return;
+          }
           if (result.status !== "pending") {
             stopTimers();
             setPhase("failed");
@@ -103,7 +110,7 @@ export function GitHubConnectDialog({ onClose, onConnected, open, provider }: Gi
             nextInterval = result.interval;
           }
         } catch (caught) {
-          if (cancelled) {
+          if (cancelled || expired) {
             return;
           }
           stopTimers();
@@ -124,16 +131,18 @@ export function GitHubConnectDialog({ onClose, onConnected, open, provider }: Gi
         setFlow(started);
         setPhase("waiting");
         setRemaining(started.expires_in);
+        // Wall-clock based, so a throttled background tab still expires on time, and the
+        // state updater stays pure: the expiry decision happens outside it.
+        const deadline = Date.now() + started.expires_in * 1000;
         countdownTimer.current = window.setInterval(() => {
-          setRemaining((current) => {
-            if (current <= 1) {
-              stopTimers();
-              setPhase("failed");
-              setMessage("The code expired before GitHub confirmed it. Start again.");
-              return 0;
-            }
-            return current - 1;
-          });
+          const left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+          setRemaining(left);
+          if (left === 0 && !expired) {
+            expired = true;
+            stopTimers();
+            setPhase("failed");
+            setMessage("The code expired before GitHub confirmed it. Start again.");
+          }
         }, 1000);
         schedulePoll(started.auth_id, started.interval);
       })

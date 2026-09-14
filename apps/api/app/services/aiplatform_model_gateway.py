@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -7,7 +8,12 @@ from typing import Any
 
 import httpx
 
-from app.config import Settings, settings
+from app.config import (
+    AI_PLATFORM_DEFAULT_TRACKING_PREFIX,
+    AI_PLATFORM_DEFAULT_TRUST_TOKEN_HEADER,
+    Settings,
+    settings,
+)
 from app.llm_catalog import AI_PLATFORM_PROVIDER
 from app.records import LlmProviderRecord
 from app.services.model_gateway import (
@@ -71,6 +77,9 @@ class AIPlatformModelGateway:
             **app_settings.ai_platform_httpx_client_kwargs()
         )
         self._cached_token: ResolvedToken | None = None
+        # One gateway serves every concurrent request for its provider, so the exchange is
+        # single-flighted: a burst of annotation calls must not log in eight times.
+        self._refresh_lock = asyncio.Lock()
 
     async def responses(
         self,
@@ -170,8 +179,12 @@ class AIPlatformModelGateway:
                 "The AI Platform provider is missing credentials; add the username, password, "
                 "and usercase in AI Providers"
             )
-        self._cached_token = await self._exchange_token()
-        return self._cached_token
+        async with self._refresh_lock:
+            # Another request may have refreshed the token while this one waited.
+            if self._cached_token and token_is_fresh(self._cached_token.expires_at):
+                return self._cached_token
+            self._cached_token = await self._exchange_token()
+            return self._cached_token
 
     async def _exchange_token(self) -> ResolvedToken:
         endpoint = join_url(
@@ -262,14 +275,20 @@ class AIPlatformModelGateway:
 
     def _chat_headers(self, token: str) -> dict[str, str]:
         tracking = self._tracking_id()
+        # A blank or padded name is an illegal HTTP header name; fall back to the default.
+        header = (
+            self.settings.ai_platform_trust_token_header.strip()
+            or AI_PLATFORM_DEFAULT_TRUST_TOKEN_HEADER
+        )
         return {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            self.settings.ai_platform_trust_token_header: token,
+            header: token,
             "x-correlation-id": tracking,
             "x-usersession-id": tracking,
         }
 
     def _tracking_id(self) -> str:
         stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")[:-3]
-        return f"{self.settings.ai_platform_tracking_prefix}-{stamp}"
+        prefix = self.settings.ai_platform_tracking_prefix.strip() or AI_PLATFORM_DEFAULT_TRACKING_PREFIX
+        return f"{prefix}-{stamp}"

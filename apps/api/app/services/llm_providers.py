@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.config import Settings
@@ -60,7 +60,7 @@ class ProviderDefinition:
     name: str
     provider_type: str
     config: dict[str, str]
-    secrets: dict[str, str]
+    secrets: dict[str, str] = field(repr=False)
     models: list[str]
     default_model: str
     default_reasoning_effort: str
@@ -125,16 +125,12 @@ def normalize_provider_definition(
     if chosen_model not in normalized_models:
         raise LlmProviderError("default_model must be one of the enabled models")
 
-    if default_reasoning_effort is not None:
-        effort = normalize_reasoning_effort(
-            default_reasoning_effort,
-            default=DEFAULT_REASONING_EFFORT,
-        )
-        if effort is None:
-            supported = ", ".join(REASONING_EFFORTS)
-            raise LlmProviderError(f"default_reasoning_effort must be one of: {supported}")
-    else:
-        effort = existing.default_reasoning_effort if existing else DEFAULT_REASONING_EFFORT
+    # A blank thinking level means "unchanged" on update, like a blank default model.
+    fallback_effort = existing.default_reasoning_effort if existing else DEFAULT_REASONING_EFFORT
+    effort = normalize_reasoning_effort(default_reasoning_effort, default=fallback_effort)
+    if effort is None:
+        supported = ", ".join(REASONING_EFFORTS)
+        raise LlmProviderError(f"default_reasoning_effort must be one of: {supported}")
 
     merged_config = _merge_fields(
         existing.config if existing else {},
@@ -231,7 +227,11 @@ def resolve_inference_selection(
     else:
         if fallback_provider_id:
             candidate = store.get_llm_provider(fallback_provider_id)
-            if candidate is not None and candidate.user_id == user_id:
+            if (
+                candidate is not None
+                and candidate.user_id == user_id
+                and credentials_configured(candidate)
+            ):
                 provider = candidate
         if provider is None:
             provider = next(
@@ -320,25 +320,28 @@ def _merge_fields(
     return merged
 
 
+def ai_platform_unavailable_reason(settings: Settings) -> str | None:
+    """Why an AI Platform provider cannot be created in this deployment, or ``None``.
+
+    The catalog and the provider validation both use this, so the form's notice and the
+    save-time error always name the same missing settings.
+    """
+    missing = settings.missing_ai_platform_settings()
+    if not missing:
+        return None
+    return "AI Platform endpoints are not configured for this deployment; set " + ", ".join(
+        missing
+    )
+
+
 def _validate_ai_platform(
     settings: Settings,
     config: dict[str, str],
     secrets: dict[str, str],
 ) -> None:
-    missing_endpoints = [
-        name
-        for name, value in (
-            ("LOGAN_AI_PLATFORM_CHAT_HOST", settings.ai_platform_chat_host),
-            ("LOGAN_AI_PLATFORM_IB2B_HOST", settings.ai_platform_ib2b_host),
-            ("LOGAN_AI_PLATFORM_IB2B_URI", settings.ai_platform_ib2b_uri),
-        )
-        if not (value or "").strip()
-    ]
-    if missing_endpoints:
-        raise LlmProviderError(
-            "AI Platform endpoints are not configured for this deployment; set "
-            + ", ".join(missing_endpoints)
-        )
+    unavailable_reason = ai_platform_unavailable_reason(settings)
+    if unavailable_reason:
+        raise LlmProviderError(unavailable_reason)
     provided = [
         bool(config.get("username", "").strip()),
         bool(secrets.get("password", "").strip()),

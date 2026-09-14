@@ -61,6 +61,9 @@ def _prepared_database_path(database_path: str) -> str:
 def upgrade_database(database_path: str) -> None:
     resolved_path = _prepared_database_path(database_path)
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    # The API configures its own logging; alembic.ini's logging section is for the CLI.
+    # Applying it here would install a root handler at WARN before the app's setup runs.
+    config.attributes["configure_logger"] = False
     config.set_main_option(
         "sqlalchemy.url",
         URL.create("sqlite+pysqlite", database=resolved_path).render_as_string(

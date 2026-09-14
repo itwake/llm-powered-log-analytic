@@ -58,11 +58,12 @@ The pipeline steps in `apps/api/logan_analysis/pipeline.py` run in this order:
 3. `preprocess_redact`
 4. `template_extraction`
 5. `representative_sampling`
-6. `ai_platform_annotation`
-7. `broadcast_annotations`
-8. `temporal_aggregation`
-9. `causal_graph`
-10. `causal_summary`
+6. `heuristic_annotation`
+7. `ai_platform_annotation` (the historical step name; it serves every provider type)
+8. `broadcast_annotations`
+9. `temporal_aggregation`
+10. `causal_graph`
+11. `causal_summary`
 
 AI providers are configured per user in the web application (**AI Providers**) and stored in the
 `llm_providers` table. Two provider types exist: `ai_platform` (iB2B credential exchange, with

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 
@@ -232,4 +233,84 @@ async def test_a_rejected_github_token_is_reported_as_a_credential_error() -> No
         await gateway.responses(user_id="u", model="gpt-5.4", instructions=None, input=[])
 
     assert GITHUB_TOKEN not in str(caught.value)
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_requests_share_one_session_exchange() -> None:
+    """Template annotation fires up to eight requests at once on one gateway."""
+    exchanges = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal exchanges
+        if request.url.path == "/copilot_internal/v2/token":
+            exchanges += 1
+            await asyncio.sleep(0)  # let the other requests reach the exchange
+            return httpx.Response(
+                200,
+                json={"token": "tid=abc", "expires_at": int(time.time()) + 1800},
+            )
+        return _responses_reply("ok")
+
+    gateway, http_client = _gateway(handler)
+    results = await asyncio.gather(
+        *(
+            gateway.responses(user_id="u", model="gpt-5.4", instructions=None, input=[])
+            for _ in range(8)
+        )
+    )
+
+    assert exchanges == 1
+    assert [result["output_text"] for result in results] == ["ok"] * 8
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_fenced_or_prosed_json_replies_are_still_parsed() -> None:
+    """The Responses endpoint has no JSON mode, so the parser tolerates fences and prose."""
+    replies = iter(
+        [
+            '```json\n{"golden_signal": "error"}\n```',
+            'Here is the annotation:\n{"golden_signal": "latency", "note": "a } b"}\nDone.',
+            "no json here",
+        ]
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/copilot_internal/v2/token":
+            return httpx.Response(
+                200,
+                json={"token": "tid=abc", "expires_at": int(time.time()) + 1800},
+            )
+        return _responses_reply(next(replies))
+
+    gateway, http_client = _gateway(handler)
+    request = dict(
+        user_id="u",
+        model="gpt-5.4",
+        instructions=None,
+        input=[],
+        response_format={"type": "json_object"},
+    )
+    fenced = await gateway.responses(**request)
+    prosed = await gateway.responses(**request)
+    plain = await gateway.responses(**request)
+
+    assert fenced["output_json"] == {"golden_signal": "error"}
+    assert prosed["output_json"] == {"golden_signal": "latency", "note": "a } b"}
+    assert "output_json" not in plain
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_an_unusable_expiry_keeps_the_default_session_window() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/copilot_internal/v2/token":
+            return httpx.Response(200, json={"token": "tid=abc", "expires_at": 1e20})
+        return _responses_reply("ok")
+
+    gateway, http_client = _gateway(handler)
+    result = await gateway.responses(user_id="u", model="gpt-5.4", instructions=None, input=[])
+
+    assert result["output_text"] == "ok"
     await http_client.aclose()

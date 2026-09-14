@@ -28,8 +28,9 @@ Production configuration requires:
 - TLS verification enabled for SSO, AI Platform, and GitHub Copilot transports
 - a persistent database and upload directory
 - outbound access from the API to the AI Platform endpoints and, for GitHub Copilot, to
-  `github.com`, `api.github.com`, and `api.githubcopilot.com` (directly or through
-  `LOGAN_GITHUB_COPILOT_PROXY_URL`)
+  `github.com`, `api.github.com`, and the Copilot API origin the token exchange reports
+  (`api.githubcopilot.com`, or a tenant address such as `api.individual.githubcopilot.com`),
+  directly or through `LOGAN_GITHUB_COPILOT_PROXY_URL`
 
 Development uses the local default user when `LOGAN_SSO_AUTHORIZE_URL` is empty. Non-development
 deployments require complete SSO configuration.

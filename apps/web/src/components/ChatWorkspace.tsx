@@ -16,7 +16,12 @@ import type {
 } from "@/lib/api";
 import { chatApi } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
-import { EMPTY_SELECTION, reasoningLabel, reconcileSelection } from "@/lib/inference";
+import {
+  EMPTY_SELECTION,
+  defaultInferenceSelection,
+  reasoningLabel,
+  reconcileSelection,
+} from "@/lib/inference";
 import { EvidenceChip } from "@/components/Evidence";
 import { InferenceSelector } from "@/components/InferenceSelector";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
@@ -85,6 +90,11 @@ export function ChatWorkspace({
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Until the user picks a provider, the selection follows the run being answered about
+  // (it usually completes after this workspace mounts); a manual choice is kept as long as
+  // it stays valid.
+  const selectionTouched = useRef(false);
+  const runId = run?.analysis_run_id ?? null;
   const runProviderId = run?.llm_provider_id ?? null;
   const runModel = run?.model_name ?? null;
   const runReasoningEffort = run?.reasoning_effort ?? null;
@@ -92,14 +102,17 @@ export function ChatWorkspace({
   useEffect(() => () => abortRef.current?.abort(), []);
 
   useEffect(() => {
+    const preferred = {
+      provider_id: runProviderId,
+      model: runModel,
+      reasoning_effort: runReasoningEffort,
+    };
     setSelection((current) =>
-      reconcileSelection(providers, current, {
-        provider_id: runProviderId,
-        model: runModel,
-        reasoning_effort: runReasoningEffort,
-      }),
+      selectionTouched.current
+        ? reconcileSelection(providers, current, preferred)
+        : defaultInferenceSelection(providers, preferred),
     );
-  }, [providers, runModel, runProviderId, runReasoningEffort]);
+  }, [providers, runId, runModel, runProviderId, runReasoningEffort]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -407,7 +420,10 @@ export function ChatWorkspace({
           loading={providersLoading}
           providers={providers}
           value={selection}
-          onChange={setSelection}
+          onChange={(next) => {
+            selectionTouched.current = true;
+            setSelection(next);
+          }}
         />
 
         <Box

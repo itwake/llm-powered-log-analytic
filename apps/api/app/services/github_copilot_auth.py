@@ -3,7 +3,8 @@
 The flow follows the Copilot editor plugins: request a device code from github.com, let the
 user confirm the code in the browser, then poll for the OAuth access token. Pending
 authorizations are kept in process memory only, scoped to the signing-in user, and the token
-never travels back to the browser; the API stores it encrypted on the provider record.
+never travels back to the browser; the API stores it on the provider record as given, so the
+database file is the security boundary.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ GITHUB_ACCESS_TOKEN_PATH = "/login/oauth/access_token"
 GITHUB_USER_PATH = "/user"
 DEVICE_FLOW_SCOPE = "read:user"
 DEFAULT_DEVICE_CODE_TTL_SECONDS = 900
+MAX_DEVICE_CODE_TTL_SECONDS = 3600
 DEFAULT_POLL_INTERVAL_SECONDS = 5
 MAX_PENDING_AUTHORIZATIONS_PER_USER = 5
 
@@ -75,15 +77,31 @@ class GitHubDeviceFlow:
         github_api_base_url: str = GITHUB_API_BASE_URL,
     ) -> None:
         self.settings = app_settings
-        self.http_client = http_client or httpx.AsyncClient(
-            **app_settings.github_copilot_httpx_client_kwargs()
-        )
+        self._http_client = http_client
         self.github_base_url = github_base_url.rstrip("/")
         self.github_api_base_url = github_api_base_url.rstrip("/")
         self._pending: dict[str, PendingDeviceAuthorization] = {}
 
+    @property
+    def http_client(self) -> httpx.AsyncClient:
+        """The GitHub client, built on first use so that a deployment that never connects
+        GitHub Copilot does not load the Copilot TLS settings at startup."""
+        if self._http_client is None:
+            try:
+                self._http_client = httpx.AsyncClient(
+                    **self.settings.github_copilot_httpx_client_kwargs()
+                )
+            except OSError as exc:
+                raise ModelTransportError(
+                    "The TLS CA bundle for GitHub cannot be loaded; check "
+                    "LOGAN_GITHUB_COPILOT_CA_BUNDLE (or SSL_CERT_FILE / REQUESTS_CA_BUNDLE) "
+                    "on the API host"
+                ) from exc
+        return self._http_client
+
     async def aclose(self) -> None:
-        await self.http_client.aclose()
+        if self._http_client is not None:
+            await self._http_client.aclose()
 
     def pending_for(self, *, user_id: str, auth_id: str) -> PendingDeviceAuthorization | None:
         self._cleanup_expired()
@@ -125,7 +143,10 @@ class GitHubDeviceFlow:
                 "GitHub device authorization response is missing device_code, user_code, "
                 "or verification_uri"
             )
-        expires_in = _positive_int(data.get("expires_in"), DEFAULT_DEVICE_CODE_TTL_SECONDS)
+        expires_in = min(
+            _positive_int(data.get("expires_in"), DEFAULT_DEVICE_CODE_TTL_SECONDS),
+            MAX_DEVICE_CODE_TTL_SECONDS,
+        )
         interval = _positive_int(data.get("interval"), DEFAULT_POLL_INTERVAL_SECONDS)
         record = PendingDeviceAuthorization(
             auth_id=str(uuid.uuid4()),

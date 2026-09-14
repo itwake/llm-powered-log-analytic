@@ -201,7 +201,7 @@ The main setting groups are:
 | Persistence | `LOGAN_DATABASE_PATH`, `LOGAN_LOCAL_OBJECT_STORE_DIR`, `LOGAN_MAX_UPLOAD_BYTES` |
 | Browser access | `LOGAN_WEB_BASE_URL`, `LOGAN_CORS_ALLOWED_ORIGINS` |
 | Authentication | `LOGAN_SSO_AUTHORIZE_URL`, `LOGAN_SSO_TOKEN_URL`, `LOGAN_SSO_CLIENT_ID` |
-| AI Platform | endpoint defaults for the provider form, TLS, proxy, timeout, and token settings |
+| AI Platform | deployment endpoints (chat host and URI, iB2B host and URI), TLS, proxy, timeout, and token settings |
 | GitHub Copilot | TLS, proxy, and timeout settings |
 
 `app/config.py` is the runtime contract and `.env.full.example` documents every supported setting.

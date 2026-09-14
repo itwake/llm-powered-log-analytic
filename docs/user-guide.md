@@ -170,7 +170,9 @@ belong to you only; other users configure their own.
   model ids can be typed into the list.
 - **Test connection** sends a minimal request through the provider.
 
-New runs and chat pre-select the first provider that has usable credentials.
+New runs pre-select the first provider that has usable credentials. Chat pre-selects the
+provider, model, and thinking level of the run it answers about (or the first connected provider
+when that run had none) until you choose another.
 
 ## Interpreting results
 

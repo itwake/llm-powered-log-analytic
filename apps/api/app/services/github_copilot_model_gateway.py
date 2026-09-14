@@ -9,6 +9,7 @@ rejects unknown fields and headers outright.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -103,6 +104,9 @@ class GitHubCopilotModelGateway:
         )
         self._session: ResolvedToken | None = None
         self._api_base_url = COPILOT_API_BASE_URL
+        # One gateway serves every concurrent request for its provider, so the exchange is
+        # single-flighted: a burst of annotation calls must not exchange the token eight times.
+        self._refresh_lock = asyncio.Lock()
 
     async def responses(
         self,
@@ -149,8 +153,9 @@ class GitHubCopilotModelGateway:
         response = await self._post(payload, session, initiator=initiator)
         if response.status_code == 401:
             # The session token has a short life; a refresh covers the race where it expires
-            # between two requests.
-            session = await self._resolve_session(force_refresh=True)
+            # between two requests. Passing the rejected session means concurrent requests
+            # that hit the same 401 share one refresh instead of each forcing their own.
+            session = await self._resolve_session(stale=session)
             response = await self._post(payload, session, initiator=initiator)
         try:
             response.raise_for_status()
@@ -198,22 +203,34 @@ class GitHubCopilotModelGateway:
                 )
             ) from exc
 
-    async def _resolve_session(self, *, force_refresh: bool = False) -> ResolvedToken:
+    async def _resolve_session(self, *, stale: ResolvedToken | None = None) -> ResolvedToken:
+        """The cached session token, exchanging a new one when it is missing, expiring, or
+        ``stale`` (a session the API just rejected)."""
         if not self.credentials.configured:
             raise ModelCredentialError(
                 "The GitHub Copilot provider is not connected; authorize GitHub in AI Providers"
             )
-        if (
-            not force_refresh
-            and self._session is not None
-            and token_is_fresh(
-                self._session.expires_at,
-                margin_seconds=COPILOT_TOKEN_REFRESH_MARGIN_SECONDS,
-            )
-        ):
+        session = self._usable_session(stale)
+        if session is not None:
+            return session
+        async with self._refresh_lock:
+            # Another request may have refreshed the session while this one waited.
+            session = self._usable_session(stale)
+            if session is not None:
+                return session
+            self._session = await self._exchange_token()
             return self._session
-        self._session = await self._exchange_token()
-        return self._session
+
+    def _usable_session(self, stale: ResolvedToken | None) -> ResolvedToken | None:
+        session = self._session
+        if session is None or session is stale:
+            return None
+        if not token_is_fresh(
+            session.expires_at,
+            margin_seconds=COPILOT_TOKEN_REFRESH_MARGIN_SECONDS,
+        ):
+            return None
+        return session
 
     async def _exchange_token(self) -> ResolvedToken:
         source_token = self.credentials.github_token.strip()
@@ -258,10 +275,12 @@ class GitHubCopilotModelGateway:
         if not isinstance(token, str) or not token.strip():
             raise ModelTransportError("GitHub Copilot token exchange returned an invalid token")
         expires_at_raw = data.get("expires_at")
+        expires_at = datetime.now(UTC) + timedelta(minutes=25)
         if isinstance(expires_at_raw, (int, float)) and not isinstance(expires_at_raw, bool):
-            expires_at = datetime.fromtimestamp(float(expires_at_raw), UTC)
-        else:
-            expires_at = datetime.now(UTC) + timedelta(minutes=25)
+            try:
+                expires_at = datetime.fromtimestamp(float(expires_at_raw), UTC)
+            except (OverflowError, OSError, ValueError):
+                pass  # An unusable expiry only keeps the default reuse window.
         endpoints = data.get("endpoints") if isinstance(data, dict) else None
         api_endpoint = endpoints.get("api") if isinstance(endpoints, dict) else None
         derived = (

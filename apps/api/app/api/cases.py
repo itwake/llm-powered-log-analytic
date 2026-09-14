@@ -22,9 +22,10 @@ from app.schemas.case import (
     UploadStartResponse,
 )
 from app.services.llm_providers import LlmProviderError, resolve_inference_selection
+from app.services.model_gateway import ModelGatewayError
 from app.services.model_gateway_factory import ModelGatewayRegistry
 from app.services.object_store import file_uri_to_path, filesystem_path
-from app.store import Store, UserRecord
+from app.store import Store, UserRecord, sanitize_error_message
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 logger = logging.getLogger("logan.analysis")
@@ -351,7 +352,10 @@ async def start_analysis(
             )
         except LlmProviderError as exc:
             raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-        gateway = registry.gateway_for(selection.provider)
+        try:
+            gateway = registry.gateway_for(selection.provider)
+        except ModelGatewayError as exc:
+            raise HTTPException(status_code=502, detail=sanitize_error_message(exc)) from exc
     run = store.create_analysis_run(
         case_id=case_id,
         user_id=user.id,

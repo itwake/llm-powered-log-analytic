@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
@@ -233,6 +234,55 @@ async def test_streaming_is_emulated_from_the_chat_completion_response() -> None
     assert events[0]["delta"] == "streamed enough"
     assert events[-1]["provider"] == "ai_platform"
     assert events[-1]["output_text"] == "streamed enough"
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_requests_share_one_token_exchange() -> None:
+    """Template annotation fires up to eight requests at once on one gateway."""
+    exchanges = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal exchanges
+        if str(request.url) == EXCHANGE_URL:
+            exchanges += 1
+            await asyncio.sleep(0)  # let the other requests reach the exchange
+            return httpx.Response(200, json={"issued_token": "issued-jwt"})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    gateway, http_client = _gateway(handler)
+    results = await asyncio.gather(
+        *(
+            gateway.responses(user_id="u", model="gpt-5.4", instructions=None, input=[])
+            for _ in range(8)
+        )
+    )
+
+    assert exchanges == 1
+    assert [result["output_text"] for result in results] == ["ok"] * 8
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_blank_header_settings_fall_back_to_the_defaults() -> None:
+    """A blank header name is an illegal HTTP header; the defaults must apply instead."""
+    headers: list[httpx.Headers] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == EXCHANGE_URL:
+            return httpx.Response(200, json={"issued_token": "issued-jwt"})
+        headers.append(request.headers)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    gateway, http_client = _gateway(
+        handler,
+        ai_platform_trust_token_header="  ",
+        ai_platform_tracking_prefix=" ",
+    )
+    await gateway.responses(user_id="u", model="gpt-5.4", instructions=None, input=[])
+
+    assert headers[0]["X-XXXX-E2E-Trust-Token"] == "issued-jwt"
+    assert headers[0]["x-correlation-id"].startswith("EFP-")
     await http_client.aclose()
 
 

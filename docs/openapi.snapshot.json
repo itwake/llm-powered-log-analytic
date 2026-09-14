@@ -522,7 +522,7 @@
                 "type": "null"
               }
             ],
-            "description": "AI provider to answer with; defaults to the run's provider or the user's default provider.",
+            "description": "AI provider to answer with; defaults to the run's provider, else the first provider with usable credentials.",
             "title": "Provider Id"
           },
           "reasoning_effort": {

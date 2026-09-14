@@ -11,7 +11,12 @@ import type {
   LlmProviderCatalogResponse,
   LlmProviderResponse,
 } from "@/lib/api";
-import { EMPTY_SELECTION, findProvider, selectionForProvider } from "@/lib/inference";
+import {
+  EMPTY_SELECTION,
+  findProvider,
+  readyProviders,
+  selectionForProvider,
+} from "@/lib/inference";
 
 const NO_PROVIDER_VALUE = "__none__";
 
@@ -49,6 +54,9 @@ export function InferenceSelector({
       : "";
   const size = compact ? "small" : "medium";
   const nothingConfigured = !loading && providers.length === 0;
+  // Saved providers without credentials cannot answer, so the picker treats "none connected"
+  // like "none configured": otherwise the select would hold a value no option renders.
+  const nothingReady = !loading && readyProviders(providers).length === 0;
 
   function changeProvider(providerId: string) {
     if (providerId === NO_PROVIDER_VALUE) {
@@ -62,7 +70,7 @@ export function InferenceSelector({
     <Stack spacing={1}>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
         <TextField
-          disabled={disabled || loading || (nothingConfigured && !allowNone)}
+          disabled={disabled || loading || (nothingReady && !allowNone)}
           label="AI provider"
           select
           size={size}
@@ -72,9 +80,13 @@ export function InferenceSelector({
           onChange={(event) => changeProvider(event.target.value)}
         >
           {allowNone && <MenuItem value={NO_PROVIDER_VALUE}>No AI (deterministic pipeline)</MenuItem>}
-          {!allowNone && providers.length === 0 && (
+          {!allowNone && (loading || nothingReady) && (
             <MenuItem disabled value={NO_PROVIDER_VALUE}>
-              {loading ? "Loading providers" : "No AI provider configured"}
+              {loading
+                ? "Loading providers"
+                : providers.length === 0
+                  ? "No AI provider configured"
+                  : "No AI provider connected"}
             </MenuItem>
           )}
           {providers.map((provider) => (
@@ -119,16 +131,18 @@ export function InferenceSelector({
           ))}
         </TextField>
       </Stack>
-      {nothingConfigured && (
+      {nothingReady && (
         <Typography color="text.secondary" variant="caption">
-          No AI provider is configured.{" "}
+          {nothingConfigured ? "No AI provider is configured." : "No AI provider is connected."}{" "}
           <Box component={Link} href="/settings/ai-providers" sx={{ fontWeight: 750 }}>
-            Add an AI Platform or GitHub Copilot provider
+            {nothingConfigured
+              ? "Add an AI Platform or GitHub Copilot provider"
+              : "Connect a provider under AI Providers"}
           </Box>{" "}
           to enable annotation, generated summaries, and chat.
         </Typography>
       )}
-      {!nothingConfigured && selectedProvider && (
+      {!nothingReady && selectedProvider && (
         <Typography color="text.secondary" variant="caption">
           {selectedProvider.provider_label}
           {selectedProvider.credential_summary ? ` · ${selectedProvider.credential_summary}` : ""}

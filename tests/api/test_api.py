@@ -155,9 +155,12 @@ async def test_chat_requires_a_configured_provider() -> None:
             },
         )
 
+    # The provider check runs before the analysis result is decoded, so an unfinished run
+    # still reaches it.
     assert response.status_code == 409
-    assert response.json()["detail"] == "analysis result is not ready"
-    assert run.model_provider == "none"
+    assert response.json()["detail"] == (
+        "No AI provider is configured; add one under AI Providers first"
+    )
 
 
 @pytest.mark.asyncio

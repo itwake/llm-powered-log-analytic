@@ -38,7 +38,8 @@ async def chat_stream(
     run = store.get_analysis_run(payload.analysis_run_id)
     if run is None or run.case_id != payload.case_id:
         raise HTTPException(status_code=404, detail="analysis run not found")
-    context = _analysis_chat_context(store, payload)
+    # Validate the provider choice before decoding the analysis result: a rejected request
+    # should not pay for the artifact reads.
     try:
         selection = resolve_inference_selection(
             store=store,
@@ -50,7 +51,11 @@ async def chat_stream(
         )
     except LlmProviderError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    gateway = registry.gateway_for(selection.provider)
+    try:
+        gateway = registry.gateway_for(selection.provider)
+    except ModelGatewayError as exc:
+        raise HTTPException(status_code=502, detail=sanitize_error_message(exc)) from exc
+    context = _analysis_chat_context(store, payload)
 
     async def events() -> AsyncIterator[str]:
         evidence_refs = context["evidence_refs"]

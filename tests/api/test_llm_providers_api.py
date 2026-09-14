@@ -552,3 +552,195 @@ async def test_github_device_flow_connects_a_copilot_provider() -> None:
     assert provider is not None
     assert provider.secrets == {"github_token": "gho_device_token"}
     assert provider.config["github_login"] == "octocat"
+
+
+@pytest.mark.asyncio
+async def test_github_device_check_reports_a_provider_deleted_while_polling() -> None:
+    store = _store()
+    user, token = _user(store)
+    app = create_app(store=store)
+    provider_ids: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/login/device/code":
+            return httpx.Response(
+                200,
+                json={
+                    "device_code": "device-secret",
+                    "user_code": "WXYZ-9876",
+                    "verification_uri": "https://github.com/login/device",
+                    "expires_in": 600,
+                    "interval": 1,
+                },
+            )
+        if request.url.path == "/login/oauth/access_token":
+            # The user deletes the provider in another tab while GitHub is being polled.
+            store.delete_llm_provider(provider_id=provider_ids[0], user_id=user.id)
+            return httpx.Response(200, json={"access_token": "gho_device_token"})
+        if request.url.path == "/user":
+            return httpx.Response(200, json={"login": "octocat"})
+        raise AssertionError(str(request.url))
+
+    app.state.github_device_flow = GitHubDeviceFlow(
+        app_settings=store.settings,
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    async with _client(app, token) as client:
+        copilot = (
+            await client.post(
+                "/api/llm-providers",
+                json={"name": "Copilot", "provider_type": "github_copilot"},
+            )
+        ).json()
+        provider_ids.append(copilot["provider_id"])
+        started = (
+            await client.post(f"/api/llm-providers/{copilot['provider_id']}/github-device/start")
+        ).json()
+        checked = await client.post(
+            f"/api/llm-providers/{copilot['provider_id']}/github-device/check",
+            json={"auth_id": started["auth_id"]},
+        )
+
+    assert checked.status_code == 404, checked.text
+    assert checked.json()["detail"] == "AI provider not found"
+
+
+@pytest.mark.asyncio
+async def test_ai_platform_needs_every_deployment_endpoint_to_be_offered_or_created() -> None:
+    """The catalog notice and the save-time error name the same missing setting."""
+    store = _store(ai_platform_chat_uri="")
+    _, token = _user(store)
+    app = create_app(store=store)
+
+    async with _client(app, token) as client:
+        catalog = (await client.get("/api/llm-providers/catalog")).json()
+        created = await client.post("/api/llm-providers", json=AI_PLATFORM_PAYLOAD)
+
+    ai_platform = catalog["provider_types"][0]
+    assert ai_platform["available"] is False
+    assert "LOGAN_AI_PLATFORM_CHAT_URI" in ai_platform["unavailable_reason"]
+    assert created.status_code == 400
+    assert "LOGAN_AI_PLATFORM_CHAT_URI" in created.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_blank_default_thinking_level_keeps_the_stored_one() -> None:
+    store = _store()
+    _, token = _user(store)
+    app = create_app(store=store)
+
+    async with _client(app, token) as client:
+        created = (await client.post("/api/llm-providers", json=AI_PLATFORM_PAYLOAD)).json()
+        blank = await client.patch(
+            f"/api/llm-providers/{created['provider_id']}",
+            json={"default_reasoning_effort": " "},
+        )
+        invalid = await client.patch(
+            f"/api/llm-providers/{created['provider_id']}",
+            json={"default_reasoning_effort": "ultra"},
+        )
+
+    assert blank.status_code == 200, blank.text
+    assert blank.json()["default_reasoning_effort"] == "medium"
+    assert invalid.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_connection_test_reports_an_unusable_ca_bundle(tmp_path) -> None:
+    bundle = tmp_path / "corp.pem"
+    bundle.write_text("not a certificate")
+    store = _store(github_copilot_ca_bundle=str(bundle))
+    _, token = _user(store)
+    app = create_app(store=store)
+
+    async with _client(app, token) as client:
+        copilot = (
+            await client.post(
+                "/api/llm-providers",
+                json={"name": "Copilot", "provider_type": "github_copilot"},
+            )
+        ).json()
+        await client.patch(
+            f"/api/llm-providers/{copilot['provider_id']}",
+            json={"secrets": {"github_token": "gho_manual_token"}},
+        )
+        tested = await client.post(f"/api/llm-providers/{copilot['provider_id']}/test")
+
+    assert tested.status_code == 200, tested.text
+    assert tested.json()["ok"] is False
+    assert "LOGAN_GITHUB_COPILOT_CA_BUNDLE" in tested.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_chat_skips_a_run_provider_that_lost_its_credentials() -> None:
+    store = _store()
+    _, token = _user(store)
+    gateway = StubModelGateway()
+    app = create_app(store=store, model_gateway=gateway)
+
+    async with _client(app, token) as client:
+        first = (
+            await client.post(
+                "/api/llm-providers",
+                json={"name": "Copilot A", "provider_type": "github_copilot"},
+            )
+        ).json()
+        await client.patch(
+            f"/api/llm-providers/{first['provider_id']}",
+            json={"secrets": {"github_token": "gho_first"}},
+        )
+        case_id = (await client.post("/api/cases", json={"title": "Incident"})).json()["case_id"]
+        content = b"2026-01-01T00:00:00Z ERROR payment-service pool exhausted\n"
+        upload = (
+            await client.post(
+                f"/api/cases/{case_id}/uploads",
+                json={"filename": "incident.log", "size_bytes": len(content)},
+            )
+        ).json()
+        await client.put(upload["upload_url"], content=content)
+        run = (
+            await client.post(
+                f"/api/cases/{case_id}/analysis-runs",
+                json={"input_file_ids": [upload["file_id"]], "provider_id": first["provider_id"]},
+            )
+        ).json()
+        assert run["llm_provider_id"] == first["provider_id"]
+        for _ in range(200):
+            current = (
+                await client.get(f"/api/cases/{case_id}/analysis-runs/{run['analysis_run_id']}")
+            ).json()
+            if current["status"] in {"completed", "failed"}:
+                break
+            await asyncio.sleep(0.01)
+        assert current["status"] == "completed"
+
+        # The run's provider loses its token afterwards; the fallback must not pick it.
+        cleared = await client.patch(
+            f"/api/llm-providers/{first['provider_id']}",
+            json={"secrets": {"github_token": ""}},
+        )
+        assert cleared.json()["credentials_configured"] is False
+        chat_payload = {
+            "message": "What happened?",
+            "case_id": case_id,
+            "analysis_run_id": run["analysis_run_id"],
+        }
+        nothing_ready = await client.post("/api/chat/stream", json=chat_payload)
+        assert nothing_ready.status_code == 409
+        assert "No AI provider is configured" in nothing_ready.json()["detail"]
+
+        second = (
+            await client.post(
+                "/api/llm-providers",
+                json={"name": "Copilot B", "provider_type": "github_copilot"},
+            )
+        ).json()
+        await client.patch(
+            f"/api/llm-providers/{second['provider_id']}",
+            json={"secrets": {"github_token": "gho_second"}},
+        )
+        answered = await client.post("/api/chat/stream", json=chat_payload)
+
+    assert answered.status_code == 200, answered.text
+    assert f'"provider_id":"{second["provider_id"]}"' in answered.text

@@ -72,15 +72,21 @@ def test_upgrade_creates_a_missing_database_directory(tmp_path: Path) -> None:
         engine.dispose()
 
 
-def test_migrations_do_not_disable_application_loggers(tmp_path: Path) -> None:
-    """The API runs migrations in-process, so Alembic must not switch its loggers off."""
+def test_in_process_migrations_leave_logging_to_the_application(tmp_path: Path) -> None:
+    """The API runs migrations in-process: Alembic must neither switch loggers off nor install
+    alembic.ini's root handler, which would make the app's own logging setup a no-op."""
     import logging
 
     from app.schema import upgrade_database
 
+    root = logging.getLogger()
     logger = logging.getLogger("logan.analysis")
     logger.disabled = False
+    handlers_before = list(root.handlers)
+    level_before = root.level
 
     upgrade_database(str(tmp_path / "logan.db"))
 
     assert not logger.disabled
+    assert root.handlers == handlers_before
+    assert root.level == level_before

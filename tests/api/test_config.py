@@ -80,6 +80,42 @@ def test_ai_platform_needs_deployment_endpoints_to_be_offered() -> None:
     ).ai_platform_configured
 
 
+def test_ai_platform_missing_settings_name_every_required_endpoint() -> None:
+    """The catalog notice and the save-time error are built from this one list."""
+    blank_chat_uri = Settings(
+        ai_platform_chat_host="https://ai.example.test",
+        ai_platform_chat_uri=" ",
+        ai_platform_ib2b_host="https://identity.example.test",
+        ai_platform_ib2b_uri="/token",
+    )
+
+    assert blank_chat_uri.missing_ai_platform_settings() == ["LOGAN_AI_PLATFORM_CHAT_URI"]
+    assert not blank_chat_uri.ai_platform_configured
+    assert Settings().missing_ai_platform_settings() == [
+        "LOGAN_AI_PLATFORM_CHAT_HOST",
+        "LOGAN_AI_PLATFORM_IB2B_HOST",
+    ]
+
+
+def test_runtime_validation_rejects_a_missing_ca_bundle(tmp_path) -> None:
+    """httpx loads the bundle when a provider client is first built, so a bad path must be a
+    startup error with the setting's name rather than a 500 on the first request."""
+    bundle = tmp_path / "corp.pem"
+    bundle.write_text("-----BEGIN CERTIFICATE-----\n")
+    missing = str(tmp_path / "missing.pem")
+
+    Settings(ai_platform_ca_bundle=str(bundle)).validate_for_runtime()
+    with pytest.raises(ValueError, match="LOGAN_AI_PLATFORM_CA_BUNDLE"):
+        Settings(ai_platform_ca_bundle=missing).validate_for_runtime()
+    with pytest.raises(ValueError, match="LOGAN_GITHUB_COPILOT_CA_BUNDLE"):
+        Settings(github_copilot_ca_bundle=missing).validate_for_runtime()
+    # The bundle is only loaded while verification is on.
+    Settings(
+        github_copilot_ca_bundle=missing,
+        github_copilot_tls_verify=False,
+    ).validate_for_runtime()
+
+
 def test_github_copilot_client_kwargs_honour_proxy_and_ca_bundle() -> None:
     kwargs = Settings(
         github_copilot_proxy_url="http://proxy.example.test:3128",

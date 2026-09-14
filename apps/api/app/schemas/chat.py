@@ -9,8 +9,8 @@ class ChatRequest(BaseModel):
     analysis_run_id: str = Field(min_length=1)
     provider_id: str | None = Field(
         default=None,
-        description="AI provider to answer with; defaults to the run's provider or the "
-        "user's default provider.",
+        description="AI provider to answer with; defaults to the run's provider, else the "
+        "first provider with usable credentials.",
     )
     model: str | None = Field(default=None, description="Model enabled on the provider.")
     reasoning_effort: str | None = Field(

@@ -62,9 +62,10 @@ API returns the queued run and continues analysis in the background. Run respons
 Providers are scoped to the signed-in user. `provider_type` is `ai_platform` or
 `github_copilot`. `config` holds non-secret settings and `secrets` holds credentials; responses
 list stored secrets by field name only. The catalog returns the supported provider types, their
-model lists, the thinking levels, and the deployment defaults for AI Platform endpoints. The
-GitHub device endpoints start the Copilot device flow and poll it; a successful check stores the
-token on the provider.
+model lists, the thinking levels, and whether an AI Platform provider can be created in this
+deployment (its endpoints come from `LOGAN_AI_PLATFORM_*`; the reason names any missing
+setting). The GitHub device endpoints start the Copilot device flow and poll it; a successful
+check stores the token on the provider.
 
 ## Chat and health
 

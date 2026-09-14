@@ -32,6 +32,7 @@ from app.services.llm_providers import (
     PROVIDER_CONFIG_FIELDS,
     PROVIDER_SECRET_FIELDS,
     LlmProviderError,
+    ai_platform_unavailable_reason,
     normalize_provider_definition,
     provider_public_view,
     smoke_test_provider,
@@ -41,10 +42,6 @@ from app.services.model_gateway_factory import ModelGatewayRegistry
 from app.store import LlmProviderRecord, Store, UserRecord, sanitize_error_message
 
 router = APIRouter(prefix="/api/llm-providers", tags=["llm-providers"])
-AI_PLATFORM_UNAVAILABLE = (
-    "AI Platform endpoints are not configured for this deployment; set "
-    "LOGAN_AI_PLATFORM_CHAT_HOST and the iB2B host and URI."
-)
 
 
 def _response(provider: LlmProviderRecord) -> LlmProviderResponse:
@@ -71,7 +68,8 @@ def provider_catalog(
     _: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),
 ) -> LlmProviderCatalogResponse:
-    ai_platform_available = store.settings.ai_platform_configured
+    ai_platform_unavailable = ai_platform_unavailable_reason(store.settings)
+    ai_platform_available = ai_platform_unavailable is None
     return LlmProviderCatalogResponse(
         provider_types=[
             ProviderTypeCatalog(
@@ -86,9 +84,7 @@ def provider_catalog(
                     ai_platform_available if provider_type == AI_PLATFORM_PROVIDER else True
                 ),
                 unavailable_reason=(
-                    None
-                    if provider_type != AI_PLATFORM_PROVIDER or ai_platform_available
-                    else AI_PLATFORM_UNAVAILABLE
+                    ai_platform_unavailable if provider_type == AI_PLATFORM_PROVIDER else None
                 ),
             )
             for provider_type in PROVIDER_TYPES
@@ -224,6 +220,14 @@ async def test_provider(
     provider = _owned_provider(store, user, provider_id)
     try:
         gateway = registry.gateway_for(provider)
+    except ModelGatewayError as exc:
+        # A transport that cannot be built (for example an unusable CA bundle) is a test
+        # failure the user can read, not a server error.
+        return LlmProviderTestResponse(
+            ok=False,
+            message=sanitize_error_message(exc, max_length=600),
+            model=provider.default_model,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     ok, message = await smoke_test_provider(provider=provider, gateway=gateway, user_id=user.id)
@@ -285,6 +289,9 @@ async def check_github_device_flow(
             message=result.message,
             interval=result.interval,
         )
+    # The provider may have been edited or deleted while GitHub was being polled; store the
+    # token on the current record (or answer 404) instead of the snapshot taken before.
+    provider = _owned_provider(store, user, provider_id)
     config = dict(provider.config)
     if result.github_login:
         config["github_login"] = result.github_login

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -171,18 +171,42 @@ def requires_json_keyword(response_format: dict[str, Any] | None) -> bool:
     return bool(response_format and response_format.get("type") == "json_object")
 
 
+_JSON_FENCE_RE = re.compile(r"^\s*```[A-Za-z]*\s*(.*?)\s*```\s*$", re.DOTALL)
+
+
 def parse_json_output(
     output_text: str,
     *,
     response_format: dict[str, Any] | None,
 ) -> dict[str, Any] | list[Any] | None:
+    """The JSON object or array in ``output_text``, tolerating a code fence or surrounding prose.
+
+    A provider without a server-side JSON mode (GitHub Copilot) receives the contract only as
+    an instruction, and models occasionally wrap the object in ``` fences or a sentence.
+    """
     if not output_text or not response_format or response_format.get("type") != "json_object":
         return None
-    try:
-        parsed = json.loads(output_text)
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, (dict, list)) else None
+    for candidate in _json_candidates(output_text):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, (dict, list)):
+            return parsed
+    return None
+
+
+def _json_candidates(text: str) -> Iterator[str]:
+    yield text
+    fenced = _JSON_FENCE_RE.match(text)
+    if fenced:
+        yield fenced.group(1)
+    starts = [index for index in (text.find("{"), text.find("[")) if index >= 0]
+    if starts:
+        start = min(starts)
+        end = max(text.rfind("}"), text.rfind("]"))
+        if end > start:
+            yield text[start : end + 1]
 
 
 def completion_result(

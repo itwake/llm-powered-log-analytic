@@ -11,6 +11,7 @@ from app.services.github_copilot_model_gateway import (
     GitHubCopilotCredentials,
     GitHubCopilotModelGateway,
 )
+from app.services.model_gateway import ModelTransportError
 
 
 def create_model_gateway(
@@ -78,11 +79,20 @@ class ModelGatewayRegistry:
     def _client_for(self, provider_type: str) -> httpx.AsyncClient:
         client = self._clients.get(provider_type)
         if client is None:
-            kwargs = (
-                self.settings.ai_platform_httpx_client_kwargs()
-                if provider_type == AI_PLATFORM_PROVIDER
-                else self.settings.github_copilot_httpx_client_kwargs()
-            )
-            client = httpx.AsyncClient(**kwargs)
+            if provider_type == AI_PLATFORM_PROVIDER:
+                kwargs = self.settings.ai_platform_httpx_client_kwargs()
+                bundle_setting = "LOGAN_AI_PLATFORM_CA_BUNDLE"
+            else:
+                kwargs = self.settings.github_copilot_httpx_client_kwargs()
+                bundle_setting = "LOGAN_GITHUB_COPILOT_CA_BUNDLE"
+            try:
+                client = httpx.AsyncClient(**kwargs)
+            except OSError as exc:
+                # httpx loads the CA bundle here; report it as a provider transport problem
+                # instead of a server error.
+                raise ModelTransportError(
+                    f"The TLS CA bundle for this provider cannot be loaded; check {bundle_setting}"
+                    " (or SSL_CERT_FILE / REQUESTS_CA_BUNDLE) on the API host"
+                ) from exc
             self._clients[provider_type] = client
         return client

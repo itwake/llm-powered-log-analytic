@@ -50,3 +50,21 @@ def test_filesystem_path_keeps_the_name_and_only_changes_windows_spelling(tmp_pa
         assert str(spelled).startswith(EXTENDED_LENGTH_PREFIX)
     else:
         assert spelled == target
+
+
+def test_ingestion_identity_ignores_the_windows_extended_length_spelling(tmp_path) -> None:
+    """The pipeline receives the spelling that opens long paths; stored URIs and file ids must
+    not depend on it."""
+    import uuid
+
+    from logan_analysis.activities.ingestion import ingest_paths
+
+    source = tmp_path / "service.log"
+    source.write_bytes(b"2026-01-01T00:00:00Z ERROR pool exhausted\n")
+
+    [ingested] = ingest_paths([str(filesystem_path(source))])
+
+    assert EXTENDED_LENGTH_PREFIX not in ingested.object_uri
+    assert ingested.object_uri == f"file://{source.resolve()}"
+    assert ingested.file_id == str(uuid.uuid5(uuid.NAMESPACE_URL, str(source.resolve())))
+    assert ingested.original_filename == "service.log"

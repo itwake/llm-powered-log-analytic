@@ -26,6 +26,15 @@ LOCAL_WEB_ORIGINS = (
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 )
+AI_PLATFORM_DEFAULT_TRUST_TOKEN_HEADER = "X-XXXX-E2E-Trust-Token"
+AI_PLATFORM_DEFAULT_TRACKING_PREFIX = "EFP"
+# The deployment settings an AI Platform provider needs, as (environment variable, attribute).
+AI_PLATFORM_ENDPOINT_SETTINGS = (
+    ("LOGAN_AI_PLATFORM_CHAT_HOST", "ai_platform_chat_host"),
+    ("LOGAN_AI_PLATFORM_CHAT_URI", "ai_platform_chat_uri"),
+    ("LOGAN_AI_PLATFORM_IB2B_HOST", "ai_platform_ib2b_host"),
+    ("LOGAN_AI_PLATFORM_IB2B_URI", "ai_platform_ib2b_uri"),
+)
 
 
 @dataclass(frozen=True)
@@ -66,13 +75,12 @@ class Settings:
         "LOGAN_AI_PLATFORM_IB2B_URI",
         "/dsp/rest-sts/DSP_iB2B/iB2B_tokenTranslator_v2?_action=translate",
     )
-    ai_platform_trust_token_header: str = os.getenv(
-        "LOGAN_AI_PLATFORM_TRUST_TOKEN_HEADER",
-        "X-XXXX-E2E-Trust-Token",
+    # A blank value falls back to the default: these become HTTP header names and values.
+    ai_platform_trust_token_header: str = (
+        _env_first("LOGAN_AI_PLATFORM_TRUST_TOKEN_HEADER") or AI_PLATFORM_DEFAULT_TRUST_TOKEN_HEADER
     )
-    ai_platform_tracking_prefix: str = os.getenv(
-        "LOGAN_AI_PLATFORM_TRACKING_PREFIX",
-        "EFP",
+    ai_platform_tracking_prefix: str = (
+        _env_first("LOGAN_AI_PLATFORM_TRACKING_PREFIX") or AI_PLATFORM_DEFAULT_TRACKING_PREFIX
     )
     ai_platform_max_completion_tokens: int = int(
         os.getenv("LOGAN_AI_PLATFORM_MAX_COMPLETION_TOKENS", "4096")
@@ -153,6 +161,20 @@ class Settings:
                 errors.append("LOGAN_AI_PLATFORM_TLS_VERIFY must be true")
             if not self.github_copilot_tls_verify:
                 errors.append("LOGAN_GITHUB_COPILOT_TLS_VERIFY must be true")
+        # httpx loads a CA bundle when the client is built, which now happens on the first
+        # provider request; checking here keeps a bad path a startup error with a clear name.
+        for name, ca_bundle, tls_verify in (
+            ("LOGAN_AI_PLATFORM_CA_BUNDLE", self.ai_platform_ca_bundle, self.ai_platform_tls_verify),
+            (
+                "LOGAN_GITHUB_COPILOT_CA_BUNDLE",
+                self.github_copilot_ca_bundle,
+                self.github_copilot_tls_verify,
+            ),
+        ):
+            if tls_verify and ca_bundle and not Path(ca_bundle).is_file():
+                errors.append(
+                    f"{name} (or SSL_CERT_FILE / REQUESTS_CA_BUNDLE) must point to a CA bundle file"
+                )
         if errors:
             raise ValueError("Invalid configuration: " + "; ".join(errors))
 
@@ -172,22 +194,23 @@ class Settings:
         origins = self.cors_origins()
         return origins[0].rstrip("/") if origins else None
 
-    @property
-    def ai_platform_configured(self) -> bool:
-        """Whether this deployment can reach AI Platform at all.
+    def missing_ai_platform_settings(self) -> list[str]:
+        """Environment variables an AI Platform provider needs that this deployment lacks.
 
         Users supply only their own credentials, so without these endpoints an AI Platform
-        provider cannot be created.
+        provider cannot be created. The catalog and the provider validation both report
+        this list so they can never disagree.
         """
-        return all(
-            (value or "").strip()
-            for value in (
-                self.ai_platform_chat_host,
-                self.ai_platform_chat_uri,
-                self.ai_platform_ib2b_host,
-                self.ai_platform_ib2b_uri,
-            )
-        )
+        return [
+            name
+            for name, attribute in AI_PLATFORM_ENDPOINT_SETTINGS
+            if not (getattr(self, attribute) or "").strip()
+        ]
+
+    @property
+    def ai_platform_configured(self) -> bool:
+        """Whether this deployment can reach AI Platform at all."""
+        return not self.missing_ai_platform_settings()
 
     def ai_platform_httpx_client_kwargs(self) -> dict[str, object]:
         return _httpx_client_kwargs(
