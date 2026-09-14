@@ -11,6 +11,7 @@ import type {
 } from "@/lib/api";
 import { formatDateTime, valueLabel } from "@/lib/format";
 import { describeRunModel } from "@/lib/inference";
+import { aiOutcome, stepLabel } from "@/lib/runs";
 import { AnalysisProgressPanel } from "@/components/AnalysisProgressPanel";
 import { EvidenceDetail } from "@/components/Evidence";
 import { Badge, Card, EmptyState, SectionHeader, statusTone } from "@/components/ui";
@@ -50,6 +51,7 @@ export function CaseRunInspector({
   run,
   selectedEvidence,
 }: CaseRunInspectorProps) {
+  const outcome = aiOutcome(run);
   return (
     <Stack spacing={2}>
       <AnalysisProgressPanel
@@ -103,13 +105,24 @@ export function CaseRunInspector({
               <dt>Status</dt>
               <dd><Badge tone={statusTone(run.status)}>{run.status}</Badge></dd>
               <dt>Step</dt>
-              <dd>{run.current_step}</dd>
+              <dd>{stepLabel(run.current_step)}</dd>
               <dt>Started</dt>
               <dd>{formatDateTime(run.started_at)}</dd>
               <dt>Completed</dt>
               <dd>{formatDateTime(run.completed_at)}</dd>
               <dt>AI model</dt>
-              <dd>{describeRunModel(run)}</dd>
+              <dd>
+                {describeRunModel(run)}
+                {outcome && (
+                  <Badge
+                    sx={{ ml: 1 }}
+                    title={outcome.detail}
+                    tone={outcome.level === "failed" ? "danger" : "warning"}
+                  >
+                    {outcome.level === "failed" ? "AI not applied" : "AI partial"}
+                  </Badge>
+                )}
+              </dd>
               {run.error_message && (
                 <>
                   <dt>Error</dt>

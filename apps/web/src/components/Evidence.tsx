@@ -6,7 +6,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Link from "@/components/Link";
 import type { EvidenceRef } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { formatLogTimestamp } from "@/lib/format";
 import { Button, EmptyState } from "@/components/ui";
 
 export function formatEvidenceLabel(ref: EvidenceRef): string {
@@ -106,7 +106,7 @@ export function EvidenceDetail({ caseId, refItem, runId }: EvidenceDetailProps) 
         <dt>Line</dt>
         <dd>{refItem.line_number}</dd>
         <dt>Timestamp</dt>
-        <dd>{formatDateTime(refItem.timestamp)}</dd>
+        <dd>{refItem.timestamp ? `${formatLogTimestamp(refItem.timestamp)} UTC` : "n/a"}</dd>
         <dt>Template</dt>
         <dd>{refItem.template_id || "n/a"}</dd>
         <dt>Log id</dt>

@@ -5,6 +5,7 @@ import {
   errorMessage,
   parseResponse,
   parseXhrPayload,
+  redirectToLoginIfUnauthorized,
   request,
   xhrUpload,
 } from "./api/http";
@@ -635,6 +636,7 @@ export const chatApi = {
     });
     if (!response.ok) {
       const errorPayload = await parseResponse(response);
+      redirectToLoginIfUnauthorized(response.status);
       throw new ApiError(response.status, errorMessage(response.status, errorPayload), errorPayload);
     }
     if (!response.body) {

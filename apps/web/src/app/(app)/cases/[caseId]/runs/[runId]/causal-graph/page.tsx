@@ -2,6 +2,7 @@
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -9,20 +10,26 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useTheme } from "@mui/material/styles";
 import cytoscape from "cytoscape";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { evidenceLogsHref } from "@/components/Evidence";
+import Link from "@/components/Link";
+import { SignalBadge } from "@/components/SignalBadge";
 import { TemplateText } from "@/components/TemplateText";
-import { Badge, Card, EmptyState } from "@/components/ui";
+import { Badge, Button, Card, EmptyState } from "@/components/ui";
 import { reportsApi } from "@/lib/api";
 import type { CausalGraphResponse, CausalNode } from "@/lib/api";
 import { apiErrorMessage, formatPercent } from "@/lib/format";
-import { signalColor } from "@/lib/signals";
+import { SIGNAL_ORDER, signalColor } from "@/lib/signals";
 import { templateLabel } from "@/lib/templates";
 
 const MAX_RENDERED_EDGES = 30;
+const MIN_CONFIDENCE_OPTIONS = [0, 0.2, 0.35, 0.5, 0.7, 0.85];
+const MAX_NODES_OPTIONS = [25, 50, 100, 200];
 
 type GraphSelection =
   | { kind: "node"; id: string }
@@ -59,13 +66,15 @@ export default function CausalGraphPage() {
   const [data, setData] = useState<CausalGraphResponse | null>(null);
   const [selection, setSelection] = useState<GraphSelection>(null);
   const [error, setError] = useState<string | null>(null);
+  const [minConfidence, setMinConfidence] = useState(0.35);
+  const [maxNodes, setMaxNodes] = useState(100);
 
   useEffect(() => {
     let active = true;
     setData(null);
     setSelection(null);
     setError(null);
-    reportsApi.causalGraph(caseId, runId, { max_nodes: 100, min_confidence: 0.35 })
+    reportsApi.causalGraph(caseId, runId, { max_nodes: maxNodes, min_confidence: minConfidence })
       .then((response) => {
         if (active) {
           setData(response);
@@ -79,10 +88,24 @@ export default function CausalGraphPage() {
     return () => {
       active = false;
     };
-  }, [caseId, runId]);
+  }, [caseId, maxNodes, minConfidence, runId]);
+
+  /** Logs around the node's representative line, or every line of its template. */
+  function nodeLogsHref(node: CausalNode | undefined, templateId: string): string {
+    const evidence = node?.evidence_refs[0];
+    if (evidence) {
+      return evidenceLogsHref(caseId, runId, evidence);
+    }
+    const params = new URLSearchParams({ template_id: templateId });
+    return `/cases/${caseId}/runs/${runId}/logs?${params.toString()}`;
+  }
 
   const nodesById = useMemo(
     () => new Map(data?.nodes.map((node) => [node.id, node]) ?? []),
+    [data],
+  );
+  const legendSignals = useMemo(
+    () => SIGNAL_ORDER.filter((signal) => data?.nodes.some((node) => node.golden_signal === signal)),
     [data],
   );
   const rootTemplateIds = useMemo(
@@ -294,7 +317,17 @@ export default function CausalGraphPage() {
                           template={node?.template_text ?? node?.label}
                         />
                       </Stack>
-                      <Badge>{Math.round(candidate.score * 100)}%</Badge>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexShrink: 0 }}>
+                        <Badge>{Math.round(candidate.score * 100)}%</Badge>
+                        <Button
+                          component={Link}
+                          href={nodeLogsHref(node, candidate.template_id)}
+                          size="sm"
+                          variant="secondary"
+                        >
+                          Logs
+                        </Button>
+                      </Stack>
                     </Stack>
                     <Typography color="text.secondary" variant="body2">
                       {candidate.reason}
@@ -311,17 +344,59 @@ export default function CausalGraphPage() {
             ) : (
               <Stack spacing={2}>
                 <Stack
-                  direction={{ xs: "column", sm: "row" }}
-                  spacing={1}
-                  sx={{ justifyContent: "space-between" }}
+                  direction={{ xs: "column", md: "row" }}
+                  spacing={1.5}
+                  sx={{ alignItems: { md: "center" }, justifyContent: "space-between" }}
                 >
-                  <Typography sx={{ fontWeight: 800 }}>
-                    Directed relationship graph
-                  </Typography>
-                  <Typography color="text.secondary" variant="caption">
-                    Node size = causal rank · red ring = root candidate · dashed edge = validate
-                  </Typography>
+                  <Box>
+                    <Typography sx={{ fontWeight: 800 }}>
+                      Directed relationship graph
+                    </Typography>
+                    <Typography color="text.secondary" variant="caption">
+                      Node size = causal rank · red ring = root candidate · dashed edge = validate
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1.5}>
+                    <TextField
+                      label="Min confidence"
+                      select
+                      size="small"
+                      sx={{ minWidth: 150 }}
+                      value={String(minConfidence)}
+                      onChange={(event) => setMinConfidence(Number(event.target.value))}
+                    >
+                      {MIN_CONFIDENCE_OPTIONS.map((value) => (
+                        <MenuItem key={value} value={String(value)}>
+                          {Math.round(value * 100)}%
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <TextField
+                      label="Max nodes"
+                      select
+                      size="small"
+                      sx={{ minWidth: 120 }}
+                      value={String(maxNodes)}
+                      onChange={(event) => setMaxNodes(Number(event.target.value))}
+                    >
+                      {MAX_NODES_OPTIONS.map((value) => (
+                        <MenuItem key={value} value={String(value)}>
+                          {value}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Stack>
                 </Stack>
+                {legendSignals.length > 0 && (
+                  <Stack direction="row" sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
+                    <Typography color="text.secondary" variant="caption">
+                      Node colour = golden signal:
+                    </Typography>
+                    {legendSignals.map((signal) => (
+                      <SignalBadge key={signal} signal={signal} />
+                    ))}
+                  </Stack>
+                )}
                 <Box
                   aria-label="Directed causal relationship graph"
                   ref={graphElement}
@@ -357,6 +432,16 @@ export default function CausalGraphPage() {
                     {selectedNode.occurrence_count} · causal rank:{" "}
                     {formatPercent(selectedNode.rank_score)}
                   </Typography>
+                  <Box>
+                    <Button
+                      component={Link}
+                      href={nodeLogsHref(selectedNode, selectedNode.template_id)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Open logs
+                    </Button>
+                  </Box>
                 </Stack>
               )}
               {selectedEdge && (
@@ -394,10 +479,22 @@ export default function CausalGraphPage() {
                     {data.edges.map((edge) => (
                       <TableRow key={edge.id} hover>
                         <TableCell sx={{ maxWidth: 360 }}>
-                          <EdgeEndpoint node={nodesById.get(edge.source)} />
+                          <Box
+                            component={Link}
+                            href={nodeLogsHref(nodesById.get(edge.source), edge.source_template_id)}
+                            sx={{ color: "inherit", display: "block", textDecoration: "none", "&:hover": { color: "primary.dark" } }}
+                          >
+                            <EdgeEndpoint node={nodesById.get(edge.source)} />
+                          </Box>
                         </TableCell>
                         <TableCell sx={{ maxWidth: 360 }}>
-                          <EdgeEndpoint node={nodesById.get(edge.target)} />
+                          <Box
+                            component={Link}
+                            href={nodeLogsHref(nodesById.get(edge.target), edge.target_template_id)}
+                            sx={{ color: "inherit", display: "block", textDecoration: "none", "&:hover": { color: "primary.dark" } }}
+                          >
+                            <EdgeEndpoint node={nodesById.get(edge.target)} />
+                          </Box>
                         </TableCell>
                         <TableCell align="right">{edge.lag_seconds ?? 0}s</TableCell>
                         <TableCell align="right">{edge.support_windows}</TableCell>

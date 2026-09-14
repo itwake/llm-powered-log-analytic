@@ -24,12 +24,14 @@ import {
 } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, valueLabel } from "@/lib/format";
 import { EMPTY_SELECTION, defaultInferenceSelection } from "@/lib/inference";
+import { latestCompletedRun, stepLabel } from "@/lib/runs";
 import { useLlmProviders } from "@/lib/useLlmProviders";
 import { CaseAnalysisNav } from "@/components/CaseAnalysisNav";
 import { CaseRunInspector } from "@/components/CaseRunInspector";
 import { ChatWorkspace } from "@/components/ChatWorkspace";
 import { FileUploadDropzone } from "@/components/FileUploadDropzone";
 import { InferenceSelector } from "@/components/InferenceSelector";
+import { Toast, type ToastMessage } from "@/components/Toast";
 import { Badge, Button, Card, EmptyState, SectionHeader, statusTone } from "@/components/ui";
 
 type UploadItemStatus = "queued" | "preparing" | "hashing" | "uploading" | "verifying" | "completed" | "failed";
@@ -124,7 +126,8 @@ export default function CaseWorkspacePage() {
   const [savingCase, setSavingCase] = useState(false);
   const [deletingCase, setDeletingCase] = useState(false);
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   const [caseTitle, setCaseTitle] = useState("");
   const [caseIssueDescription, setCaseIssueDescription] = useState("");
   const [caseProduct, setCaseProduct] = useState("");
@@ -144,10 +147,20 @@ export default function CaseWorkspacePage() {
     }
   }, [providers]);
 
+  // Errors and confirmations for actions appear as a toast near the bottom of the viewport,
+  // where the upload, analysis, and edit controls are; only a failed page load stays inline.
+  function setError(message: string | null) {
+    setToast(message ? { severity: "error", text: message } : null);
+  }
+
+  function notify(text: string) {
+    setToast({ severity: "success", text });
+  }
+
   const load = useCallback(async () => {
     const currentRequest = ++loadRequestId.current;
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
       const [caseResponse, runResponse] = await Promise.all([
         casesApi.get(caseId),
@@ -163,7 +176,7 @@ export default function CaseWorkspacePage() {
       }
     } catch (caught) {
       if (loadRequestId.current === currentRequest) {
-        setError(apiErrorMessage(caught));
+        setLoadError(apiErrorMessage(caught));
       }
     } finally {
       if (loadRequestId.current === currentRequest) {
@@ -238,7 +251,8 @@ export default function CaseWorkspacePage() {
   }, [caseRecord]);
 
   const latestRun = runs[0] || null;
-  const chatRun = runs.find((run) => run.status === "completed") || null;
+  const reportRun = latestCompletedRun(runs);
+  const chatRun = reportRun;
   const trackedRun = runs.find((run) => run.analysis_run_id === activeRunId) || latestRun;
   const trackedRunId = trackedRun?.analysis_run_id;
   const trackedRunStatus = trackedRun?.status;
@@ -286,6 +300,8 @@ export default function CaseWorkspacePage() {
         reasoning_effort: runSelection.reasoning_effort,
       });
       setActiveRunId(run.analysis_run_id);
+      setSelectedFiles([]);
+      notify(`Analysis started as Run #${run.run_number}.`);
       await refreshRunProgress(run.analysis_run_id);
     } catch (caught) {
       setUploadItems((current) =>
@@ -316,6 +332,7 @@ export default function CaseWorkspacePage() {
       setCaseRecord(updated);
       window.dispatchEvent(new CustomEvent("logan:case-saved", { detail: updated }));
       setEditingCase(false);
+      notify("Case saved.");
     } catch (caught) {
       setError(apiErrorMessage(caught));
     } finally {
@@ -345,6 +362,7 @@ export default function CaseWorkspacePage() {
     try {
       const cancelled = await runsApi.cancel(caseId, run.analysis_run_id);
       upsertRun(cancelled);
+      notify(`Run #${run.run_number} terminated.`);
       await refreshRunProgress(run.analysis_run_id);
     } catch (caught) {
       setError(apiErrorMessage(caught));
@@ -355,15 +373,17 @@ export default function CaseWorkspacePage() {
 
   return (
     <Stack spacing={2.5}>
-      {error && <Alert severity="error">{error}</Alert>}
+      {loadError && <Alert severity="error">{loadError}</Alert>}
       {loading && <Card><EmptyState title="Loading case" /></Card>}
+      <Toast message={toast} onClose={() => setToast(null)} />
 
       {!loading && caseRecord && (
         <>
           {latestRun && (
             <CaseAnalysisNav
               caseId={caseId}
-              runId={latestRun.analysis_run_id}
+              reportsDisabledReason={reportRun ? null : "Reports open once a run has completed."}
+              runId={(reportRun ?? latestRun).analysis_run_id}
             />
           )}
 
@@ -405,9 +425,9 @@ export default function CaseWorkspacePage() {
                   </Stack>
                 </Stack>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" }, flexShrink: 0, justifyContent: { lg: "flex-end" }, width: { xs: "100%", sm: "auto" } }}>
-                  {latestRun?.status === "completed" && (
-                    <Button component={Link} href={`/cases/${caseId}/runs/${latestRun.analysis_run_id}/summary`}>
-                      Open latest report
+                  {reportRun && (
+                    <Button component={Link} href={`/cases/${caseId}/runs/${reportRun.analysis_run_id}/summary`}>
+                      {reportRun === latestRun ? "Open latest report" : `Open Run #${reportRun.run_number} report`}
                     </Button>
                   )}
                   <Button disabled={savingCase || deletingCase} variant="secondary" onClick={() => setEditingCase((current) => !current)}>
@@ -480,6 +500,7 @@ export default function CaseWorkspacePage() {
 
             {runs.length > 0 && (
               <ChatWorkspace
+                key={caseId}
                 caseId={caseId}
                 catalog={providerState.catalog}
                 providers={providers}
@@ -501,7 +522,12 @@ export default function CaseWorkspacePage() {
                 {selectedFiles.length > 0 && (
                   <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
                     {selectedFiles.map((file, index) => (
-                      <Chip key={uploadKey(file, index)} label={`${file.name || "upload.bin"} - ${formatBytes(file.size)}`} />
+                      <Chip
+                        disabled={starting !== null}
+                        key={uploadKey(file, index)}
+                        label={`${file.name || "upload.bin"} - ${formatBytes(file.size)}`}
+                        onDelete={() => handleFileSelection(selectedFiles.filter((_, position) => position !== index))}
+                      />
                     ))}
                   </Stack>
                 )}
@@ -588,7 +614,7 @@ export default function CaseWorkspacePage() {
                                     Run #{run.run_number}
                                   </Typography>
                                 }
-                                secondary={`${run.current_step} - ${formatDateTime(run.started_at)}`}
+                                secondary={`${stepLabel(run.current_step)} · ${formatDateTime(run.started_at)}`}
                               />
                               <Badge tone={statusTone(run.status)}>{run.status}</Badge>
                             </ListItemButton>
