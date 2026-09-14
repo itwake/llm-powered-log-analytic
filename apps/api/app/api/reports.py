@@ -33,6 +33,29 @@ def _require_report_value(
     raise HTTPException(status_code=409, detail="analysis completed without a readable result")
 
 
+def _template_samples(
+    store: Store,
+    case_id: str,
+    run_id: str,
+) -> dict[str, dict[str, str | None]]:
+    """Each template's text and one line it covers, so clients can label it with real values."""
+    summary = store.get_analysis_report_summary(case_id, run_id)
+    if summary is None:
+        return {}
+    samples = {sample.template_id: sample for sample in summary.samples}
+    return {
+        template.template_id: {
+            "template_text": template.template_text,
+            "representative_message": (
+                samples[template.template_id].message
+                if template.template_id in samples
+                else None
+            ),
+        }
+        for template in summary.templates
+    }
+
+
 @router.get("/{case_id}/analysis-runs/{run_id}/summary")
 def data_summary(
     case_id: str,
@@ -140,18 +163,27 @@ def temporal(
         else:
             name = aggregate.golden_signal
         grouped[name][aggregate.window_start.isoformat()] += aggregate.count
+    template_samples = (
+        _template_samples(store, case_id, run_id) if group_by == "template" else {}
+    )
+    series: list[dict[str, object]] = []
+    for name, points in sorted(grouped.items()):
+        item: dict[str, object] = {"name": name}
+        if group_by == "template":
+            details = template_samples.get(name)
+            item["template_id"] = name if details is not None else None
+            item["template_text"] = details["template_text"] if details else None
+            item["representative_message"] = (
+                details["representative_message"] if details else None
+            )
+        item["points"] = [
+            {"window_start": window_start, "count": count}
+            for window_start, count in sorted(points.items())
+        ]
+        series.append(item)
     return {
         "window_size_seconds": (aggregates[0].window_size_seconds if aggregates else 60),
-        "series": [
-            {
-                "name": name,
-                "points": [
-                    {"window_start": window_start, "count": count}
-                    for window_start, count in sorted(points.items())
-                ],
-            }
-            for name, points in sorted(grouped.items())
-        ],
+        "series": series,
     }
 
 
@@ -251,8 +283,18 @@ def causal_graph(
             and edge.target in node_ids
         )
     ]
+    template_samples = _template_samples(store, case_id, run_id)
+    nodes: list[dict[str, object]] = []
+    for node in graph.nodes[:max_nodes]:
+        payload = node.model_dump(mode="json")
+        details = template_samples.get(node.template_id)
+        payload["template_text"] = details["template_text"] if details else node.label
+        payload["representative_message"] = (
+            details["representative_message"] if details else None
+        )
+        nodes.append(payload)
     return {
-        "nodes": [node.model_dump(mode="json") for node in graph.nodes[:max_nodes]],
+        "nodes": nodes,
         "edges": [edge.model_dump(mode="json") for edge in edges],
         "root_cause_candidates": [
             candidate.model_dump(mode="json") for candidate in graph.root_cause_candidates

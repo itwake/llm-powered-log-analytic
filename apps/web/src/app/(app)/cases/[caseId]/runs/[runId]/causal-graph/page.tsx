@@ -14,11 +14,13 @@ import { useTheme } from "@mui/material/styles";
 import cytoscape from "cytoscape";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { TemplateText } from "@/components/TemplateText";
 import { Badge, Card, EmptyState } from "@/components/ui";
 import { reportsApi } from "@/lib/api";
-import type { CausalGraphResponse } from "@/lib/api";
+import type { CausalGraphResponse, CausalNode } from "@/lib/api";
 import { apiErrorMessage, formatPercent } from "@/lib/format";
-import { cleanTemplateLabel, signalColor } from "@/lib/signals";
+import { signalColor } from "@/lib/signals";
+import { templateLabel } from "@/lib/templates";
 
 const MAX_RENDERED_EDGES = 30;
 
@@ -26,6 +28,28 @@ type GraphSelection =
   | { kind: "node"; id: string }
   | { kind: "edge"; id: string }
   | null;
+
+/** Plain-text label for graph nodes and the edge summary; the API's `label` is the fallback. */
+function nodeLabel(node: CausalNode | undefined, maxLength: number): string {
+  if (!node) {
+    return "unknown template";
+  }
+  return templateLabel(node.template_text ?? node.label, node.representative_message, maxLength);
+}
+
+function EdgeEndpoint({ node }: { node: CausalNode | undefined }) {
+  if (!node) {
+    return <>unknown template</>;
+  }
+  return (
+    <TemplateText
+      headline
+      sample={node.representative_message}
+      template={node.template_text ?? node.label}
+      truncate
+    />
+  );
+}
 
 export default function CausalGraphPage() {
   const { caseId, runId } = useParams<{ caseId: string; runId: string }>();
@@ -57,8 +81,8 @@ export default function CausalGraphPage() {
     };
   }, [caseId, runId]);
 
-  const labels = useMemo(
-    () => new Map(data?.nodes.map((node) => [node.id, node.label]) ?? []),
+  const nodesById = useMemo(
+    () => new Map(data?.nodes.map((node) => [node.id, node]) ?? []),
     [data],
   );
   const rootTemplateIds = useMemo(
@@ -86,7 +110,7 @@ export default function CausalGraphPage() {
           color: signalColor(node.golden_signal),
           confidence: node.confidence,
           id: node.id,
-          label: cleanTemplateLabel(node.label, 42),
+          label: nodeLabel(node, 42),
           rankScore: node.rank_score,
         },
       })),
@@ -261,10 +285,15 @@ export default function CausalGraphPage() {
               return (
                 <Card key={candidate.template_id}>
                   <Stack spacing={1}>
-                    <Stack direction="row" sx={{ justifyContent: "space-between" }}>
-                      <Typography sx={{ fontWeight: 850 }}>
-                        #{candidate.rank} {cleanTemplateLabel(node?.label, 80)}
-                      </Typography>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: "baseline", minWidth: 0 }}>
+                        <Typography sx={{ flexShrink: 0, fontWeight: 850 }}>#{candidate.rank}</Typography>
+                        <TemplateText
+                          headline
+                          sample={node?.representative_message}
+                          template={node?.template_text ?? node?.label}
+                        />
+                      </Stack>
                       <Badge>{Math.round(candidate.score * 100)}%</Badge>
                     </Stack>
                     <Typography color="text.secondary" variant="body2">
@@ -318,9 +347,11 @@ export default function CausalGraphPage() {
             <Card tone="subtle">
               {selectedNode && (
                 <Stack spacing={0.75}>
-                  <Typography sx={{ fontWeight: 850 }}>
-                    {cleanTemplateLabel(selectedNode.label, 120)}
-                  </Typography>
+                  <TemplateText
+                    headline
+                    sample={selectedNode.representative_message}
+                    template={selectedNode.template_text ?? selectedNode.label}
+                  />
                   <Typography color="text.secondary" variant="body2">
                     Signal: {selectedNode.golden_signal} · occurrences:{" "}
                     {selectedNode.occurrence_count} · causal rank:{" "}
@@ -331,9 +362,9 @@ export default function CausalGraphPage() {
               {selectedEdge && (
                 <Stack spacing={0.75}>
                   <Typography sx={{ fontWeight: 850 }}>
-                    {cleanTemplateLabel(labels.get(selectedEdge.source), 60)}
+                    {nodeLabel(nodesById.get(selectedEdge.source), 60)}
                     {" → "}
-                    {cleanTemplateLabel(labels.get(selectedEdge.target), 60)}
+                    {nodeLabel(nodesById.get(selectedEdge.target), 60)}
                   </Typography>
                   <Typography color="text.secondary" variant="body2">
                     Confidence: {formatPercent(selectedEdge.confidence)} · lag:{" "}
@@ -362,8 +393,12 @@ export default function CausalGraphPage() {
                   <TableBody>
                     {data.edges.map((edge) => (
                       <TableRow key={edge.id} hover>
-                        <TableCell>{labels.get(edge.source) || edge.source}</TableCell>
-                        <TableCell>{labels.get(edge.target) || edge.target}</TableCell>
+                        <TableCell sx={{ maxWidth: 360 }}>
+                          <EdgeEndpoint node={nodesById.get(edge.source)} />
+                        </TableCell>
+                        <TableCell sx={{ maxWidth: 360 }}>
+                          <EdgeEndpoint node={nodesById.get(edge.target)} />
+                        </TableCell>
                         <TableCell align="right">{edge.lag_seconds ?? 0}s</TableCell>
                         <TableCell align="right">{edge.support_windows}</TableCell>
                         <TableCell align="right">

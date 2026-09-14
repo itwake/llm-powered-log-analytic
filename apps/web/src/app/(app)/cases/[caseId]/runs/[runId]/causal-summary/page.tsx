@@ -10,6 +10,7 @@ import { ConfidenceExplainer, confidenceLabel, formatConfidence } from "@/compon
 import { EvidenceChip, EvidenceDetail } from "@/components/Evidence";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { Metric } from "@/components/Shell";
+import { TextWithTemplates } from "@/components/TemplateText";
 import { Card, EmptyState } from "@/components/ui";
 import { reportsApi } from "@/lib/api";
 import type { CausalSummaryResponse, EvidenceRef } from "@/lib/api";
@@ -124,8 +125,12 @@ export default function CausalSummaryPage() {
               {data.next_actions.length === 0 && <EmptyState title="No next actions" />}
               {data.next_actions.map((action, index) => (
                 <Box key={`${textField(action, "title")}-${index}`} sx={{ border: 1, borderColor: "divider", borderRadius: "10px", p: 1.5 }}>
-                  <Typography sx={{ fontWeight: 800 }}>{textField(action, "title")}</Typography>
-                  <Typography>{textField(action, "description")}</Typography>
+                  <Typography sx={{ fontWeight: 800 }}>
+                    <TextWithTemplates text={textField(action, "title")} />
+                  </Typography>
+                  <Typography>
+                    <TextWithTemplates text={textField(action, "description")} />
+                  </Typography>
                   <Typography color="text.secondary" variant="caption">
                     {textField(action, "priority")} · {textField(action, "owner_role")}
                   </Typography>

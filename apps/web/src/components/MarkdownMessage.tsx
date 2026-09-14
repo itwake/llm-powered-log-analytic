@@ -18,6 +18,8 @@ import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
+import { TemplateText } from "@/components/TemplateText";
+import { hasTemplatePlaceholder } from "@/lib/templates";
 
 interface MarkdownMessageProps {
   content: string;
@@ -252,6 +254,9 @@ function createMarkdownComponents(headingMode: MarkdownMessageProps["headingMode
         </Box>
       );
     }
+    // Generated summaries and chat answers quote templates verbatim; keep their `<*>` slots
+    // from reaching the screen.
+    const text = textFromReactNode(children);
     return (
       <Box
         component="code"
@@ -266,7 +271,7 @@ function createMarkdownComponents(headingMode: MarkdownMessageProps["headingMode
           py: 0.15,
         }}
       >
-        {children}
+        {hasTemplatePlaceholder(text) ? <TemplateText mono={false} template={text} /> : children}
       </Box>
     );
   },

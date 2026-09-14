@@ -12,6 +12,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useEffect, useMemo, useState } from "react";
 import { SignalBadge } from "@/components/SignalBadge";
+import { TemplateText } from "@/components/TemplateText";
 import { Button, EmptyState } from "@/components/ui";
 import type { LogItem } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
@@ -183,7 +184,7 @@ export function LogTable({ emptyTitle = "No matching logs", items }: LogTablePro
                 <TableCell>{serviceValue(item)}</TableCell>
                 <TableCell><SignalBadge signal={signalValue(item)} /></TableCell>
                 <TableCell sx={{ maxWidth: 640, overflowWrap: "anywhere" }}>
-                  {item.message}
+                  <TemplateText mono={false} preferSample sample={item.message} template={item.template_text} />
                 </TableCell>
                 <TableCell sx={{ whiteSpace: "nowrap" }}>{sourceValue(item)}</TableCell>
               </TableRow>

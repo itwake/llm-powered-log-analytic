@@ -88,6 +88,10 @@ so historical results remain separate.
 Data Summary groups repeated messages into templates and shows representative content, occurrence
 counts, time ranges, services, classification, severity, and confidence.
 
+Each template is shown as one real line from its group with the values that vary between lines
+highlighted. Structured lines show their `msg` text first and the remaining fields below it. When
+no sample line is available, each varying value appears as an ellipsis.
+
 The default **Attention** scope shows templates annotated with an offending golden signal. Choose
 **All** to inspect every extracted template. In `none` mode, use **All** because no AI annotations
 are created.
@@ -105,22 +109,25 @@ to compare series, or select a bar to open the matching log window. Group the se
 - fault category
 - template
 
-Lines without a parsed or inferred timestamp do not contribute to time windows.
+Series grouped by template are labelled with the template's message text. Lines without a parsed
+or inferred timestamp do not contribute to time windows.
 
 ## Tabular Logs
 
 Tabular Logs displays normalized redacted messages. Search across message text, template text, and
 annotated entity values, or filter by exact service name.
 
-Each row includes its file path and line numbers. Multiline entries can contain more than one
-physical line number. Evidence links from other views open the corresponding log context.
+Within each message, the values that vary across the lines of its template are highlighted. Each
+row includes its file path and line numbers. Multiline entries can contain more than one physical
+line number. Evidence links from other views open the corresponding log context.
 
 ## Causal Graph
 
 Causal Graph draws templates and their strongest supported directed associations. Node size
 represents causal rank, red rings identify root-cause candidates, and dashed edges require
-validation. Select a node or edge for details; the table below the graph contains the complete
-edge list with confidence, lag, and support.
+validation. Nodes and the edge table are labelled with the message text of a representative line.
+Select a node or edge for details; the table below the graph contains the complete edge list with
+confidence, lag, and support.
 
 Treat the graph as a prioritized validation plan. It reports temporal associations and never
 declares a proven root cause.

@@ -552,7 +552,7 @@ The five report pages share a run version bar at the top:
 | --- | --- |
 | Metrics | Raw lines, Visible templates, Review reduction (how much less there is to read compared with the raw line count) |
 | **Scope** | **Attention signals** shows only templates annotated with an offending signal (error, availability, latency, saturation, traffic); **All templates** shows everything. Use All for analyses without AI |
-| List | Each template's representative content, occurrence count, time range, services, classification, severity, and confidence |
+| List | Each template as one real line with the varying values highlighted (structured lines show their `msg` text first), occurrence count, time range, services, classification, severity, and confidence |
 
 > 📷 **Screenshot placeholder:** the Summary page.
 
@@ -573,7 +573,7 @@ Lines without a timestamp do not take part in the timeline.
 | Element | Meaning |
 | --- | --- |
 | **Search** | Searches messages, template text, and annotated entity values; Enter runs the search |
-| Table | Redacted message, file, line numbers (a multiline entry lists several), template, signal, categories |
+| Table | Redacted message with the values that vary across its template highlighted, file, line numbers (a multiline entry lists several), template, signal, categories |
 
 Evidence references from other pages open this page filtered to the evidence's template, so
 related lines are visible together.
@@ -584,7 +584,7 @@ related lines are visible together.
 
 | Element | Meaning |
 | --- | --- |
-| Graph | Nodes are templates; larger nodes rank higher; red rings mark root-cause candidates; dashed edges still need validation |
+| Graph | Nodes are templates, labelled with the message text of a representative line; larger nodes rank higher; red rings mark root-cause candidates; dashed edges still need validation |
 | Selecting a node or edge | Shows its details |
 | Edge table | Every association with confidence, lag, and the number of supporting windows |
 

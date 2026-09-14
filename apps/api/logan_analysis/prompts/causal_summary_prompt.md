@@ -5,6 +5,7 @@ Every causal statement must refer to evidence_refs.
 For each evidence claim, include a case-specific reason explaining why that claim was chosen from the supplied causal ordering, linked evidence, confidence, timing, service/entity context, or validation gaps.
 Use cautious language: candidate, likely, evidence suggests, needs validation.
 The input is an evidence packet containing only redacted messages, template text, log ids, template ids, services, times, line numbers, confidence, and methods.
+Template text marks values that vary between lines with `<*>`; when you mention a template in the markdown, describe the message in words rather than repeating `<*>`.
 Do not ask for or reference raw logs, prompts, model inputs, tokens, passwords, API keys, secrets, or credentials.
 Return this JSON shape:
 {
