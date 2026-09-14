@@ -171,7 +171,8 @@ export function GitHubConnectDialog({ onClose, onConnected, open, provider }: Gi
           {provider && (
             <Typography color="text.secondary" variant="body2">
               Authorize <strong>{provider.name}</strong> with your GitHub account. LogAn uses the
-              GitHub Copilot device flow; the resulting token is stored encrypted on the server.
+              GitHub Copilot device flow; the resulting token is stored on the server and never
+              shown in the browser.
             </Typography>
           )}
           {phase === "starting" && (

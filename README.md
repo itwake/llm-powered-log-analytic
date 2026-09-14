@@ -101,6 +101,7 @@ python scripts/export_openapi.py --out docs/openapi.snapshot.json
 
 ## Documentation
 
+- [Tutorial, 中文教程](docs/tutorial.md)
 - [Getting started](docs/getting-started.md)
 - [User guide](docs/user-guide.md)
 - [Architecture](docs/architecture.md)
