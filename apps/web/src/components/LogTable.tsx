@@ -12,9 +12,10 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useEffect, useMemo, useState } from "react";
 import { SignalBadge } from "@/components/SignalBadge";
+import { TemplateText } from "@/components/TemplateText";
 import { Button, EmptyState } from "@/components/ui";
 import type { LogItem } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { formatLogTimestamp } from "@/lib/format";
 
 interface LogTableProps {
   emptyTitle?: string;
@@ -37,7 +38,12 @@ function uniqueSorted(values: string[]): string[] {
 }
 
 function timeValue(item: LogItem): string {
-  return formatDateTime(item.timestamp);
+  return formatLogTimestamp(item.timestamp);
+}
+
+/** Minute-level bucket for the Time filter; rows show the full timestamp. */
+function timeBucket(item: LogItem): string {
+  return timeValue(item).slice(0, 16);
 }
 
 function serviceValue(item: LogItem): string {
@@ -99,11 +105,11 @@ export function LogTable({ emptyTitle = "No matching logs", items }: LogTablePro
     service: uniqueSorted(items.map(serviceValue)),
     signal: uniqueSorted(items.map(signalValue)),
     source: uniqueSorted(items.map(sourceValue)),
-    time: uniqueSorted(items.map(timeValue)),
+    time: uniqueSorted(items.map(timeBucket)),
   }), [items]);
 
   const filteredItems = useMemo(() => items.filter((item) => (
-    (!filters.time || timeValue(item) === filters.time)
+    (!filters.time || timeBucket(item) === filters.time)
     && (!filters.service || serviceValue(item) === filters.service)
     && (!filters.signal || signalValue(item) === filters.signal)
     && (!filters.source || sourceValue(item) === filters.source)
@@ -143,7 +149,7 @@ export function LogTable({ emptyTitle = "No matching logs", items }: LogTablePro
             <TableRow>
               <TableCell>
                 <HeaderFilter
-                  label="Time"
+                  label="Time (UTC)"
                   options={options.time}
                   value={filters.time}
                   onChange={(value) => updateFilter("time", value)}
@@ -179,11 +185,19 @@ export function LogTable({ emptyTitle = "No matching logs", items }: LogTablePro
           <TableBody>
             {filteredItems.map((item) => (
               <TableRow hover key={item.log_id}>
-                <TableCell sx={{ whiteSpace: "nowrap" }}>{timeValue(item)}</TableCell>
+                <TableCell
+                  sx={{
+                    fontFamily: "var(--font-mono), Consolas, Monaco, monospace",
+                    fontSize: "0.85em",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {timeValue(item)}
+                </TableCell>
                 <TableCell>{serviceValue(item)}</TableCell>
                 <TableCell><SignalBadge signal={signalValue(item)} /></TableCell>
                 <TableCell sx={{ maxWidth: 640, overflowWrap: "anywhere" }}>
-                  {item.message}
+                  <TemplateText mono={false} preferSample sample={item.message} template={item.template_text} />
                 </TableCell>
                 <TableCell sx={{ whiteSpace: "nowrap" }}>{sourceValue(item)}</TableCell>
               </TableRow>

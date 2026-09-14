@@ -26,6 +26,7 @@ import { reportsApi } from "@/lib/api";
 import type { LogsResponse, TemporalResponse, TemporalSeries } from "@/lib/api";
 import { apiErrorMessage, formatDateTime, formatShortTime } from "@/lib/format";
 import { SIGNAL_COLORS } from "@/lib/signals";
+import { templateLabel } from "@/lib/templates";
 
 echarts.use([
   BarChart,
@@ -91,6 +92,22 @@ export default function TemporalPage() {
       }
     }
     return Array.from(values).sort();
+  }, [data]);
+
+  // Series grouped by template are keyed by template id; show the template's message instead,
+  // made unique because the chart legend identifies series by name.
+  const seriesNames = useMemo(() => {
+    const used = new Map<string, number>();
+    const names = new Map<string, string>();
+    for (const series of data?.series ?? []) {
+      const base = series.template_text
+        ? templateLabel(series.template_text, series.representative_message, 48) || series.name
+        : series.name;
+      const count = (used.get(base) ?? 0) + 1;
+      used.set(base, count);
+      names.set(series.name, count > 1 ? `${base} (${count})` : base);
+    }
+    return names;
   }, [data]);
 
   const selectedTotal = useMemo(() => {
@@ -174,7 +191,7 @@ export default function TemporalPage() {
       type: "scroll",
     },
     series: (data?.series ?? []).map((series) => ({
-      name: series.name,
+      name: seriesNames.get(series.name) ?? series.name,
       type: "bar",
       stack: "logs",
       barMaxWidth: 46,
@@ -205,7 +222,7 @@ export default function TemporalPage() {
       name: "Logs",
       type: "value",
     },
-  }), [data, theme, windows]);
+  }), [data, seriesNames, theme, windows]);
 
   useEffect(() => {
     if (!data || data.series.length === 0 || !chartElement.current) {

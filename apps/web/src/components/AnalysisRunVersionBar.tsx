@@ -17,6 +17,7 @@ import { runsApi } from "@/lib/api";
 import type { AnalysisRunResponse } from "@/lib/api";
 import { apiErrorMessage, formatDateTime } from "@/lib/format";
 import { describeRunModel } from "@/lib/inference";
+import { aiOutcome, latestCompletedRun } from "@/lib/runs";
 import { Badge, Button, Card, statusTone } from "@/components/ui";
 
 interface AnalysisRunVersionBarProps {
@@ -97,6 +98,8 @@ export function AnalysisRunVersionBar({ caseId, runId }: AnalysisRunVersionBarPr
     [runId, runs],
   );
   const latestRun = runs[0] || null;
+  const latestCompleted = latestCompletedRun(runs);
+  const outcome = aiOutcome(currentRun);
   const isLatest = Boolean(
     currentRun && latestRun && currentRun.analysis_run_id === latestRun.analysis_run_id,
   );
@@ -216,6 +219,15 @@ export function AnalysisRunVersionBar({ caseId, runId }: AnalysisRunVersionBarPr
                   ? "Loading…"
                   : "n/a"}
             </Typography>
+            {outcome && (
+              <Badge
+                sx={{ mt: 0.5 }}
+                title={outcome.detail}
+                tone={outcome.level === "failed" ? "danger" : "warning"}
+              >
+                {outcome.level === "failed" ? "AI not applied" : "AI partial"}
+              </Badge>
+            )}
           </Box>
         </Box>
 
@@ -260,20 +272,24 @@ export function AnalysisRunVersionBar({ caseId, runId }: AnalysisRunVersionBarPr
                   </MenuItem>
                 )}
                 {runs.map((run) => (
-                  <MenuItem key={run.analysis_run_id} value={run.analysis_run_id}>
+                  <MenuItem
+                    disabled={run.status !== "completed" && run.analysis_run_id !== runId}
+                    key={run.analysis_run_id}
+                    value={run.analysis_run_id}
+                  >
                     {`Run #${run.run_number} · ${run.status}${
                       run.analysis_run_id === latestRun?.analysis_run_id ? " · latest" : ""
-                    }`}
+                    }${run.status === "completed" ? "" : " · no report"}`}
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
-            {latestRun && !isLatest && (
+            {latestCompleted && latestCompleted.analysis_run_id !== runId && (
               <Button
                 variant="secondary"
-                onClick={() => navigateToRun(latestRun.analysis_run_id)}
+                onClick={() => navigateToRun(latestCompleted.analysis_run_id)}
               >
-                Open latest
+                Open latest completed
               </Button>
             )}
           </Stack>

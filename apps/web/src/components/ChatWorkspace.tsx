@@ -75,6 +75,63 @@ function messageStatusLabel(status: ChatMessageStatus): string | null {
   return null;
 }
 
+const STORAGE_PREFIX = "logan:chat:";
+const MAX_STORED_MESSAGES = 60;
+
+function isStoredMessage(value: unknown): value is ChatMessage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const message = value as Record<string, unknown>;
+  return (
+    typeof message.id === "string" &&
+    (message.role === "user" || message.role === "assistant") &&
+    typeof message.content === "string" &&
+    typeof message.status === "string"
+  );
+}
+
+function restoreMessage(message: ChatMessage): ChatMessage {
+  const evidenceRefs = Array.isArray(message.evidenceRefs) ? message.evidenceRefs : [];
+  if (message.status === "streaming") {
+    return { ...message, content: message.content || "Cancelled.", evidenceRefs, status: "cancelled" };
+  }
+  return { ...message, evidenceRefs };
+}
+
+/**
+ * Chat history is kept per case in this tab's session storage, so following an evidence link to
+ * the logs and coming back does not lose the conversation. It is never sent to the server.
+ */
+function loadStoredMessages(caseId: string): ChatMessage[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const raw = window.sessionStorage.getItem(`${STORAGE_PREFIX}${caseId}`);
+    if (!raw) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isStoredMessage).map(restoreMessage) : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeMessages(caseId: string, messages: ChatMessage[]): void {
+  try {
+    const key = `${STORAGE_PREFIX}${caseId}`;
+    if (messages.length === 0) {
+      window.sessionStorage.removeItem(key);
+      return;
+    }
+    window.sessionStorage.setItem(key, JSON.stringify(messages.slice(-MAX_STORED_MESSAGES)));
+  } catch {
+    // Storage can be unavailable or full; the in-memory history is enough for this page.
+  }
+}
+
 export function ChatWorkspace({
   caseId,
   catalog,
@@ -83,7 +140,7 @@ export function ChatWorkspace({
   providersLoading = false,
   run,
 }: ChatWorkspaceProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadStoredMessages(caseId));
   const [input, setInput] = useState("");
   const [selection, setSelection] = useState<InferenceSelection>(EMPTY_SELECTION);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -119,6 +176,14 @@ export function ChatWorkspace({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    // A streaming answer is stored once it settles; storing every delta is wasted work.
+    if (messages.some((message) => message.status === "streaming")) {
+      return;
+    }
+    storeMessages(caseId, messages);
+  }, [caseId, messages]);
 
   function updateMessage(
     messageId: string,
@@ -240,6 +305,12 @@ export function ChatWorkspace({
     setStreamingMessageId(null);
   }
 
+  function clearChat() {
+    cancel();
+    setMessages([]);
+    setError(null);
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -283,6 +354,11 @@ export function ChatWorkspace({
               </Typography>
             )}
           </Box>
+          {messages.length > 0 && (
+            <Button size="sm" sx={{ ml: "auto" }} variant="ghost" onClick={clearChat}>
+              Clear chat
+            </Button>
+          )}
         </Stack>
 
         {messages.length === 0 && (

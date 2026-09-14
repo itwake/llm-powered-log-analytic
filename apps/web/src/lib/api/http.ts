@@ -63,6 +63,24 @@ export function errorMessage(status: number, payload: unknown): string {
   return `Request failed with HTTP ${status}`;
 }
 
+let redirectingToLogin = false;
+
+/**
+ * An expired session answers 401 to every call; send the browser back to the login page once,
+ * remembering where it was. Callers still receive the error for their own state.
+ */
+export function redirectToLoginIfUnauthorized(status: number): void {
+  if (status !== 401 || typeof window === "undefined" || redirectingToLogin) {
+    return;
+  }
+  const { pathname, search } = window.location;
+  if (pathname.startsWith("/login")) {
+    return;
+  }
+  redirectingToLogin = true;
+  window.location.assign(`/login?next=${encodeURIComponent(`${pathname}${search}`)}`);
+}
+
 export async function request<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const {body: payload, query, ...init} = options;
   const headers = new Headers(init.headers);
@@ -79,6 +97,7 @@ export async function request<T>(path: string, options: ApiOptions = {}): Promis
   });
   if (!response.ok) {
     const payload = await parseResponse(response);
+    redirectToLoginIfUnauthorized(response.status);
     throw new ApiError(response.status, errorMessage(response.status, payload), payload);
   }
   if (response.status === 204) {
@@ -125,6 +144,7 @@ export function xhrUpload(
         return;
       }
       const payload = parseXhrPayload(xhr);
+      redirectToLoginIfUnauthorized(xhr.status);
       reject(new ApiError(xhr.status, errorMessage(xhr.status, payload), payload));
     };
     xhr.onerror = () => reject(new Error("upload failed"));

@@ -14,6 +14,7 @@ import { reasoningLabel } from "@/lib/inference";
 import { useLlmProviders } from "@/lib/useLlmProviders";
 import { GitHubConnectDialog } from "@/components/providers/GitHubConnectDialog";
 import { ProviderFormDialog } from "@/components/providers/ProviderFormDialog";
+import { Toast, type ToastMessage } from "@/components/Toast";
 import { Badge, Button, Card, EmptyState, SectionHeader } from "@/components/ui";
 
 type DialogState =
@@ -33,6 +34,7 @@ export default function AiProvidersPage() {
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   const aiPlatform = catalog?.provider_types.find((item) => item.provider_type === "ai_platform");
 
   const handleSaved = useCallback(
@@ -43,6 +45,7 @@ export default function AiProvidersPage() {
         delete next[saved.provider_id];
         return next;
       });
+      setToast({ severity: "success", text: `Provider "${saved.name}" saved.` });
       void reload();
     },
     [reload],
@@ -53,6 +56,7 @@ export default function AiProvidersPage() {
       setProviders((current) =>
         current.map((item) => (item.provider_id === connected.provider_id ? connected : item)),
       );
+      setToast({ severity: "success", text: `GitHub connected for "${connected.name}".` });
     },
     [setProviders],
   );
@@ -85,6 +89,7 @@ export default function AiProvidersPage() {
     try {
       await providersApi.remove(provider.provider_id);
       await reload();
+      setToast({ severity: "success", text: `Provider "${provider.name}" deleted.` });
     } catch (caught) {
       setPageError(apiErrorMessage(caught));
     } finally {
@@ -251,6 +256,7 @@ export default function AiProvidersPage() {
         </Stack>
       </Card>
 
+      <Toast message={toast} onClose={() => setToast(null)} />
       <ProviderFormDialog
         catalog={catalog}
         initialType={dialog?.mode === "create" ? dialog.initialType : "ai_platform"}

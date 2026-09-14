@@ -47,6 +47,11 @@ API returns the queued run and continues analysis in the background. Run respons
 - `GET /api/cases/{case_id}/analysis-runs/{run_id}/causal-graph`
 - `GET /api/cases/{case_id}/analysis-runs/{run_id}/causal-summary`
 
+Template text masks the values that vary between lines as `<*>`. Summary items, temporal series
+grouped by `template`, and causal-graph nodes therefore carry `template_text` together with a
+`representative_message`, one real line the template covers, so clients can show the template
+with its values filled in.
+
 ## AI providers
 
 - `GET /api/llm-providers/catalog`

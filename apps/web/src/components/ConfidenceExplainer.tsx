@@ -1,6 +1,7 @@
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { TextWithTemplates } from "@/components/TemplateText";
 import { Card, EmptyState } from "@/components/ui";
 import type { CausalSummaryClaim } from "@/lib/api";
 
@@ -158,10 +159,12 @@ export function ConfidenceExplainer({
                         p: 1.5,
                       }}
                     >
-                      <Typography sx={{ fontWeight: 800 }}>{textField(claim, "claim")}</Typography>
+                      <Typography sx={{ fontWeight: 800 }}>
+                        <TextWithTemplates text={textField(claim, "claim")} />
+                      </Typography>
                       {claimReason && (
                         <Typography color="text.secondary" variant="body2">
-                          Why this was chosen: {claimReason}
+                          Why this was chosen: <TextWithTemplates text={claimReason} />
                         </Typography>
                       )}
                       <Typography color="text.secondary" variant="body2">
@@ -188,7 +191,7 @@ export function ConfidenceExplainer({
             <Stack component="ul" spacing={0.75} sx={{ m: 0, pl: 2.25 }}>
               {uncertainties.map((item) => (
                 <Typography color="text.secondary" component="li" key={item} variant="body2">
-                  {item}
+                  <TextWithTemplates text={item} />
                 </Typography>
               ))}
             </Stack>

@@ -397,3 +397,80 @@ async def test_long_upload_names_below_a_deep_object_store_are_written(tmp_path:
     assert len(str(stored)) > 260
     assert stored.name == filename
     assert list(filesystem_path(stored).parent.glob("*.part")) == []
+
+
+@pytest.mark.asyncio
+async def test_report_templates_carry_a_representative_line() -> None:
+    """Timeline series and causal-graph nodes label templates with one real line."""
+    store = create_ephemeral_store(Settings())
+    user = store.register_user(
+        email="owner@example.com",
+        username="owner",
+        full_name=None,
+    )
+    token, _ = store.create_session(user.id)
+    case = store.create_case(user_id=user.id, data={"title": "Checkout incident"})
+    app = create_app(store=store)
+    fixture_dir = Path(__file__).resolve().parents[1] / "fixtures" / "logs" / "checkout_incident"
+    fixtures = sorted(fixture_dir.glob("*.log"))
+    assert fixtures
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+        cookies={"logan_session": token},
+    ) as client:
+        file_ids = []
+        for fixture in fixtures:
+            content = fixture.read_bytes()
+            upload = await client.post(
+                f"/api/cases/{case.id}/uploads",
+                json={"filename": fixture.name, "size_bytes": len(content)},
+            )
+            assert upload.status_code == 200, upload.text
+            completed = await client.put(upload.json()["upload_url"], content=content)
+            assert completed.status_code == 200, completed.text
+            file_ids.append(upload.json()["file_id"])
+        started = await client.post(
+            f"/api/cases/{case.id}/analysis-runs",
+            json={"input_file_ids": file_ids},
+        )
+        assert started.status_code == 200, started.text
+        run_id = started.json()["analysis_run_id"]
+        for _ in range(600):
+            run = await client.get(f"/api/cases/{case.id}/analysis-runs/{run_id}")
+            if run.json()["status"] in {"completed", "failed"}:
+                break
+            await asyncio.sleep(0.05)
+        assert run.json()["status"] == "completed", run.text
+
+        summary = await client.get(
+            f"/api/cases/{case.id}/analysis-runs/{run_id}/summary",
+            params={"scope": "all", "limit": 500},
+        )
+        timeline = await client.get(
+            f"/api/cases/{case.id}/analysis-runs/{run_id}/temporal",
+            params={"group_by": "template"},
+        )
+        graph = await client.get(f"/api/cases/{case.id}/analysis-runs/{run_id}/causal-graph")
+
+    assert summary.status_code == 200, summary.text
+    assert timeline.status_code == 200, timeline.text
+    assert graph.status_code == 200, graph.text
+    templates = {item["template_id"]: item for item in summary.json()["items"]}
+    assert any("<*>" in item["template_text"] for item in templates.values())
+
+    series = timeline.json()["series"]
+    assert series
+    for item in series:
+        template = templates[item["template_id"]]
+        assert item["template_text"] == template["template_text"]
+        assert item["representative_message"] == template["representative_message"]
+        assert "<*>" not in item["representative_message"]
+
+    nodes = graph.json()["nodes"]
+    assert nodes
+    for node in nodes:
+        template = templates[node["template_id"]]
+        assert node["template_text"] == template["template_text"]
+        assert node["representative_message"] == template["representative_message"]

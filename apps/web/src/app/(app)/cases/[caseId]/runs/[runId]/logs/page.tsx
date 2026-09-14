@@ -8,6 +8,7 @@ import Typography from "@mui/material/Typography";
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LogTable } from "@/components/LogTable";
+import { TemplateText } from "@/components/TemplateText";
 import { Button, Card, EmptyState } from "@/components/ui";
 import { reportsApi } from "@/lib/api";
 import type { LogsResponse } from "@/lib/api";
@@ -55,6 +56,10 @@ export default function LogsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery, load]);
 
+  const templateSample = templateId
+    ? data?.items.find((item) => item.template_id === templateId) ?? null
+    : null;
+
   return (
     <Stack spacing={2.5}>
       <Box>
@@ -73,7 +78,12 @@ export default function LogsPage() {
           }}
           severity="info"
         >
-          Filtered to one template ({templateId.slice(0, 8)}…). Close to see all logs.
+          <Stack spacing={0.5}>
+            <Typography variant="body2">Filtered to one template. Close to see all logs.</Typography>
+            {templateSample && (
+              <TemplateText headline sample={templateSample.message} template={templateSample.template_text} />
+            )}
+          </Stack>
         </Alert>
       )}
       {error && <Alert severity="error">{error}</Alert>}

@@ -41,23 +41,6 @@ export function levelColor(level: string | null | undefined): string | null {
   return LEVEL_COLORS[(level || "").toLowerCase()] || null;
 }
 
-/**
- * Turn a raw template text into a human-friendly label: drop `<*>`
- * placeholders and collapse whitespace so graph nodes and lists read as a
- * message shape instead of parser output.
- */
-export function cleanTemplateLabel(text: string | null | undefined, maxLength = 64): string {
-  const cleaned = (text || "")
-    .replaceAll("<*>", " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^[.…\s]+/, "");
-  if (!cleaned) {
-    return "template";
-  }
-  return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 3)}...` : cleaned;
-}
-
 /** Strip a leading ISO timestamp from a raw log message for display. */
 export function stripLeadingTimestamp(message: string | null | undefined): string {
   return (message || "").replace(

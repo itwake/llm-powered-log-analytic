@@ -44,6 +44,8 @@ There are two submission paths:
 
 Accepted inputs are log, text, JSON, JSONL, zip, gzip, tar, and tgz files. Each file and its
 expanded archive content must fit within the server upload limit, which defaults to 300 MiB.
+Files of another type are listed as skipped, choosing files again adds to the selection, and a
+selected file can be removed from its chip.
 
 ## Use the case workspace
 
@@ -80,13 +82,23 @@ terminated from the progress panel or run history. After the ten analysis steps 
 **preparing reports** means the result is still being finalized. Open report views after the run
 status changes to `completed`.
 
+When a run asked for an AI provider but the model calls failed, the progress panel, the run
+details, and the report header say so: those templates keep their rule-based classification and
+the summary is built from structured evidence. Confirmations and errors for uploads, runs, and
+case edits appear as a toast at the bottom of the window.
+
 Select a run in **Analysis Runs** to inspect its status. Report links are tied to a specific run id,
-so historical results remain separate.
+so historical results remain separate. The report links in the workspace point at the newest
+completed run and stay disabled, with an explanation, until a run has completed.
 
 ## Data Summary
 
 Data Summary groups repeated messages into templates and shows representative content, occurrence
 counts, time ranges, services, classification, severity, and confidence.
+
+Each template is shown as one real line from its group with the values that vary between lines
+highlighted. Structured lines show their `msg` text first and the remaining fields below it. When
+no sample line is available, each varying value appears as an ellipsis.
 
 The default **Attention** scope shows templates annotated with an offending golden signal. Choose
 **All** to inspect every extracted template. In `none` mode, use **All** because no AI annotations
@@ -105,22 +117,28 @@ to compare series, or select a bar to open the matching log window. Group the se
 - fault category
 - template
 
-Lines without a parsed or inferred timestamp do not contribute to time windows.
+Series grouped by template are labelled with the template's message text. Lines without a parsed
+or inferred timestamp do not contribute to time windows.
 
 ## Tabular Logs
 
 Tabular Logs displays normalized redacted messages. Search across message text, template text, and
 annotated entity values, or filter by exact service name.
 
-Each row includes its file path and line numbers. Multiline entries can contain more than one
-physical line number. Evidence links from other views open the corresponding log context.
+The time column shows UTC with millisecond precision, the zone and precision of the log files.
+Within each message, the values that vary across the lines of its template are highlighted. Each
+row includes its file path and line numbers. Multiline entries can contain more than one physical
+line number. Evidence links from other views open the corresponding log context.
 
 ## Causal Graph
 
 Causal Graph draws templates and their strongest supported directed associations. Node size
 represents causal rank, red rings identify root-cause candidates, and dashed edges require
-validation. Select a node or edge for details; the table below the graph contains the complete
-edge list with confidence, lag, and support.
+validation. Nodes and the edge table are labelled with the message text of a representative line.
+Select a node or edge for details; the table below the graph contains the complete edge list with
+confidence, lag, and support. Use **Min confidence** and **Max nodes** above the graph to widen or
+narrow it; the legend shows the colour of each golden signal. Candidate cards, the selected node,
+and the endpoints in the edge table open the matching logs.
 
 Treat the graph as a prioritized validation plan. It reports temporal associations and never
 declares a proven root cause.
@@ -155,7 +173,8 @@ Chat answers from the stored redacted analysis result. Responses stream into the
 include evidence references. Use those references to verify important statements in Tabular Logs.
 Each answer is labelled with the provider, model, and thinking level that produced it.
 
-Chat history is held in the current browser page and is not stored as part of the case.
+Chat history is kept per case in the current browser tab until the tab closes, so opening a report
+and coming back does not lose it; **Clear chat** discards it. It is not stored as part of the case.
 
 ## AI Providers
 

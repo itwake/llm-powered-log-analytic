@@ -5,6 +5,7 @@ import {
   errorMessage,
   parseResponse,
   parseXhrPayload,
+  redirectToLoginIfUnauthorized,
   request,
   xhrUpload,
 } from "./api/http";
@@ -223,6 +224,10 @@ export interface TemporalPoint {
 
 export interface TemporalSeries {
   name: string;
+  /** Present when grouped by template: the template and one line it covers, for labels. */
+  template_id?: string | null;
+  template_text?: string | null;
+  representative_message?: string | null;
   points: TemporalPoint[];
 }
 
@@ -276,6 +281,9 @@ export interface CausalNode {
   id: string;
   label: string;
   template_id: string;
+  /** The template's text and one line it covers, for readable labels. */
+  template_text?: string;
+  representative_message?: string | null;
   golden_signal: string;
   fault_categories: string[];
   occurrence_count: number;
@@ -628,6 +636,7 @@ export const chatApi = {
     });
     if (!response.ok) {
       const errorPayload = await parseResponse(response);
+      redirectToLoginIfUnauthorized(response.status);
       throw new ApiError(response.status, errorMessage(response.status, errorPayload), errorPayload);
     }
     if (!response.body) {

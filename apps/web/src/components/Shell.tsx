@@ -542,13 +542,12 @@ export function Shell({ children, caseId, caseTitle }: ShellProps) {
           <Typography component="div" noWrap sx={{ fontWeight: 800 }} variant="subtitle1">
             {headerTitle}
           </Typography>
-          <Box sx={{ flex: "0 0 auto" }}>
-            {authState === "loading" && <Chip color="default" label="Checking session" variant="outlined" />}
-            {authState === "signed-in" && <Chip label="Signed in" variant="outlined" />}
-            {authState === "signed-out" && (
+          {/* The sidebar already shows who is signed in; the header only needs a way back in. */}
+          {authState === "signed-out" && (
+            <Box sx={{ flex: "0 0 auto" }}>
               <Chip component={Link} clickable href="/login" label="Sign in" variant="outlined" />
-            )}
-          </Box>
+            </Box>
+          )}
         </Box>
         <Box
           component="main"

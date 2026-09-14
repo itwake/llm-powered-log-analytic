@@ -18,6 +18,7 @@ import { ConfidenceExplainer, confidenceLabel, confidenceReason, formatConfidenc
 import Link from "@/components/Link";
 import { Metric } from "@/components/Shell";
 import { SignalBadge } from "@/components/SignalBadge";
+import { TemplateText } from "@/components/TemplateText";
 import { Button, Card, EmptyState } from "@/components/ui";
 import { ApiError, reportsApi } from "@/lib/api";
 import type { SummaryResponse } from "@/lib/api";
@@ -117,9 +118,9 @@ export default function SummaryPage() {
                     {data.items.map((item) => (
                       <TableRow key={item.template_id} hover>
                         <TableCell><SignalBadge signal={item.golden_signal} /></TableCell>
-                        <TableCell>
-                          <Typography sx={{ fontWeight: 700 }} variant="body2">{item.template_text}</Typography>
-                          <Typography color="text.secondary" variant="caption">{item.services.join(", ") || "unknown service"}</Typography>
+                        <TableCell sx={{ minWidth: 320 }}>
+                          <TemplateText headline sample={item.representative_message} template={item.template_text} />
+                          <Typography color="text.secondary" component="div" variant="caption">{item.services.join(", ") || "unknown service"}</Typography>
                         </TableCell>
                         <TableCell align="right">{item.occurrence_count}</TableCell>
                         <TableCell>{formatDateTime(item.first_seen)}</TableCell>

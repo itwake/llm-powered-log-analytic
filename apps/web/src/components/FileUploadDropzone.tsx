@@ -44,9 +44,42 @@ function fileMatchesAccept(file: File, accept: string): boolean {
   });
 }
 
-function acceptedFilesFromList(fileList: FileList, accept: string, multiple: boolean): File[] {
-  const accepted = Array.from(fileList).filter((file) => fileMatchesAccept(file, accept));
-  return multiple ? accepted : accepted.slice(0, 1);
+interface FileSelection {
+  accepted: File[];
+  skipped: string[];
+}
+
+function splitFileList(fileList: FileList, accept: string): FileSelection {
+  const accepted: File[] = [];
+  const skipped: string[] = [];
+  for (const file of Array.from(fileList)) {
+    if (fileMatchesAccept(file, accept)) {
+      accepted.push(file);
+    } else {
+      skipped.push(file.name);
+    }
+  }
+  return { accepted, skipped };
+}
+
+function fileKey(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+/** Newly chosen files join the current selection; a file chosen twice is kept once. */
+function mergeFiles(current: File[], added: File[], multiple: boolean): File[] {
+  if (!multiple) {
+    return added.slice(0, 1);
+  }
+  const seen = new Set(current.map(fileKey));
+  const merged = [...current];
+  for (const file of added) {
+    if (!seen.has(fileKey(file))) {
+      seen.add(fileKey(file));
+      merged.push(file);
+    }
+  }
+  return merged;
 }
 
 function isFileDrag(event: DragEvent<HTMLElement>): boolean {
@@ -65,11 +98,20 @@ export function FileUploadDropzone({
   title = "Log/archive files",
 }: FileUploadDropzoneProps) {
   const [dragDepth, setDragDepth] = useState(0);
+  const [skipped, setSkipped] = useState<string[]>([]);
   const isDragging = dragDepth > 0 && !disabled;
   const selectedLabel = files.length
     ? `${files.length} file${files.length === 1 ? "" : "s"} selected`
     : "No files selected";
   const hintContent = isDragging ? "Drop files to attach them." : hint || selectedLabel;
+
+  function addFiles(fileList: FileList) {
+    const selection = splitFileList(fileList, accept);
+    setSkipped(selection.skipped);
+    if (selection.accepted.length > 0) {
+      onFilesSelected(mergeFiles(files, selection.accepted, multiple));
+    }
+  }
 
   function handleDragEnter(event: DragEvent<HTMLElement>) {
     if (disabled || !isFileDrag(event)) {
@@ -105,10 +147,7 @@ export function FileUploadDropzone({
     event.preventDefault();
     event.stopPropagation();
     setDragDepth(0);
-    const nextFiles = acceptedFilesFromList(event.dataTransfer.files, accept, multiple);
-    if (nextFiles.length > 0) {
-      onFilesSelected(nextFiles);
-    }
+    addFiles(event.dataTransfer.files);
   }
 
   return (
@@ -155,6 +194,12 @@ export function FileUploadDropzone({
             {description}
           </Typography>
           <FieldHint>{hintContent}</FieldHint>
+          {skipped.length > 0 && (
+            <Typography color="error" component="p" sx={{ mt: 0.5 }} variant="caption">
+              Skipped {skipped.length === 1 ? "1 file" : `${skipped.length} files`} with an
+              unsupported type: {skipped.join(", ")}. Accepted types: {accept.split(",").join(" ")}.
+            </Typography>
+          )}
         </Box>
         <Button
           component="label"
@@ -181,10 +226,9 @@ export function FileUploadDropzone({
               width: 1,
             }}
             onChange={(event) => {
-              const nextFiles = event.currentTarget.files
-                ? acceptedFilesFromList(event.currentTarget.files, accept, multiple)
-                : [];
-              onFilesSelected(nextFiles);
+              if (event.currentTarget.files) {
+                addFiles(event.currentTarget.files);
+              }
               event.currentTarget.value = "";
             }}
           />

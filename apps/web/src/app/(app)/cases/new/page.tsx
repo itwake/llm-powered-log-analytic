@@ -228,8 +228,13 @@ export default function NewCasePage() {
               />
               {selectedFiles.length > 0 && (
                 <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
-                  {selectedFiles.map((file) => (
-                    <Chip key={`${file.name}-${file.size}`} label={`${file.name} - ${formatBytes(file.size)}`} />
+                  {selectedFiles.map((file, index) => (
+                    <Chip
+                      disabled={submitting}
+                      key={`${file.name}-${file.size}-${file.lastModified}`}
+                      label={`${file.name} - ${formatBytes(file.size)}`}
+                      onDelete={() => setSelectedFiles(selectedFiles.filter((_, position) => position !== index))}
+                    />
                   ))}
                 </Stack>
               )}

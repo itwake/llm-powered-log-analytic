@@ -20,6 +20,8 @@ interface CaseAnalysisNavProps {
   variant?: "card" | "inline";
   title?: string;
   subtitle?: string;
+  /** When set, the report links are disabled and this explains why. */
+  reportsDisabledReason?: string | null;
 }
 
 interface AnalysisNavItem {
@@ -86,6 +88,7 @@ function analysisNavItems(caseId: string, runId: string, pathname: string): Anal
 
 export function CaseAnalysisNav({
   caseId,
+  reportsDisabledReason = null,
   runId,
   subtitle = "Navigate the workspace and report views for this run.",
   title = "Case analysis",
@@ -139,7 +142,36 @@ export function CaseAnalysisNav({
             p: 0.75,
           }}
         >
-          {items.map((item) => (
+          {items.map((item) => {
+            const disabled = item.key !== "workspace" && Boolean(reportsDisabledReason);
+            if (disabled) {
+              return (
+                <Tooltip key={item.key} title={reportsDisabledReason}>
+                  <Box
+                    aria-disabled="true"
+                    aria-label={item.fullLabel}
+                    component="span"
+                    sx={{
+                      alignItems: "center",
+                      bgcolor: "rgba(255,255,255,0.45)",
+                      borderRadius: "12px",
+                      color: "text.disabled",
+                      cursor: "not-allowed",
+                      display: "inline-flex",
+                      gap: 0.85,
+                      minHeight: 38,
+                      px: 1.5,
+                    }}
+                  >
+                    {item.icon}
+                    <Typography component="span" sx={{ color: "inherit", fontWeight: 850 }} variant="body2">
+                      {item.shortLabel}
+                    </Typography>
+                  </Box>
+                </Tooltip>
+              );
+            }
+            return (
             <Tooltip key={item.key} title={item.fullLabel}>
               <Box
                 aria-current={item.active ? "page" : undefined}
@@ -178,7 +210,8 @@ export function CaseAnalysisNav({
                 </Typography>
               </Box>
             </Tooltip>
-          ))}
+            );
+          })}
         </Stack>
       </Stack>
     </Box>

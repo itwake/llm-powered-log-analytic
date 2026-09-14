@@ -395,7 +395,7 @@ Choose **New Case** in the sidebar.
 | Element | Meaning |
 | --- | --- |
 | Drop zone / **Choose files** | Multiple files allowed. Accepts `.log .txt .json .jsonl .zip .gz .tar .tgz` |
-| Selected file chips | Name and size |
+| Selected file chips | Name and size; the × removes a file. Choosing files again adds to the selection, and files of an unsupported type are listed as skipped |
 | Limits | Each file must contain at least one byte; the default maximum is 300 MiB, and the expanded contents of an archive count against the same limit |
 
 While uploading, the page shows the prepare, upload, and verify progress of each file.
@@ -429,8 +429,8 @@ and a narrow right column.
 ### 6.1 Case analysis navigation
 
 Appears once the case has at least one analysis and switches between
-**Workspace / Summary / Timeline / Logs / Graph / RCA**. The report links point at the latest
-analysis.
+**Workspace / Summary / Timeline / Logs / Graph / RCA**. The report links point at the newest
+completed analysis and stay disabled, with an explanation, until one has completed.
 
 ### 6.2 Incident Overview card
 
@@ -438,7 +438,7 @@ analysis.
 | --- | --- |
 | Case key and status badges | The case state and the latest analysis state |
 | Title, description, metadata chips | Product / Service / Environment / Incident start |
-| **Open latest report** | Appears once the latest analysis has completed; opens Summary |
+| **Open latest report** | Appears once an analysis has completed; opens the Summary of the newest completed one |
 | **Edit case** | Expands the edit form |
 
 ### 6.3 Edit Case form
@@ -462,12 +462,14 @@ files only.
 | Upload progress | One bar per file with the percentage and byte counts |
 | AI selection | As in 5.3 |
 | **Upload and analyze files** | Disabled until files are selected |
+| Feedback | Confirmations and errors appear as a toast at the bottom of the window |
 
 ### 6.6 Analysis Progress (right column)
 
 | Element | Meaning |
 | --- | --- |
-| Heading | "Run #N - state" |
+| Heading | "Run #N · step", for example "Annotating with AI" |
+| AI notice | When the run asked for a provider but model calls failed, a warning says how many annotation calls failed and whether the summary fell back to structured evidence |
 | Metrics | Files / Raw lines / Templates / Windows |
 | Step list | Ingest, Merge, Redact, Template, Sample, Classify, Annotate, Broadcast, Temporal, Graph, Summary; each shows pending / processing / completed / failed / skipped |
 | Started / Completed | Timestamps |
@@ -487,7 +489,8 @@ Line, and Timestamp and offers a link into Logs.
 
 The Case card lists the state and all metadata. The Run card lists the number, state, current
 step, start and end times, and an **AI model** line in the form "provider name · model · thinking";
-without AI it reads "None (deterministic)". A failed run shows its sanitized error message.
+without AI it reads "None (deterministic)", and an **AI not applied** or **AI partial** badge
+appears when model calls failed. A failed run shows its sanitized error message.
 
 ### 6.9 Analysis Runs history
 
@@ -552,7 +555,7 @@ The five report pages share a run version bar at the top:
 | --- | --- |
 | Metrics | Raw lines, Visible templates, Review reduction (how much less there is to read compared with the raw line count) |
 | **Scope** | **Attention signals** shows only templates annotated with an offending signal (error, availability, latency, saturation, traffic); **All templates** shows everything. Use All for analyses without AI |
-| List | Each template's representative content, occurrence count, time range, services, classification, severity, and confidence |
+| List | Each template as one real line with the varying values highlighted (structured lines show their `msg` text first), occurrence count, time range, services, classification, severity, and confidence |
 
 > 📷 **Screenshot placeholder:** the Summary page.
 
@@ -573,7 +576,7 @@ Lines without a timestamp do not take part in the timeline.
 | Element | Meaning |
 | --- | --- |
 | **Search** | Searches messages, template text, and annotated entity values; Enter runs the search |
-| Table | Redacted message, file, line numbers (a multiline entry lists several), template, signal, categories |
+| Table | Time in UTC with millisecond precision, redacted message with the values that vary across its template highlighted, file, line numbers (a multiline entry lists several), template, signal, categories |
 
 Evidence references from other pages open this page filtered to the evidence's template, so
 related lines are visible together.
@@ -584,9 +587,12 @@ related lines are visible together.
 
 | Element | Meaning |
 | --- | --- |
-| Graph | Nodes are templates; larger nodes rank higher; red rings mark root-cause candidates; dashed edges still need validation |
-| Selecting a node or edge | Shows its details |
-| Edge table | Every association with confidence, lag, and the number of supporting windows |
+| Graph | Nodes are templates, labelled with the message text of a representative line; larger nodes rank higher; red rings mark root-cause candidates; dashed edges still need validation |
+| **Min confidence / Max nodes** | Hide weaker edges or limit the graph size |
+| Legend | The colour of each golden signal present in the graph |
+| Selecting a node or edge | Shows its details; a selected node offers **Open logs** |
+| Edge table | Every association with confidence, lag, and the number of supporting windows; each endpoint opens the matching logs |
+| **Logs** on a candidate card | Opens the logs around the candidate's representative line |
 
 Edges are temporal associations, a suggested validation order rather than proof. An empty graph
 means there were not enough offending events or supported associations.
@@ -631,7 +637,8 @@ Shown in the workspace once the case has at least one analysis; it answers about
 
 The model receives a compact analysis context: your question (at most 1,000 characters), the
 causal summary (2,500 characters), up to five evidence references, and the five most severe
-templates. Chat history lives only in the current page and is gone after a reload.
+templates. Chat history is kept per case in this browser tab: it survives opening a report and
+coming back, and is gone when the tab closes or after **Clear chat**.
 
 ---
 
@@ -657,8 +664,10 @@ The model is not part of your subscription, or the catalog id differs from what 
 Open **Edit** on the provider and correct the id or pick another default model.
 
 **The analysis completed, but Annotate looks like it ran without AI and RCA has no prose.**
-Model calls fall back silently (see 7.3). Run **Test connection** first, then check the proxy and
-certificate settings in `.env`.
+Model calls fall back inside the pipeline (see 7.3); the progress panel shows an AI notice with
+the failed call count and the run details and report header show an **AI not applied** or
+**AI partial** badge. Run **Test connection** first, then check the proxy and certificate settings
+in `.env`.
 
 **An upload returns 500 and the log says "No such file or directory".**
 Older versions failed on Windows when a path exceeded 260 characters; the current version handles
