@@ -196,6 +196,14 @@ Each file must contain at least one byte and is limited to 300 MiB by default. S
 `LOGAN_MAX_UPLOAD_BYTES` to a positive byte count to change the limit. The same configured limit
 applies to the combined expanded content of a zip, gzip, tar, or tgz input.
 
+### The package registry does not offer `postcss@8.4.31`
+
+Next.js pins `postcss` to exactly 8.4.31. The root `package.json` overrides it to 8.5.28 and the
+lockfile records that version, so `npm ci` never requests 8.4.31. npm still labels the package
+`invalid` in `npm ls postcss` because it compares against Next.js's own pin; the shallow check the
+Windows launcher runs (`npm ls --workspace @logan/web --depth=0`) passes, and the build is
+unaffected. Bump the override and regenerate the lockfile together when a newer postcss is needed.
+
 ### The web application reports that `next` is not recognized
 
 Run `scripts\local.bat` without `-SkipInstall`. The launcher verifies the web workspace
