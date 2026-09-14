@@ -22,7 +22,7 @@ from logan_analysis.models import (
     WindowAggregate,
 )
 from logan_analysis.pipeline import AnalyzeCasePipeline
-from sqlalchemy import URL, create_engine, event, func, or_, select
+from sqlalchemy import URL, create_engine, event, func, or_, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, defer, sessionmaker
@@ -55,6 +55,7 @@ from app.records import (
     AnalysisRunCancelled,
     AnalysisRunRecord,
     CaseRecord,
+    LlmProviderRecord,
     SessionRecord,
     UploadRecord,
     UserRecord,
@@ -500,7 +501,12 @@ class SQLAlchemyStore:
         *,
         case_id: str,
         user_id: str,
+        provider: LlmProviderRecord | None = None,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> AnalysisRunRecord:
+        if provider is not None and provider.user_id != user_id:
+            raise KeyError(provider.id)
         with self._session() as session:
             case = session.get(tables.Case, case_id)
             if case is None or case.deleted_at is not None or case.created_by != user_id:
@@ -518,11 +524,12 @@ class SQLAlchemyStore:
                 case_id=case_id,
                 run_number=run_number,
                 status="queued",
-                model_provider=self.settings.normalized_llm_provider,
-                model_name=(
-                    self.settings.ai_platform_model
-                    if self.settings.normalized_llm_provider == "ai_platform"
-                    else "none"
+                model_provider=provider.provider_type if provider else "none",
+                model_name=(model or provider.default_model) if provider else "none",
+                llm_provider_id=provider.id if provider else None,
+                llm_provider_name=provider.name if provider else None,
+                reasoning_effort=(
+                    (reasoning_effort or provider.default_reasoning_effort) if provider else None
                 ),
                 progress_json={"current_step": "queued", "steps": {}},
                 created_by=user_id,
@@ -582,7 +589,8 @@ class SQLAlchemyStore:
                     "service": case.service,
                     "environment": case.environment,
                     "model": run.model_name,
-                    "reasoning_effort": self.settings.ai_platform_reasoning_effort,
+                    "reasoning_effort": run.reasoning_effort or "high",
+                    "user_id": user_id,
                 },
                 gateway=gateway,
                 progress_callback=record_progress,
@@ -1203,6 +1211,128 @@ class SQLAlchemyStore:
                     case_row.updated_at = failed_at
             return len(rows)
 
+    # --- AI providers ----------------------------------------------------------------
+
+    def create_llm_provider(
+        self,
+        *,
+        user_id: str,
+        name: str,
+        provider_type: str,
+        config: dict[str, Any],
+        secrets: dict[str, str],
+        models: list[str],
+        default_model: str,
+        default_reasoning_effort: str,
+    ) -> LlmProviderRecord:
+        try:
+            with self._session() as session:
+                if session.get(tables.User, user_id) is None:
+                    raise KeyError(user_id)
+                now = _now()
+                row = tables.LlmProvider(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    name=name,
+                    provider_type=provider_type,
+                    config_json=dict(config),
+                    secrets_json=dict(secrets),
+                    models_json=list(models),
+                    default_model=default_model,
+                    default_reasoning_effort=default_reasoning_effort,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(row)
+                session.flush()
+                return self._llm_provider_record(row)
+        except IntegrityError as exc:
+            raise ValueError("an AI provider with this name already exists") from exc
+
+    def list_llm_providers(self, user_id: str) -> list[LlmProviderRecord]:
+        with self._session() as session:
+            rows = session.scalars(
+                select(tables.LlmProvider)
+                .where(tables.LlmProvider.user_id == user_id)
+                .order_by(tables.LlmProvider.created_at, tables.LlmProvider.name)
+            ).all()
+            return [self._llm_provider_record(row) for row in rows]
+
+    def get_llm_provider(self, provider_id: str) -> LlmProviderRecord | None:
+        with self._session() as session:
+            row = session.get(tables.LlmProvider, provider_id)
+            return self._llm_provider_record(row) if row else None
+
+    def update_llm_provider(
+        self,
+        *,
+        provider_id: str,
+        user_id: str,
+        name: str | None = None,
+        config: dict[str, Any] | None = None,
+        secrets: dict[str, str] | None = None,
+        models: list[str] | None = None,
+        default_model: str | None = None,
+        default_reasoning_effort: str | None = None,
+    ) -> LlmProviderRecord:
+        try:
+            with self._session() as session:
+                row = session.get(tables.LlmProvider, provider_id)
+                if row is None or row.user_id != user_id:
+                    raise KeyError(provider_id)
+                if name is not None:
+                    row.name = name
+                if config is not None:
+                    row.config_json = dict(config)
+                if secrets is not None:
+                    row.secrets_json = dict(secrets)
+                if models is not None:
+                    row.models_json = list(models)
+                if default_model is not None:
+                    row.default_model = default_model
+                if default_reasoning_effort is not None:
+                    row.default_reasoning_effort = default_reasoning_effort
+                row.updated_at = _now()
+                session.flush()
+                return self._llm_provider_record(row)
+        except IntegrityError as exc:
+            raise ValueError("an AI provider with this name already exists") from exc
+
+    def delete_llm_provider(self, *, provider_id: str, user_id: str) -> bool:
+        with self._session() as session:
+            row = session.get(tables.LlmProvider, provider_id)
+            if row is None or row.user_id != user_id:
+                return False
+            session.execute(
+                update(tables.AnalysisRun)
+                .where(tables.AnalysisRun.llm_provider_id == provider_id)
+                .values(llm_provider_id=None)
+            )
+            session.delete(row)
+            return True
+
+    def _llm_provider_record(self, row: tables.LlmProvider) -> LlmProviderRecord:
+        config = row.config_json if isinstance(row.config_json, dict) else {}
+        secrets = row.secrets_json if isinstance(row.secrets_json, dict) else {}
+        models = row.models_json if isinstance(row.models_json, list) else []
+        return LlmProviderRecord(
+            id=row.id,
+            user_id=row.user_id,
+            name=row.name,
+            provider_type=row.provider_type,
+            config=dict(config),
+            models=[str(model) for model in models],
+            default_model=row.default_model,
+            default_reasoning_effort=row.default_reasoning_effort,
+            created_at=_utc(row.created_at) or _now(),
+            updated_at=_utc(row.updated_at) or _now(),
+            secrets={
+                str(key): str(value)
+                for key, value in secrets.items()
+                if isinstance(value, str) and value
+            },
+        )
+
     def _user_record(self, row: tables.User) -> UserRecord:
         return UserRecord(
             id=row.id,
@@ -1267,4 +1397,7 @@ class SQLAlchemyStore:
             error_message=row.error_message,
             result=None,
             progress=dict(row.progress_json or {}),
+            llm_provider_id=row.llm_provider_id,
+            llm_provider_name=row.llm_provider_name,
+            reasoning_effort=row.reasoning_effort,
         )

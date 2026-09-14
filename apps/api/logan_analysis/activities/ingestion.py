@@ -13,6 +13,23 @@ from logan_analysis.models import IngestedFile, RawPhysicalLine
 
 SUPPORTED_EXTENSIONS = {".log", ".txt", ".json", ".jsonl", ".zip", ".gz", ".tar", ".tgz"}
 DEFAULT_MAX_INPUT_BYTES = 300 * 1024 * 1024
+_EXTENDED_LENGTH_PREFIX = "\\\\?\\"
+_EXTENDED_LENGTH_UNC_PREFIX = _EXTENDED_LENGTH_PREFIX + "UNC\\"
+
+
+def _identity(path: Path) -> str:
+    """The platform-neutral spelling of ``path`` used for file ids and object URIs.
+
+    Windows callers may hand over the extended-length form (``\\\\?\\C:\\...``) so that long
+    paths open; that prefix is an I/O detail and must not change a file's identity or the URI
+    stored with the result.
+    """
+    text = str(path.resolve())
+    if text.startswith(_EXTENDED_LENGTH_UNC_PREFIX):
+        return "\\\\" + text[len(_EXTENDED_LENGTH_UNC_PREFIX) :]
+    if text.startswith(_EXTENDED_LENGTH_PREFIX):
+        return text[len(_EXTENDED_LENGTH_PREFIX) :]
+    return text
 
 
 def _format_limit(max_input_bytes: int) -> str:
@@ -99,7 +116,7 @@ def _from_plain_file(
     ingestion_order_start: int,
     max_input_bytes: int,
 ) -> tuple[IngestedFile, int]:
-    file_id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(path.resolve())))
+    file_id = str(uuid.uuid5(uuid.NAMESPACE_URL, _identity(path)))
     size_bytes = path.stat().st_size
     _ensure_input_size(path, max_input_bytes)
     whole_hash = hashlib.sha256()
@@ -122,7 +139,7 @@ def _from_plain_file(
         IngestedFile(
             file_id=file_id,
             original_filename=path.name,
-            object_uri=f"file://{path.resolve()}",
+            object_uri=f"file://{_identity(path)}",
             size_bytes=size_bytes,
             sha256=whole_hash.hexdigest(),
             detected_format=_detect_format(path),
@@ -137,7 +154,7 @@ def _from_gzip(
     ingestion_order_start: int,
     max_input_bytes: int,
 ) -> tuple[IngestedFile, int]:
-    file_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"gzip:{path.resolve()}"))
+    file_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"gzip:{_identity(path)}"))
     size_bytes = path.stat().st_size
     whole_hash = _file_sha256(path)
     lines: list[RawPhysicalLine] = []
@@ -165,7 +182,7 @@ def _from_gzip(
         IngestedFile(
             file_id=file_id,
             original_filename=path.name,
-            object_uri=f"file://{path.resolve()}",
+            object_uri=f"file://{_identity(path)}",
             size_bytes=size_bytes,
             sha256=whole_hash,
             detected_format="gz",
@@ -192,7 +209,7 @@ def _from_zip(
             )
         for member in sorted(members, key=lambda item: item.filename):
             name = member.filename
-            file_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"zip:{path.resolve()}:{name}"))
+            file_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"zip:{_identity(path)}:{name}"))
             lines: list[RawPhysicalLine] = []
             whole_hash = hashlib.sha256()
             size_bytes = 0
@@ -220,7 +237,7 @@ def _from_zip(
                 IngestedFile(
                     file_id=file_id,
                     original_filename=name,
-                    object_uri=f"zip://{path.resolve()}!/{name}",
+                    object_uri=f"zip://{_identity(path)}!/{name}",
                     size_bytes=size_bytes,
                     sha256=whole_hash.hexdigest(),
                     detected_format=Path(name).suffix.lower().lstrip(".") or "text",
@@ -250,7 +267,7 @@ def _from_tar(
             extracted = archive.extractfile(member)
             if extracted is None:
                 continue
-            file_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"tar:{path.resolve()}:{member.name}"))
+            file_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"tar:{_identity(path)}:{member.name}"))
             lines: list[RawPhysicalLine] = []
             whole_hash = hashlib.sha256()
             size_bytes = 0
@@ -278,7 +295,7 @@ def _from_tar(
                 IngestedFile(
                     file_id=file_id,
                     original_filename=member.name,
-                    object_uri=f"tar://{path.resolve()}!/{member.name}",
+                    object_uri=f"tar://{_identity(path)}!/{member.name}",
                     size_bytes=size_bytes,
                     sha256=whole_hash.hexdigest(),
                     detected_format=Path(member.name).suffix.lower().lstrip(".") or "text",

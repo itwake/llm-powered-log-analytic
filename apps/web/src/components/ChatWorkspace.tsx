@@ -6,16 +6,34 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
-import type { AnalysisRunResponse, EvidenceRef } from "@/lib/api";
+import type {
+  AnalysisRunResponse,
+  ChatMeta,
+  EvidenceRef,
+  InferenceSelection,
+  LlmProviderCatalogResponse,
+  LlmProviderResponse,
+} from "@/lib/api";
 import { chatApi } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/format";
+import {
+  EMPTY_SELECTION,
+  defaultInferenceSelection,
+  reasoningLabel,
+  reconcileSelection,
+} from "@/lib/inference";
 import { EvidenceChip } from "@/components/Evidence";
+import { InferenceSelector } from "@/components/InferenceSelector";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { Button, Card, EmptyState } from "@/components/ui";
 
 interface ChatWorkspaceProps {
   caseId: string;
+  /** The completed run the assistant answers about. */
   run: AnalysisRunResponse | null;
+  providers: LlmProviderResponse[];
+  catalog: LlmProviderCatalogResponse | null;
+  providersLoading?: boolean;
   onEvidenceSelect?: (ref: EvidenceRef) => void;
 }
 
@@ -29,6 +47,7 @@ interface ChatMessage {
   evidenceRefs: EvidenceRef[];
   status: ChatMessageStatus;
   createdAt: number;
+  meta?: ChatMeta;
 }
 
 const QUICK_PROMPTS = [
@@ -56,15 +75,44 @@ function messageStatusLabel(status: ChatMessageStatus): string | null {
   return null;
 }
 
-export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspaceProps) {
+export function ChatWorkspace({
+  caseId,
+  catalog,
+  onEvidenceSelect,
+  providers,
+  providersLoading = false,
+  run,
+}: ChatWorkspaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [selection, setSelection] = useState<InferenceSelection>(EMPTY_SELECTION);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Until the user picks a provider, the selection follows the run being answered about
+  // (it usually completes after this workspace mounts); a manual choice is kept as long as
+  // it stays valid.
+  const selectionTouched = useRef(false);
+  const runId = run?.analysis_run_id ?? null;
+  const runProviderId = run?.llm_provider_id ?? null;
+  const runModel = run?.model_name ?? null;
+  const runReasoningEffort = run?.reasoning_effort ?? null;
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  useEffect(() => {
+    const preferred = {
+      provider_id: runProviderId,
+      model: runModel,
+      reasoning_effort: runReasoningEffort,
+    };
+    setSelection((current) =>
+      selectionTouched.current
+        ? reconcileSelection(providers, current, preferred)
+        : defaultInferenceSelection(providers, preferred),
+    );
+  }, [providers, runId, runModel, runProviderId, runReasoningEffort]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -84,7 +132,11 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
   async function sendMessage(prompt?: string) {
     const question = (prompt ?? input).trim();
     if (!run) {
-      setError("Start an analysis run before asking LogAn AI.");
+      setError("Complete an analysis run before asking LogAn AI.");
+      return;
+    }
+    if (!selection.provider_id) {
+      setError("Choose a connected AI provider before asking LogAn AI.");
       return;
     }
     if (!question || streamingMessageId) {
@@ -123,8 +175,14 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
           message: question,
           case_id: caseId,
           analysis_run_id: run.analysis_run_id,
+          provider_id: selection.provider_id,
+          model: selection.model,
+          reasoning_effort: selection.reasoning_effort,
         },
         {
+          meta: (meta) => {
+            updateMessage(assistantId, (message) => ({ ...message, meta }));
+          },
           delta: (delta) => {
             updateMessage(assistantId, (message) => ({
               ...message,
@@ -189,7 +247,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
     }
   }
 
-  const composerDisabled = !run || Boolean(streamingMessageId);
+  const composerDisabled = !run || Boolean(streamingMessageId) || !selection.provider_id;
 
   return (
     <Card sx={{ background: "linear-gradient(180deg, #ffffff, rgba(230,225,255,0.26))" }}>
@@ -219,6 +277,11 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
             <Typography component="h2" sx={{ fontWeight: 900 }} variant="h6">
               Analysis Chat
             </Typography>
+            {run && (
+              <Typography color="text.secondary" variant="caption">
+                Answers about run #{run.run_number}
+              </Typography>
+            )}
           </Box>
         </Stack>
 
@@ -232,12 +295,13 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
               }
               title="Ask about this incident"
             >
-              Ask about symptoms, timelines, evidence, likely root cause, and next actions. AI Analyst supports tables, lists, and code blocks.
+              Ask about symptoms, timelines, evidence, likely root cause, and next actions. Pick the
+              provider, model, and thinking level for each question below.
             </EmptyState>
             <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1 }}>
               {QUICK_PROMPTS.map((prompt) => (
                 <Button
-                  disabled={!run || Boolean(streamingMessageId)}
+                  disabled={composerDisabled}
                   key={prompt}
                   size="sm"
                   variant="ghost"
@@ -268,6 +332,9 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
             {messages.map((message) => {
               const isUser = message.role === "user";
               const statusLabel = messageStatusLabel(message.status);
+              const metaLabel = message.meta
+                ? `${message.meta.provider_name} · ${message.meta.model} · ${reasoningLabel(catalog, message.meta.reasoning_effort)}`
+                : null;
               return (
                 <Stack
                   component="article"
@@ -312,9 +379,9 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
                       </Typography>
                     )}
                   </Box>
-                  {statusLabel && (
+                  {(statusLabel || metaLabel) && (
                     <Typography color="text.secondary" variant="caption">
-                      {statusLabel}
+                      {[metaLabel, statusLabel].filter(Boolean).join(" · ")}
                     </Typography>
                   )}
                   {message.role === "assistant" && message.evidenceRefs.length > 0 && (
@@ -342,9 +409,22 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
         {error && <Alert severity="error">{error}</Alert>}
         {!run && (
           <Typography color="text.secondary" variant="caption">
-            Start an analysis run before asking LogAn AI.
+            Complete an analysis run before asking LogAn AI.
           </Typography>
         )}
+
+        <InferenceSelector
+          catalog={catalog}
+          compact
+          disabled={Boolean(streamingMessageId)}
+          loading={providersLoading}
+          providers={providers}
+          value={selection}
+          onChange={(next) => {
+            selectionTouched.current = true;
+            setSelection(next);
+          }}
+        />
 
         <Box
           component="form"
@@ -376,7 +456,7 @@ export function ChatWorkspace({ caseId, onEvidenceSelect, run }: ChatWorkspacePr
                 Cancel
               </Button>
             ) : (
-              <Button disabled={!input.trim() || !run} type="submit">
+              <Button disabled={!input.trim() || composerDisabled} type="submit">
                 Ask
               </Button>
             )}

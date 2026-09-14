@@ -8,5 +8,8 @@
     "build": "npm run build --workspace @logan/web",
     "lint": "npm run lint --workspace @logan/web",
     "typecheck": "npm run typecheck --workspace @logan/web"
+  },
+  "overrides": {
+    "postcss": "8.5.28"
   }
 }

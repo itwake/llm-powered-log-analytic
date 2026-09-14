@@ -14,6 +14,7 @@ from app.db import Base
 from app.models import tables  # noqa: F401
 from app.services import analysis_result_artifacts
 from app.services.analysis_result_artifacts import read_artifact, write_artifact
+from app.services.object_store import filesystem_path
 from app.sqlalchemy_store import SQLAlchemyStore
 from sqlalchemy.exc import IntegrityError
 
@@ -22,6 +23,7 @@ def test_database_contains_only_core_tables() -> None:
     assert set(Base.metadata.tables) == {
         "analysis_runs",
         "cases",
+        "llm_providers",
         "raw_files",
         "sessions",
         "users",
@@ -68,14 +70,16 @@ def test_artifact_temporary_name_does_not_repeat_the_target(
 
     assert len(temporary_paths) == 1
     temporary = temporary_paths[0]
-    assert temporary.parent == target.parent
+    # The writer opens the target through the OS spelling (extended-length on Windows).
+    spelled_target = filesystem_path(target)
+    assert temporary.parent == spelled_target.parent
     assert temporary.name.startswith(".")
     assert temporary.name.endswith(".part")
     assert len(temporary.name) == 38
     assert target.name not in temporary.name
     legacy_temporary = target.with_name(f".{target.name}.{'0' * 32}.part")
     assert len(str(legacy_temporary)) == 262
-    assert len(str(temporary)) == 239
+    assert len(str(temporary)) == len(str(spelled_target.parent)) + 39
 
 
 def test_core_records_persist_across_store_instances(tmp_path) -> None:

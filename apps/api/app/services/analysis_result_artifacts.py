@@ -22,7 +22,12 @@ from logan_analysis.models import (
 from pydantic import TypeAdapter
 
 from app.config import Settings
-from app.services.object_store import file_uri_to_path, path_to_file_uri, safe_filename
+from app.services.object_store import (
+    file_uri_to_path,
+    filesystem_path,
+    path_to_file_uri,
+    safe_filename,
+)
 
 RESULT_MANIFEST_FORMAT = "logan.analysis-result-manifest"
 RESULT_MANIFEST_VERSION = 2
@@ -71,14 +76,17 @@ def _result_directory(
 
 def write_artifact(path: Path, raw: bytes) -> dict[str, Any]:
     compressed = zlib.compress(raw, level=1)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    # The manifest keeps the plain path; only the filesystem access uses the Windows
+    # extended-length spelling, so a deep object-store root does not hit the 260-char limit.
+    target = filesystem_path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
     # Keep the full random suffix without repeating the target name. On
     # Windows, the repeated name can push an otherwise valid result path
     # beyond the legacy 260-character boundary during the temporary write.
-    temporary = path.with_name(f".{uuid.uuid4().hex}.part")
+    temporary = target.with_name(f".{uuid.uuid4().hex}.part")
     try:
         temporary.write_bytes(compressed)
-        temporary.replace(path)
+        temporary.replace(target)
     finally:
         temporary.unlink(missing_ok=True)
     return {
@@ -193,7 +201,7 @@ def _artifact_path(entry: dict[str, Any], settings: Settings) -> Path:
     root = Path(settings.local_object_store_dir).resolve()
     if path != root and root not in path.parents:
         raise ValueError("analysis result artifact is outside the object store")
-    return path
+    return filesystem_path(path)
 
 
 def read_artifact(entry: dict[str, Any], *, settings: Settings) -> bytes:

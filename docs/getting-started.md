@@ -112,24 +112,20 @@ Compose applies pending database migrations, starts the two applications, and st
 database and uploaded files in the `logan-data` volume. `NEXT_PUBLIC_API_BASE_URL` is a web build
 argument, so rebuild the web image after changing it.
 
-## LLM mode
+## AI providers
 
-The default configuration uses:
+No AI configuration is required to start. Runs without a provider use the deterministic
+processing pipeline. To enable template annotation, generated summary text, and analysis chat,
+open **AI Providers** in the web app and add a provider:
 
-```text
-LOGAN_LLM_PROVIDER=none
-```
+- **AI Platform**: enter your iB2B username, password, and usercase. The endpoints belong to the
+  deployment, so `LOGAN_AI_PLATFORM_CHAT_HOST` and the iB2B host and URI must be set in `.env`
+  before this provider type can be added.
+- **GitHub Copilot**: save the provider, choose **Connect GitHub**, and confirm the one-time code
+  on github.com.
 
-This runs the deterministic processing pipeline without model calls. AI annotation, generated
-summary text, and analysis chat require:
-
-```text
-LOGAN_LLM_PROVIDER=ai_platform
-```
-
-AI Platform mode also requires a chat host and either a token or a complete set of iB2B
-credentials. Copy `.env.full.example` when every supported setting and its default value is
-needed.
+Each provider lists the models it offers and a default thinking level; both can be changed per
+run and per chat question.
 
 ## Validation
 
@@ -175,22 +171,38 @@ Confirm that the web terminal opened by `scripts\local.bat` is still running. St
 process on port 3000, close stale browser tabs, run the launcher again, and open
 `http://localhost:3000`. The launcher refuses to start when ports 3000 or 8000 are already in use.
 
-### AI Platform configuration is rejected at startup
+### An AI provider test fails
 
-For `ai_platform`, configure `LOGAN_AI_PLATFORM_CHAT_HOST` and either
-`LOGAN_AI_PLATFORM_TOKEN` or all iB2B host, URI, username, password, and usercase settings.
+Use **Test connection** on the provider card. An AI Platform provider needs reachable deployment
+endpoints plus a complete set of credentials (username, password, and usercase). A GitHub Copilot
+provider must be connected through **Connect GitHub**; a `401` from the token exchange means the
+GitHub authorization expired and must be repeated.
 
-### AI Platform TLS verification fails
+### Provider TLS verification fails
 
-Keep TLS verification enabled. Set `LOGAN_AI_PLATFORM_CA_BUNDLE` to the corporate CA bundle
-when the platform uses an internal certificate chain. Proxy and timeout settings are available
-in `.env.full.example`.
+Keep TLS verification enabled. Set `LOGAN_AI_PLATFORM_CA_BUNDLE` or
+`LOGAN_GITHUB_COPILOT_CA_BUNDLE` to the corporate CA bundle when traffic passes an internal
+certificate chain. Proxy and timeout settings are available in `.env.full.example`.
+
+### An AI Platform provider cannot be added
+
+The **Add AI Platform** form reports that the deployment endpoints are missing. Set
+`LOGAN_AI_PLATFORM_CHAT_HOST`, `LOGAN_AI_PLATFORM_IB2B_HOST`, and `LOGAN_AI_PLATFORM_IB2B_URI`,
+then restart the API.
 
 ### A file cannot be uploaded
 
 Each file must contain at least one byte and is limited to 300 MiB by default. Set
 `LOGAN_MAX_UPLOAD_BYTES` to a positive byte count to change the limit. The same configured limit
 applies to the combined expanded content of a zip, gzip, tar, or tgz input.
+
+### The package registry does not offer `postcss@8.4.31`
+
+Next.js pins `postcss` to exactly 8.4.31. The root `package.json` overrides it to 8.5.28 and the
+lockfile records that version, so `npm ci` never requests 8.4.31. npm still labels the package
+`invalid` in `npm ls postcss` because it compares against Next.js's own pin; the shallow check the
+Windows launcher runs (`npm ls --workspace @logan/web --depth=0`) passes, and the build is
+unaffected. Bump the override and regenerate the lockfile together when a newer postcss is needed.
 
 ### The web application reports that `next` is not recognized
 

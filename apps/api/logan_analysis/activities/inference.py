@@ -23,6 +23,7 @@ logger = logging.getLogger("logan.analysis")
 PROMPT_VERSION = "annotation_v1"
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "annotation_prompt.md"
 DEFAULT_MAX_SAMPLE_MESSAGE_CHARS = 1200
+MAX_DIAGNOSTIC_OUTPUT_CHARS = 2000
 MAX_CASE_CONTEXT_CHARS = 600
 MAX_CONTEXT_LIST_ITEMS = 10
 MAX_CONTEXT_LABEL_CHARS = 160
@@ -35,6 +36,16 @@ SAFE_CASE_CONTEXT_KEYS = (
     "service",
     "environment",
 )
+
+
+def _model_output_diagnostic(response: dict[str, Any]) -> dict[str, Any]:
+    """A bounded record of a reply that held no JSON object; never the request payload."""
+    output_text = response.get("output_text")
+    return {
+        "output_text": (
+            output_text[:MAX_DIAGNOSTIC_OUTPUT_CHARS] if isinstance(output_text, str) else None
+        )
+    }
 
 
 def _load_annotation_prompt() -> str:
@@ -218,10 +229,16 @@ async def annotate_templates(
             )
         if not isinstance(response, dict):
             raise ValueError("template annotation gateway returned a stream")
-        raw = response.get("output_json", response)
+        # Only the model's JSON object is validated and kept; the rest of the gateway result
+        # carries the request payload, which must not end up in the stored diagnostics.
+        raw = response.get("output_json")
         try:
             parsed = TemplateAnnotationResult.model_validate(raw)
         except ValidationError:
+            logger.warning(
+                "template annotation reply was not a valid JSON object; keeping the fallback",
+                extra={"template_id": template.template_id},
+            )
             parsed = TemplateAnnotationResult(
                 golden_signal="unknown",
                 fault_categories=["unknown"],
@@ -239,7 +256,9 @@ async def annotate_templates(
             model_provider=getattr(gateway, "provider", "ai_platform"),
             model_name=model,
             prompt_version=PROMPT_VERSION,
-            raw_model_response=raw if isinstance(raw, dict) else {"raw": raw},
+            raw_model_response=(
+                raw if isinstance(raw, dict) else _model_output_diagnostic(response)
+            ),
             **parsed.model_dump(),
         )
 

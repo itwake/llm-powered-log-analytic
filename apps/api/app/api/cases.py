@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from app.dependencies import current_user, get_model_gateway, get_store, require_case_owner
+from app.dependencies import current_user, get_gateway_registry, get_store, require_case_owner
 from app.schemas.case import (
     AnalysisRunListResponse,
     AnalysisRunRequest,
@@ -21,8 +21,11 @@ from app.schemas.case import (
     UploadRequest,
     UploadStartResponse,
 )
-from app.services.object_store import file_uri_to_path
-from app.store import Store, UserRecord
+from app.services.llm_providers import LlmProviderError, resolve_inference_selection
+from app.services.model_gateway import ModelGatewayError
+from app.services.model_gateway_factory import ModelGatewayRegistry
+from app.services.object_store import file_uri_to_path, filesystem_path
+from app.store import Store, UserRecord, sanitize_error_message
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 logger = logging.getLogger("logan.analysis")
@@ -67,6 +70,9 @@ def _analysis_run_response(record: Any) -> AnalysisRunResponse:
         error_message=record.error_message,
         model_provider=record.model_provider,
         model_name=record.model_name,
+        llm_provider_id=record.llm_provider_id,
+        llm_provider_name=record.llm_provider_name,
+        reasoning_effort=record.reasoning_effort,
     )
 
 
@@ -80,7 +86,7 @@ def _upload_for_case(store: Store, case_id: str, file_id: str):
 def _upload_path(upload: Any) -> str:
     if not upload.completed:
         raise HTTPException(status_code=400, detail=f"upload {upload.id} is not completed")
-    path = file_uri_to_path(upload.object_uri)
+    path = filesystem_path(file_uri_to_path(upload.object_uri))
     if not path.is_file():
         raise HTTPException(status_code=400, detail=f"upload {upload.id} content is missing")
     return str(path)
@@ -269,11 +275,11 @@ async def upload_content(
     )
     upload = _upload_for_case(store, case_id, file_id)
     max_upload_bytes = store.settings.max_upload_bytes
-    target_path = file_uri_to_path(upload.object_uri)
+    target_path = filesystem_path(file_uri_to_path(upload.object_uri))
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = target_path.with_name(
-        f".{target_path.name}.{uuid.uuid4().hex}.part"
-    )
+    # Only a random identifier: repeating the upload name would double its length in the
+    # path, and the name is under the uploader's control.
+    temporary_path = target_path.with_name(f".{uuid.uuid4().hex}.part")
     digest = hashlib.sha256()
     received_bytes = 0
     try:
@@ -322,7 +328,7 @@ async def start_analysis(
     payload: AnalysisRunRequest,
     user: UserRecord = Depends(current_user),
     store: Store = Depends(get_store),
-    gateway: Any = Depends(get_model_gateway),
+    registry: ModelGatewayRegistry = Depends(get_gateway_registry),
 ) -> AnalysisRunResponse:
     require_case_owner(
         store=store,
@@ -333,9 +339,29 @@ async def start_analysis(
         _upload_path(_upload_for_case(store, case_id, file_id))
         for file_id in payload.input_file_ids
     ]
+    gateway: Any = None
+    selection = None
+    if payload.provider_id:
+        try:
+            selection = resolve_inference_selection(
+                store=store,
+                user_id=user.id,
+                provider_id=payload.provider_id,
+                model=payload.model,
+                reasoning_effort=payload.reasoning_effort,
+            )
+        except LlmProviderError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+        try:
+            gateway = registry.gateway_for(selection.provider)
+        except ModelGatewayError as exc:
+            raise HTTPException(status_code=502, detail=sanitize_error_message(exc)) from exc
     run = store.create_analysis_run(
         case_id=case_id,
         user_id=user.id,
+        provider=selection.provider if selection else None,
+        model=selection.model if selection else None,
+        reasoning_effort=selection.reasoning_effort if selection else None,
     )
     task = asyncio.create_task(
         store.run_analysis(

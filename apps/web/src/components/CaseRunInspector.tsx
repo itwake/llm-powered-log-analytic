@@ -10,6 +10,7 @@ import type {
   EvidenceRef,
 } from "@/lib/api";
 import { formatDateTime, valueLabel } from "@/lib/format";
+import { describeRunModel } from "@/lib/inference";
 import { AnalysisProgressPanel } from "@/components/AnalysisProgressPanel";
 import { EvidenceDetail } from "@/components/Evidence";
 import { Badge, Card, EmptyState, SectionHeader, statusTone } from "@/components/ui";
@@ -107,12 +108,8 @@ export function CaseRunInspector({
               <dd>{formatDateTime(run.started_at)}</dd>
               <dt>Completed</dt>
               <dd>{formatDateTime(run.completed_at)}</dd>
-              <dt>Model</dt>
-              <dd>
-                {run.model_provider === "none"
-                  ? "None"
-                  : `${run.model_provider} / ${run.model_name}`}
-              </dd>
+              <dt>AI model</dt>
+              <dd>{describeRunModel(run)}</dd>
               {run.error_message && (
                 <>
                   <dt>Error</dt>

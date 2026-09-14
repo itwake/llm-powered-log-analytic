@@ -131,6 +131,45 @@ async def test_pipeline_uses_one_gateway_for_annotation_and_summary() -> None:
 
 
 @pytest.mark.asyncio
+async def test_non_json_model_replies_store_only_bounded_output_text() -> None:
+    """A reply without a JSON object degrades to an unknown annotation whose diagnostic holds
+    the reply text only, never the request payload (which carries the prompt)."""
+
+    class ProseGateway:
+        provider = "github_copilot"
+
+        async def responses(self, **kwargs: object) -> dict[str, object]:
+            return {
+                "provider": "github_copilot",
+                "model": kwargs["model"],
+                "payload": {"instructions": "PROMPT-TEXT", "input": kwargs["input"]},
+                "provider_json": {"id": "resp"},
+                "output_text": "I cannot classify this. " + "x" * 5000,
+                "token_source": "github_exchange",
+            }
+
+    result = await AnalyzeCasePipeline().run(
+        case_id="case-1",
+        analysis_run_id="run-1",
+        paths=[str(path) for path in sorted(FIXTURES.glob("*.log"))],
+        gateway=ProseGateway(),
+    )
+
+    model_annotations = [
+        annotation
+        for annotation in result.annotations
+        if annotation.model_provider == "github_copilot"
+    ]
+    assert model_annotations
+    for annotation in model_annotations:
+        assert annotation.golden_signal == "unknown"
+        assert set(annotation.raw_model_response) == {"output_text"}
+        assert len(annotation.raw_model_response["output_text"]) == 2000
+    assert "PROMPT-TEXT" not in result.model_dump_json()
+    assert result.causal_summary.details["source"] != "llm"
+
+
+@pytest.mark.asyncio
 async def test_annotation_model_input_is_bounded_and_redacted(tmp_path: Path) -> None:
     archive_path = tmp_path / "logs.zip"
     with zipfile.ZipFile(archive_path, "w") as archive:

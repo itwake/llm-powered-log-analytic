@@ -1,0 +1,316 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import time
+
+import httpx
+import pytest
+
+from app.config import Settings
+from app.services.github_copilot_model_gateway import (
+    GitHubCopilotCredentials,
+    GitHubCopilotModelGateway,
+    parse_copilot_api_base_url,
+)
+from app.services.model_gateway import ModelCredentialError, ModelTransportError
+
+GITHUB_TOKEN = "gho_source_token_1234567890"
+COPILOT_TOKEN = "tid=abc;exp=1999999999;proxy-ep=proxy.individual.githubcopilot.com;sku=x"
+TOKEN_URL = "https://api.github.com/copilot_internal/v2/token"
+RESPONSES_URL = "https://api.individual.githubcopilot.com/responses"
+
+
+def _gateway(handler, token: str = GITHUB_TOKEN) -> tuple[GitHubCopilotModelGateway, httpx.AsyncClient]:
+    http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    gateway = GitHubCopilotModelGateway(
+        credentials=GitHubCopilotCredentials(github_token=token),
+        app_settings=Settings(),
+        http_client=http_client,
+    )
+    return gateway, http_client
+
+
+def _responses_reply(text: str) -> httpx.Response:
+    """The Responses API answer shape: an ``output`` list holding one assistant message."""
+    return httpx.Response(
+        200,
+        json={
+            "id": "resp_1",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": text}],
+                }
+            ],
+        },
+    )
+
+
+def test_copilot_api_base_url_is_derived_from_the_session_token() -> None:
+    assert parse_copilot_api_base_url(COPILOT_TOKEN) == (
+        "https://api.individual.githubcopilot.com"
+    )
+    assert parse_copilot_api_base_url("tid=abc;exp=1") is None
+
+
+@pytest.mark.asyncio
+async def test_exchanges_github_token_once_and_sends_a_responses_request() -> None:
+    seen: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if str(request.url) == TOKEN_URL:
+            assert request.method == "GET"
+            assert request.headers["authorization"] == f"Bearer {GITHUB_TOKEN}"
+            assert request.headers["editor-version"] == "vscode/1.133.0"
+            assert request.headers["copilot-integration-id"] == "vscode-chat"
+            return httpx.Response(
+                200,
+                json={"token": COPILOT_TOKEN, "expires_at": int(time.time()) + 1800},
+            )
+        assert str(request.url) == RESPONSES_URL
+        assert request.headers["authorization"] == f"Bearer {COPILOT_TOKEN}"
+        assert request.headers["x-initiator"] == "agent"
+        assert request.headers["openai-intent"] == "conversation-edits"
+        assert request.headers["editor-plugin-version"] == "copilot-chat/0.41.0"
+        # The endpoint answers "invalid apiVersion" when this REST API header is sent.
+        assert "x-github-api-version" not in request.headers
+        # Exactly the fields the EFP runtime sends; the endpoint rejects unknown ones.
+        assert json.loads(request.content) == {
+            "model": "gpt-5.6-terra",
+            "input": [
+                {"role": "user", "content": [{"type": "input_text", "text": "gateway 500"}]},
+            ],
+            "stream": False,
+            "instructions": "annotate\n\nReturn valid JSON only.",
+            "reasoning": {"effort": "xhigh"},
+        }
+        return _responses_reply('{"golden_signal": "error"}')
+
+    gateway, http_client = _gateway(handler)
+    request = dict(
+        user_id="user-id",
+        model="gpt-5.6-terra",
+        instructions="annotate",
+        input=[{"role": "user", "content": [{"type": "input_text", "text": "gateway 500"}]}],
+        stream=False,
+        metadata={"purpose": "template_annotation"},
+        reasoning_effort="xhigh",
+        temperature=0.2,
+        response_format={"type": "json_object"},
+    )
+    first = await gateway.responses(**request)
+    second = await gateway.responses(**request)
+
+    assert seen == [TOKEN_URL, RESPONSES_URL, RESPONSES_URL]
+    assert first["provider"] == "github_copilot"
+    assert first["token_source"] == "github_exchange"
+    assert first["output_text"] == '{"golden_signal": "error"}'
+    assert first["output_json"] == {"golden_signal": "error"}
+    assert second["output_text"] == first["output_text"]
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_json_instruction_is_not_repeated_when_the_prompt_already_asks_for_json() -> None:
+    payloads: list[dict[str, object]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/copilot_internal/v2/token":
+            return httpx.Response(200, json={"token": "tid=abc", "expires_at": int(time.time()) + 1800})
+        payloads.append(json.loads(request.content))
+        return _responses_reply("{}")
+
+    gateway, http_client = _gateway(handler)
+    await gateway.responses(
+        user_id="u",
+        model="gpt-5.4",
+        instructions="Classify the template. Return only valid JSON.",
+        input=[
+            {"role": "user", "content": [{"type": "input_text", "text": "line"}]},
+            {"role": "assistant", "content": [{"type": "text", "text": "earlier answer"}]},
+        ],
+        response_format={"type": "json_object"},
+    )
+
+    assert payloads[0]["instructions"] == "Classify the template. Return only valid JSON."
+    assert payloads[0]["input"] == [
+        {"role": "user", "content": [{"type": "input_text", "text": "line"}]},
+        {"role": "assistant", "content": [{"type": "output_text", "text": "earlier answer"}]},
+    ]
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_prefers_the_api_endpoint_reported_by_the_exchange_and_emulates_streaming() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/copilot_internal/v2/token":
+            return httpx.Response(
+                200,
+                json={
+                    "token": "tid=abc",
+                    "expires_at": int(time.time()) + 1800,
+                    "endpoints": {"api": "https://api.enterprise.githubcopilot.com/"},
+                },
+            )
+        assert str(request.url) == "https://api.enterprise.githubcopilot.com/responses"
+        assert request.headers["x-initiator"] == "user"
+        payload = json.loads(request.content)
+        assert payload["stream"] is False
+        assert "response_format" not in payload
+        assert "temperature" not in payload
+        assert "metadata" not in payload
+        return _responses_reply("Gateway errors.")
+
+    gateway, http_client = _gateway(handler)
+    stream = await gateway.responses(
+        user_id="user-id",
+        model="gpt-5.4",
+        instructions="chat",
+        input=[{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}],
+        stream=True,
+        metadata={"purpose": "case_chat"},
+        reasoning_effort="medium",
+    )
+    events = [event async for event in stream]
+
+    assert [event["type"] for event in events] == ["message.delta", "message.completed"]
+    assert events[0]["delta"] == "Gateway errors."
+    assert events[-1]["provider"] == "github_copilot"
+    assert events[-1]["output_text"] == "Gateway errors."
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_refreshes_the_session_after_401_and_redacts_errors() -> None:
+    exchanges = 0
+    completions = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal exchanges, completions
+        if request.url.path == "/copilot_internal/v2/token":
+            exchanges += 1
+            return httpx.Response(
+                200,
+                json={"token": f"session-{exchanges}", "expires_at": int(time.time()) + 1800},
+            )
+        completions += 1
+        if request.headers["authorization"] == "Bearer session-1":
+            return httpx.Response(401, json={"message": "token expired"})
+        return httpx.Response(400, json={"error": {"message": f"bad model for {GITHUB_TOKEN}"}})
+
+    gateway, http_client = _gateway(handler)
+    with pytest.raises(ModelTransportError, match="HTTP 400") as caught:
+        await gateway.responses(user_id="u", model="gpt-5.4", instructions=None, input=[])
+
+    assert exchanges == 2
+    assert completions == 2
+    assert GITHUB_TOKEN not in str(caught.value)
+    assert "session-2" not in str(caught.value)
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_requires_a_connected_github_token() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("no request expected")
+
+    gateway, http_client = _gateway(handler, token="")
+    with pytest.raises(ModelCredentialError, match="not connected"):
+        await gateway.responses(user_id="u", model="gpt-5.4", instructions=None, input=[])
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_a_rejected_github_token_is_reported_as_a_credential_error() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"message": "Bad credentials"})
+
+    gateway, http_client = _gateway(handler)
+    with pytest.raises(ModelCredentialError, match="reconnect GitHub") as caught:
+        await gateway.responses(user_id="u", model="gpt-5.4", instructions=None, input=[])
+
+    assert GITHUB_TOKEN not in str(caught.value)
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_requests_share_one_session_exchange() -> None:
+    """Template annotation fires up to eight requests at once on one gateway."""
+    exchanges = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal exchanges
+        if request.url.path == "/copilot_internal/v2/token":
+            exchanges += 1
+            await asyncio.sleep(0)  # let the other requests reach the exchange
+            return httpx.Response(
+                200,
+                json={"token": "tid=abc", "expires_at": int(time.time()) + 1800},
+            )
+        return _responses_reply("ok")
+
+    gateway, http_client = _gateway(handler)
+    results = await asyncio.gather(
+        *(
+            gateway.responses(user_id="u", model="gpt-5.4", instructions=None, input=[])
+            for _ in range(8)
+        )
+    )
+
+    assert exchanges == 1
+    assert [result["output_text"] for result in results] == ["ok"] * 8
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_fenced_or_prosed_json_replies_are_still_parsed() -> None:
+    """The Responses endpoint has no JSON mode, so the parser tolerates fences and prose."""
+    replies = iter(
+        [
+            '```json\n{"golden_signal": "error"}\n```',
+            'Here is the annotation:\n{"golden_signal": "latency", "note": "a } b"}\nDone.',
+            "no json here",
+        ]
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/copilot_internal/v2/token":
+            return httpx.Response(
+                200,
+                json={"token": "tid=abc", "expires_at": int(time.time()) + 1800},
+            )
+        return _responses_reply(next(replies))
+
+    gateway, http_client = _gateway(handler)
+    request = dict(
+        user_id="u",
+        model="gpt-5.4",
+        instructions=None,
+        input=[],
+        response_format={"type": "json_object"},
+    )
+    fenced = await gateway.responses(**request)
+    prosed = await gateway.responses(**request)
+    plain = await gateway.responses(**request)
+
+    assert fenced["output_json"] == {"golden_signal": "error"}
+    assert prosed["output_json"] == {"golden_signal": "latency", "note": "a } b"}
+    assert "output_json" not in plain
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_an_unusable_expiry_keeps_the_default_session_window() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/copilot_internal/v2/token":
+            return httpx.Response(200, json={"token": "tid=abc", "expires_at": 1e20})
+        return _responses_reply("ok")
+
+    gateway, http_client = _gateway(handler)
+    result = await gateway.responses(user_id="u", model="gpt-5.4", instructions=None, input=[])
+
+    assert result["output_text"] == "ok"
+    await http_client.aclose()

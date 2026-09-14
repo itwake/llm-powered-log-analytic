@@ -23,6 +23,12 @@ REQUIRED = {
     "/api/cases/{case_id}/analysis-runs/{run_id}/causal-graph": {"get"},
     "/api/cases/{case_id}/analysis-runs/{run_id}/causal-summary": {"get"},
     "/api/chat/stream": {"post"},
+    "/api/llm-providers": {"get", "post"},
+    "/api/llm-providers/catalog": {"get"},
+    "/api/llm-providers/{provider_id}": {"get", "patch", "delete"},
+    "/api/llm-providers/{provider_id}/test": {"post"},
+    "/api/llm-providers/{provider_id}/github-device/start": {"post"},
+    "/api/llm-providers/{provider_id}/github-device/check": {"post"},
 }
 
 

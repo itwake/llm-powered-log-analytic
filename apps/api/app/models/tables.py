@@ -44,6 +44,27 @@ class Session(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class LlmProvider(Base):
+    """A user-managed AI provider: its credentials, offered models, and request defaults."""
+
+    __tablename__ = "llm_providers"
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
+
+    id: Mapped[str] = uuid_pk()
+    user_id: Mapped[str] = mapped_column(UUID_TYPE, ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    provider_type: Mapped[str] = mapped_column(Text, nullable=False)
+    config_json: Mapped[dict[str, Any]] = json_object()
+    secrets_json: Mapped[dict[str, Any]] = json_object()
+    models_json: Mapped[list[str]] = mapped_column(
+        JSON_TYPE, nullable=False, default=list, server_default="[]"
+    )
+    default_model: Mapped[str] = mapped_column(Text, nullable=False)
+    default_reasoning_effort: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Case(Base):
     __tablename__ = "cases"
 
@@ -88,6 +109,11 @@ class AnalysisRun(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False, default="queued")
     model_provider: Mapped[str] = mapped_column(Text, nullable=False)
     model_name: Mapped[str] = mapped_column(Text, nullable=False)
+    llm_provider_id: Mapped[str | None] = mapped_column(
+        UUID_TYPE, ForeignKey("llm_providers.id", ondelete="SET NULL")
+    )
+    llm_provider_name: Mapped[str | None] = mapped_column(Text)
+    reasoning_effort: Mapped[str | None] = mapped_column(Text)
     progress_json: Mapped[dict[str, Any]] = json_object()
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

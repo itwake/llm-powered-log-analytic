@@ -9,8 +9,12 @@ from sqlalchemy import URL, engine_from_config, pool
 from sqlalchemy.engine import Connection
 
 config = context.config
-if config.config_file_name:
-    fileConfig(config.config_file_name)
+# The API runs migrations in-process before serving and sets ``configure_logger`` to False:
+# applying alembic.ini's logging section there would install a root handler at WARN before the
+# app configures logging, and the default fileConfig would also permanently disable existing
+# loggers such as "logan.analysis". The CLI keeps the file's logging configuration.
+if config.config_file_name and config.attributes.get("configure_logger", True):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(REPOSITORY_ROOT / ".env")

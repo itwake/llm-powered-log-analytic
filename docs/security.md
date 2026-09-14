@@ -15,13 +15,19 @@ paths.
 Log preprocessing masks common secrets before model input or report display. Analysis progress
 contains pipeline-generated counts. Model requests contain bounded, redacted case context,
 representative samples, and evidence; runtime routing settings and full source paths are excluded.
-Error messages are sanitized before storage, and failure logs do not include exception content. AI
-Platform credentials are read from process environment variables and are not stored in the
-database.
+Error messages are sanitized before storage, and failure logs do not include exception content.
+
+AI provider credentials (AI Platform passwords and GitHub access tokens) are stored per user in
+the `llm_providers` table as supplied, so the database file is the security boundary: restrict it
+as you would any credential store. API responses expose secrets by field name only, and no route
+returns a stored credential. The GitHub Copilot device flow keeps the pending authorization in
+process memory scoped to the requesting user and stores the resulting token server-side; the
+browser only ever sees the one-time user code. Copilot session tokens obtained from GitHub are
+cached in memory and never persisted.
 
 For production:
 
-- use HTTPS for the web app, API, SSO provider, and AI Platform
+- use HTTPS for the web app, API, SSO provider, and AI providers
 - set a unique `LOGAN_SECRET_KEY`
 - configure the SSO authorize URL, token URL, and client id
 - keep TLS verification enabled

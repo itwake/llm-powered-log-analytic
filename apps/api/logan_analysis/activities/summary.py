@@ -757,7 +757,7 @@ async def _call_gateway(
             "purpose": "causal_summary",
             "prompt_version": PROMPT_VERSION,
         },
-        reasoning_effort="high",
+        reasoning_effort=str((case_context or {}).get("reasoning_effort") or "high"),
         response_format={"type": "json_object"},
     )
     if isinstance(response, AsyncIterator):
@@ -880,7 +880,9 @@ async def render_causal_summary(
 
     try:
         response = await _call_gateway(gateway=gateway, packet=packet, case_context=case_context)
-        raw = response.get("output_json", response) if isinstance(response, dict) else response
+        # Only the model's JSON object is validated; the gateway result also carries the
+        # request payload, which is never a summary.
+        raw = response.get("output_json") if isinstance(response, dict) else response
         return parse_causal_summary_model_output(
             raw=raw,
             packet=packet,

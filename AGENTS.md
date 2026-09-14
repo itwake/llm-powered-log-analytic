@@ -58,16 +58,21 @@ The pipeline steps in `apps/api/logan_analysis/pipeline.py` run in this order:
 3. `preprocess_redact`
 4. `template_extraction`
 5. `representative_sampling`
-6. `ai_platform_annotation`
-7. `broadcast_annotations`
-8. `temporal_aggregation`
-9. `causal_graph`
-10. `causal_summary`
+6. `heuristic_annotation`
+7. `ai_platform_annotation` (the historical step name; it serves every provider type)
+8. `broadcast_annotations`
+9. `temporal_aggregation`
+10. `causal_graph`
+11. `causal_summary`
 
-`LOGAN_LLM_PROVIDER` is either `none` or `ai_platform`. The `none` mode runs the deterministic
-pipeline without model calls. The `ai_platform` mode adds template annotation, generated summary
-text, and case chat. Tests may inject a fake `ModelGateway`, but fake gateways are not runtime
-providers.
+AI providers are configured per user in the web application (**AI Providers**) and stored in the
+`llm_providers` table. Two provider types exist: `ai_platform` (iB2B credential exchange, with
+endpoints supplied by `LOGAN_AI_PLATFORM_*`) and `github_copilot` (GitHub device flow, then a
+Copilot session-token exchange). An analysis run or chat request names a
+provider, a model enabled on it, and a thinking level (`reasoning_effort`); a run without a
+provider executes the deterministic pipeline only. `ModelGatewayRegistry` builds one gateway per
+provider record. Tests may inject a fake `ModelGateway` through `create_app(model_gateway=...)`,
+but fake gateways are not runtime providers.
 
 ## Change contracts
 
@@ -85,6 +90,9 @@ providers.
 
 - Raw customer logs, prompts, credentials, tokens, database URLs, and unrestricted filesystem
   paths must not appear in progress metadata, stored error messages, logs, or model diagnostics.
+- Provider API responses report secrets by field name only. Never return provider credentials or
+  a GitHub access token to the browser; the device flow stores the token server-side. Credentials
+  are held in the database as given, so the database file is the security boundary.
 - Redact log content before template generation, model input, and report display. Model calls may
   receive only bounded, redacted representative samples and evidence packets.
 - Keep production authentication SSO-only. Development may use the local default user only when
