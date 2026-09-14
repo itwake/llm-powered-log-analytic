@@ -18,7 +18,7 @@
     "@mui/material-nextjs": "^9.1.1",
     "cytoscape": "^3.34.0",
     "echarts": "^6.1.0",
-    "next": "16.2.7",
+    "next": "16.2.12",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-markdown": "^10.1.0",
@@ -30,7 +30,7 @@
     "@types/react": "19.1.6",
     "@types/react-dom": "19.1.6",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.2.7",
+    "eslint-config-next": "16.2.12",
     "typescript": "5.8.3"
   }
 }
