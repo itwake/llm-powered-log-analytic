@@ -21,6 +21,11 @@ analysis chat, the user picks the provider, model, and thinking level.
   scoring and an evidence-based summary, without model calls.
 - A run with a provider adds template annotation and model-generated summary text.
 
+The API can also act as a GitHub Copilot pass-through for callers whose network cannot reach
+GitHub: with `LOGAN_COPILOT_PASSTHROUGH_ENABLED=true`, `POST /api/copilot/token` and
+`POST /api/copilot/responses` relay a caller's own GitHub and Copilot tokens. See
+[API](docs/api.md) and [Security](docs/security.md).
+
 ## Run locally
 
 Requirements: Python 3.11+ and Node.js 22+. An OAuth-compatible SSO application is required only

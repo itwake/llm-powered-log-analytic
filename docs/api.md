@@ -72,6 +72,23 @@ deployment (its endpoints come from `LOGAN_AI_PLATFORM_*`; the reason names any 
 setting). The GitHub device endpoints start the Copilot device flow and poll it; a successful
 check stores the token on the provider.
 
+## Copilot pass-through
+
+- `POST /api/copilot/token`
+- `POST /api/copilot/responses`
+
+A relay for callers that cannot reach GitHub themselves, off unless
+`LOGAN_COPILOT_PASSTHROUGH_ENABLED=true`. Both routes take the caller's own token as
+`Authorization: Bearer` and need no LogAn session. The token route forwards GitHub's Copilot token
+exchange for a GitHub OAuth token and returns GitHub's answer (`token`, `expires_at`, `endpoints`)
+or its rejection with the upstream status code. The responses route forwards a JSON object of at
+most 2 MiB to the Copilot `/responses` endpoint with the Copilot session token and the editor
+headers that endpoint requires, then streams the reply back with its status code and content type,
+so `stream: true` yields server-sent events. Callers may set `x-initiator`, `Openai-Intent`, and
+`X-Request-Id`; no other request header is forwarded. Requests go only to `api.github.com` and the
+`githubcopilot.com` origin named by the token. A missing bearer token answers 401, a disabled relay
+503, and GitHub or Copilot being unreachable from the API host 502.
+
 ## Chat and health
 
 - `POST /api/chat/stream`

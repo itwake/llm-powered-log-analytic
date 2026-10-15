@@ -2408,6 +2408,66 @@
         ]
       }
     },
+    "/api/copilot/responses": {
+      "post": {
+        "description": "Relay a Copilot Responses API request with the caller's Copilot session token.\n\nSend the session token from the token exchange as ``Authorization: Bearer`` and the request\nbody exactly as the Copilot ``/responses`` endpoint expects it, up to 2 MiB. The body is\nforwarded unchanged with the editor headers the endpoint requires, and the reply streams back\nwith its status code and content type, so ``stream: true`` yields server-sent events.",
+        "operationId": "relay_copilot_responses_api_copilot_responses_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "description": "A Copilot Responses API request, forwarded unchanged.",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The upstream reply, relayed with its own status code and body."
+          },
+          "401": {
+            "description": "No bearer token was sent to LogAn."
+          },
+          "502": {
+            "description": "GitHub or the Copilot API could not be reached from the API host."
+          },
+          "503": {
+            "description": "The pass-through is disabled on this deployment."
+          }
+        },
+        "summary": "Relay Copilot Responses",
+        "tags": [
+          "copilot-passthrough"
+        ]
+      }
+    },
+    "/api/copilot/token": {
+      "post": {
+        "description": "Relay GitHub's Copilot token exchange for the caller's own GitHub OAuth token.\n\nSend the GitHub token as ``Authorization: Bearer``. GitHub's answer (``token``,\n``expires_at``, ``endpoints``, ...) or its rejection comes back with its status code and body.\nLogAn keeps neither token.",
+        "operationId": "exchange_copilot_token_api_copilot_token_post",
+        "responses": {
+          "200": {
+            "description": "The upstream reply, relayed with its own status code and body."
+          },
+          "401": {
+            "description": "No bearer token was sent to LogAn."
+          },
+          "502": {
+            "description": "GitHub or the Copilot API could not be reached from the API host."
+          },
+          "503": {
+            "description": "The pass-through is disabled on this deployment."
+          }
+        },
+        "summary": "Exchange Copilot Token",
+        "tags": [
+          "copilot-passthrough"
+        ]
+      }
+    },
     "/api/llm-providers": {
       "get": {
         "operationId": "list_providers_api_llm_providers_get",
