@@ -30,7 +30,8 @@ Production configuration requires:
 - outbound access from the API to the AI Platform endpoints and, for GitHub Copilot, to
   `github.com`, `api.github.com`, and the Copilot API origin the token exchange reports
   (`api.githubcopilot.com`, or a tenant address such as `api.individual.githubcopilot.com`),
-  directly or through `LOGAN_GITHUB_COPILOT_PROXY_URL`
+  directly or through `LOGAN_GITHUB_COPILOT_PROXY_URL`; the optional Copilot pass-through
+  (`LOGAN_COPILOT_PASSTHROUGH_ENABLED`) relays callers' requests over this same access
 
 Development uses the local default user when `LOGAN_SSO_AUTHORIZE_URL` is empty. Non-development
 deployments require complete SSO configuration.

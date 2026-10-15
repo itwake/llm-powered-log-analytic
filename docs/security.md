@@ -25,6 +25,14 @@ process memory scoped to the requesting user and stores the resulting token serv
 browser only ever sees the one-time user code. Copilot session tokens obtained from GitHub are
 cached in memory and never persisted.
 
+The GitHub Copilot pass-through (`/api/copilot/token` and `/api/copilot/responses`) is off by
+default. When `LOGAN_COPILOT_PASSTHROUGH_ENABLED` is true, it relays a caller's own GitHub OAuth
+token and Copilot session token to GitHub and the Copilot API without a LogAn session: anyone who
+can reach the API can use the host's outbound access with their own GitHub account, so restrict
+network access to the API accordingly. The relay stores and logs neither token, forwards only to
+`api.github.com` and `githubcopilot.com` hosts, and sends upstream only the request body plus the
+headers it sets itself.
+
 For production:
 
 - use HTTPS for the web app, API, SSO provider, and AI providers

@@ -29,6 +29,8 @@ REQUIRED = {
     "/api/llm-providers/{provider_id}/test": {"post"},
     "/api/llm-providers/{provider_id}/github-device/start": {"post"},
     "/api/llm-providers/{provider_id}/github-device/check": {"post"},
+    "/api/copilot/token": {"post"},
+    "/api/copilot/responses": {"post"},
 }
 
 

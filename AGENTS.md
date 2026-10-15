@@ -74,6 +74,12 @@ provider executes the deterministic pipeline only. `ModelGatewayRegistry` builds
 provider record. Tests may inject a fake `ModelGateway` through `create_app(model_gateway=...)`,
 but fake gateways are not runtime providers.
 
+`apps/api/app/copilot_passthrough` is a separate relay for callers that cannot reach GitHub: with
+`LOGAN_COPILOT_PASSTHROUGH_ENABLED` set, `POST /api/copilot/token` and `POST /api/copilot/responses`
+forward a caller's own GitHub and Copilot tokens to GitHub and the Copilot API using the GitHub
+Copilot transport settings. It needs no LogAn session, stores nothing, and must forward only to
+`api.github.com` and `githubcopilot.com` hosts.
+
 ## Change contracts
 
 - API route or schema change: update its tests and regenerate `docs/openapi.snapshot.json`.

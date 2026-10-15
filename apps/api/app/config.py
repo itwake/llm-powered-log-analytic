@@ -117,6 +117,9 @@ class Settings:
     github_copilot_tls_verify: bool = _env_bool("LOGAN_GITHUB_COPILOT_TLS_VERIFY", True)
     github_copilot_proxy_url: str | None = _env_first("LOGAN_GITHUB_COPILOT_PROXY_URL")
     github_copilot_trust_env: bool = _env_bool("LOGAN_GITHUB_COPILOT_TRUST_ENV", True)
+    # GitHub Copilot pass-through: relay callers' own GitHub and Copilot tokens through this host
+    # when they cannot reach GitHub themselves. Off by default because it makes the API a relay.
+    copilot_passthrough_enabled: bool = _env_bool("LOGAN_COPILOT_PASSTHROUGH_ENABLED", False)
 
     @property
     def sso_enabled(self) -> bool:

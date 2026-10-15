@@ -56,6 +56,7 @@ apps/api/
 │   ├── schemas/                   # Pydantic request and response models
 │   ├── models/tables.py           # SQLAlchemy table definitions
 │   ├── core/security.py           # session token issue and hashing
+│   ├── copilot_passthrough/       # relay of callers' own tokens to GitHub and the Copilot API
 │   └── services/
 │       ├── object_store.py        # generated local paths, file URIs, checksums
 │       ├── sso_auth_service.py    # OAuth authorize, token exchange, user provisioning
@@ -179,6 +180,7 @@ All application routes are under `/api`; `/healthz` is the process health endpoi
 | Runs | start, list, read, and cancel analysis runs under a case |
 | Reports | summary, temporal, logs, causal graph, and causal summary per run |
 | Chat | `POST /api/chat/stream` using server-sent events |
+| Copilot pass-through | `POST /api/copilot/token` and `POST /api/copilot/responses`, relaying a caller's own tokens; off unless enabled |
 
 See [API](../../docs/api.md) for the route list and
 [`docs/openapi.snapshot.json`](../../docs/openapi.snapshot.json) for the checked-in contract.
@@ -203,6 +205,7 @@ The main setting groups are:
 | Authentication | `LOGAN_SSO_AUTHORIZE_URL`, `LOGAN_SSO_TOKEN_URL`, `LOGAN_SSO_CLIENT_ID` |
 | AI Platform | deployment endpoints (chat host and URI, iB2B host and URI), TLS, proxy, timeout, and token settings |
 | GitHub Copilot | TLS, proxy, and timeout settings |
+| Copilot pass-through | `LOGAN_COPILOT_PASSTHROUGH_ENABLED` (uses the GitHub Copilot transport settings) |
 
 `app/config.py` is the runtime contract and `.env.full.example` documents every supported setting.
 Production validation requires a strong secret, complete SSO, and TLS verification.

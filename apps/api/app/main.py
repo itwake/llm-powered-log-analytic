@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from logan_analysis.ports import ModelGateway
 
+from app import copilot_passthrough
 from app.api import auth, cases, chat, llm_providers, reports
 from app.config import validate_runtime_settings
 from app.logging_config import configure_logging
@@ -38,6 +39,9 @@ async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
     device_flow = getattr(app.state, "github_device_flow", None)
     if isinstance(device_flow, GitHubDeviceFlow):
         await device_flow.aclose()
+    passthrough = getattr(app.state, "copilot_passthrough", None)
+    if isinstance(passthrough, copilot_passthrough.CopilotPassThrough):
+        await passthrough.aclose()
 
 
 def create_app(
@@ -60,6 +64,9 @@ def create_app(
         override=model_gateway,
     )
     app.state.github_device_flow = GitHubDeviceFlow(app_settings=app.state.store.settings)
+    app.state.copilot_passthrough = copilot_passthrough.CopilotPassThrough(
+        app_settings=app.state.store.settings
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=app.state.store.settings.cors_origins(),
@@ -72,6 +79,7 @@ def create_app(
     app.include_router(reports.router)
     app.include_router(chat.router)
     app.include_router(llm_providers.router)
+    app.include_router(copilot_passthrough.router)
     return app
 
 
